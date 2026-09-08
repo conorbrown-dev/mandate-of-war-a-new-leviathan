@@ -1,0 +1,11 @@
+spawnpoints:
+  - id: "spawn_1"
+    faction: "faction_a"
+    position: [256.0, 256.0]
+    heading: 0.0
+    type: "land"
+  - id: "spawn_2"
+    faction: "faction_a"
+    position: [128.0, 128.0]
+    heading: 1.57
+    type: "land"

@@ -1,0 +1,104 @@
+{
+    "projects": [
+        {
+            "id": "advance_ballistics",
+            "name": "Advance Ballistics",
+            "description": "Increases artillery range and damage",
+            "cost_per_tick": 10.0,
+            "total_cost": 500.0,
+            "build_time_seconds": 50.0,
+            "prerequisites": [],
+            "unlocks": ["ELITE_LONG_RANGE_ARTILLERY"]
+        },
+        {
+            "id": "advanced_targeting",
+            "name": "Advanced Targeting",
+            "description": "Improves unit accuracy and view range",
+            "cost_per_tick": 8.0,
+            "total_cost": 400.0,
+            "build_time_seconds": 40.0,
+            "prerequisites": ["advance_ballistics"],
+            "unlocks": ["ELITE_MAIN_BATTLE_TANK"]
+        },
+        {
+            "id": "stealth_tech",
+            "name": "Stealth Technology",
+            "description": "Enables stealth units and detection systems",
+            "cost_per_tick": 15.0,
+            "total_cost": 600.0,
+            "build_time_seconds": 60.0,
+            "prerequisites": [],
+            "unlocks": ["ELITE_ANTI_AIR"]
+        },
+        {
+            "id": "swarm_coordination",
+            "name": "Swarm Coordination",
+            "description": "Improves swarm unit coordination and speed",
+            "cost_per_tick": 5.0,
+            "total_cost": 250.0,
+            "build_time_seconds": 25.0,
+            "prerequisites": [],
+            "unlocks": ["MASS_SWARM_TANK"]
+        },
+        {
+            "id": "assault_support",
+            "name": "Assault Support",
+            "description": "Enhances assault vehicle armor and firepower",
+            "cost_per_tick": 7.0,
+            "total_cost": 350.0,
+            "build_time_seconds": 35.0,
+            "prerequisites": ["swarm_coordination"],
+            "unlocks": ["MASS_ASSAULT_VEHICLE"]
+        },
+        {
+            "id": "rapid_response",
+            "name": "Rapid Response",
+            "description": "Reduces unit production time",
+            "cost_per_tick": 6.0,
+            "total_cost": 300.0,
+            "build_time_seconds": 30.0,
+            "prerequisites": [],
+            "unlocks": ["MASS_ANTI_AIR"]
+        },
+        {
+            "id": "heavy_machinery",
+            "name": "Heavy Machinery",
+            "description": "Enables heavy industrial units",
+            "cost_per_tick": 12.0,
+            "total_cost": 480.0,
+            "build_time_seconds": 48.0,
+            "prerequisites": [],
+            "unlocks": ["INDUSTRIAL_MBT"]
+        },
+        {
+            "id": "missile_systems",
+            "name": "Missile Systems",
+            "description": "Develops long-range missile technology",
+            "cost_per_tick": 14.0,
+            "total_cost": 560.0,
+            "build_time_seconds": 56.0,
+            "prerequisites": ["heavy_machinery"],
+            "unlocks": ["INDUSTRIAL_MISSILE_PLATFORM"]
+        },
+        {
+            "id": "engineering_corps",
+            "name": "Engineering Corps",
+            "description": "Trains specialized engineering units",
+            "cost_per_tick": 9.0,
+            "total_cost": 420.0,
+            "build_time_seconds": 42.0,
+            "prerequisites": [],
+            "unlocks": ["INDUSTRIAL_ENGINEERING"]
+        },
+        {
+            "id": "vtol_flight_systems",
+            "name": "VTOL Flight Systems",
+            "description": "Unlocks compact runway-independent lift and recovery systems",
+            "cost_per_tick": 16.0,
+            "total_cost": 800.0,
+            "build_time_seconds": 50.0,
+            "prerequisites": ["advanced_targeting"],
+            "unlocks": ["ELITE_T1_VTOL"]
+        }
+    ]
+}

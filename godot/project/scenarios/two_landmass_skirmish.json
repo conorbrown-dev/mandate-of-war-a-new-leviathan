@@ -1,0 +1,36 @@
+{
+  "version": 1,
+  "id": "two_landmass_skirmish_v1",
+  "display_name": "Broken Strait",
+  "description": "Establish control across a wide sea lane and eliminate the opposing force.",
+  "theater": {
+    "width": 320,
+    "height": 320,
+    "landmasses": [
+      {"id": "west_landmass", "center": [-105, 0], "size": [110, 300]},
+      {"id": "east_landmass", "center": [105, 0], "size": [110, 300]}
+    ]
+  },
+  "player": {
+    "faction_id": 0,
+    "spawn": [-105, 0],
+    "units": [
+      {"unit_type": 0, "count": 12},
+      {"unit_type": 1, "count": 4},
+      {"unit_type": 2, "count": 4}
+    ]
+  },
+  "ai": {
+    "faction_id": 1,
+    "spawn": [105, 0],
+    "units": [
+      {"unit_type": 3, "count": 16},
+      {"unit_type": 4, "count": 6},
+      {"unit_type": 5, "count": 4}
+    ]
+  },
+  "victory": {
+    "type": "last_faction_standing",
+    "description": "Destroy every opposing combat unit."
+  }
+}

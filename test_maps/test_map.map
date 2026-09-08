@@ -1,0 +1,8 @@
+map_version: "1.0"
+id: "test_map"
+name: "Test Map"
+dimensions:
+  width: 1024
+  height: 1024
+  tile_size: 16
+  max_elevation: 512

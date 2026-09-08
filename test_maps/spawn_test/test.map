@@ -1,0 +1,9 @@
+map_version: "1.0"
+id: "spawn_test"
+dimensions:
+  width: 512
+  height: 512
+  tile_size: 16
+factions:
+  faction_a:
+    primary_spawn: spawn_1

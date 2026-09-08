@@ -1,0 +1,20 @@
+{
+  "id": "faction_b_t2_heavy",
+  "name": "Heavy Tanks",
+  "faction": "faction_b",
+  "tier": 2,
+  "role": "heavy",
+  "cost": 500,
+  "health": 375,
+  "speed": 1.75,
+  "max_speed": 2.5,
+  "turn_rate": 1.0,
+  "view_range": 40,
+  "attack_range": 32,
+  "attack_damage": 25,
+  "attack_cooldown": 3.0,
+  "movement_type": "ground",
+  "size_x": 2.0,
+  "size_y": 2.0,
+  "size_z": 2.0
+}

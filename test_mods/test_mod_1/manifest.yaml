@@ -1,0 +1,37 @@
+manifest_version: "1.0"
+id: "test_mod_1"
+name: "Test Mod 1"
+version: "1.2.3"
+description: "A test mod for validation"
+author: "Test Author"
+
+dependencies:
+  - id: "base_content"
+    version: ">=1.0.0"
+
+units:
+  - path: "units/test_unit.json"
+    replace: false
+  - path: "units/test_unit_2.json"
+    replace: true
+
+factions:
+  - path: "factions/test_faction.json"
+    replace: false
+
+weapons:
+  - path: "weapons/test_weapon.json"
+    replace: false
+
+maps:
+  - path: "maps/test_map.json"
+    replace: false
+
+scripts:
+  - path: "scripts/test_script.gd"
+    replace: false
+
+balance:
+  units:
+    unit|test_mod_1/test_unit: "100"
+    unit|test_mod_1/test_unit_2: "200"

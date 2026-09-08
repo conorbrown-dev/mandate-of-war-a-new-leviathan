@@ -1,0 +1,7 @@
+resources:
+  - id: "resource_1"
+    type: "material"
+    position: [256.0, 256.0]
+    amount: 10000.0
+    radius: 32.0
+    quality: 1.0

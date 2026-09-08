@@ -1,0 +1,20 @@
+{
+  "id": "faction_a_t1_interceptor",
+  "name": null,
+  "faction": "faction_a",
+  "tier": 1,
+  "role": "interceptor",
+  "cost": null,
+  "health": 100,
+  "speed": 2.4,
+  "max_speed": 2.0,
+  "turn_rate": 1.0,
+  "view_range": 39,
+  "attack_range": 30,
+  "attack_damage": 10,
+  "attack_cooldown": 1.0,
+  "movement_type": "air",
+  "size_x": 2.0,
+  "size_y": 2.0,
+  "size_z": 2.0
+}

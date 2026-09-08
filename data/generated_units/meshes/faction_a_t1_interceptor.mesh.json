@@ -1,0 +1,16 @@
+{
+  "format_version": "1.0",
+  "unit_id": "faction_a_t1_interceptor",
+  "type": "procedural_voxel",
+  "dimensions": {
+    "width": 2.0,
+    "height": 2.0,
+    "depth": 2.0
+  },
+  "geometry": "box",
+  "lod_levels": [
+    1.0,
+    0.5,
+    0.25
+  ]
+}

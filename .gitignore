@@ -1,0 +1,40 @@
+# CMake build files (keep for development)
+build/
+CMakeCache.txt
+CMakeFiles/
+Makefile
+cmake_install.cmake
+*.cmake
+
+# Generated extension binaries
+librts_gdextension.so
+librts_simulation.so
+rts_benchmark
+rts_tests
+extension_api.json
+vendor/
+gdextension_interface.h
+
+# Godot project (keep binaries for development)
+godot/project/bin/
+godot/project/.godot/
+godot/project/godot
+godot/project/godot_bin
+godot/project/rts.gdextension
+godot/project/rts.gdextension.uid
+godot/lib/
+
+# Test probes
+test_dl
+test_dl2
+
+# Documentation (include for review)
+docs/NETWORKING.md
+docs/REPLAY_FORMAT.md
+docs/NETWORKING.md
+docs/PROJECTILE_SIMULATION.md
+docs/adr/006_safe_return.md
+
+# OS-specific
+.DS_Store
+Thumbs.db
