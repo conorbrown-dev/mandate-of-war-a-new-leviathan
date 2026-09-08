@@ -5,10 +5,12 @@
 
 #include "ecs/entity.hpp"
 #include "ecs/components/factions.hpp"
+#include "ecs/components/production.hpp"
 #include "spatial/spatial_grid.hpp"
-#include "simulation/simulation.hpp"
 
 namespace rts {
+
+class Simulation;
 
 class AIManager {
 public:
@@ -37,7 +39,7 @@ private:
     std::vector<EntityId> enemy_units_;
     
     float time_since_last_decision_ = 0.0f;
-    const float decision_interval_ = 1000.0f; // 1 second between major decisions
+    const float decision_interval_ = 1000.0f;
     
     void update_visibility();
     int count_visible_extractor_slots() const;
@@ -48,9 +50,7 @@ private:
 
 } // namespace rts
 
-#ifdef __cplusplus
 extern "C" {
-#endif
 
 void ai_init();
 void ai_update(float delta_ms);
@@ -59,6 +59,4 @@ void ai_set_faction_id(int faction_id);
 int ai_get_visible_unit_count();
 int ai_get_enemy_unit_count();
 
-#ifdef __cplusplus
 }
-#endif

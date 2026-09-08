@@ -124,6 +124,13 @@ int simulation_get_unit_is_dead(int entity_id);
     int combat_get_unit_is_dead(int entity_id);
     bool combat_apply_damage(int entity_id, float damage);
     int combat_get_unit_faction_id(int entity_id);
+
+void ai_init();
+void ai_update(float delta_ms);
+void ai_reset();
+void ai_set_faction_id(int faction_id);
+int ai_get_visible_unit_count();
+int ai_get_enemy_unit_count();
 }
 
 class RtsExtension final : public RefCounted {
@@ -208,6 +215,12 @@ protected:
         ClassDB::bind_method(D_METHOD("render_get_instance_count"), &RtsExtension::get_render_instance_count);
         ClassDB::bind_method(D_METHOD("set_debug_mode", "enabled"), &RtsExtension::set_renderer_debug_mode);
         ClassDB::bind_method(D_METHOD("map_loader_load_map", "path"), &RtsExtension::map_loader_load_map);
+        ClassDB::bind_method(D_METHOD("ai_init"), &RtsExtension::ai_init);
+        ClassDB::bind_method(D_METHOD("ai_update", "delta_ms"), &RtsExtension::ai_update);
+        ClassDB::bind_method(D_METHOD("ai_reset"), &RtsExtension::ai_reset);
+        ClassDB::bind_method(D_METHOD("ai_set_faction_id", "faction_id"), &RtsExtension::ai_set_faction_id);
+        ClassDB::bind_method(D_METHOD("ai_get_visible_unit_count"), &RtsExtension::ai_get_visible_unit_count);
+        ClassDB::bind_method(D_METHOD("ai_get_enemy_unit_count"), &RtsExtension::ai_get_enemy_unit_count);
     }
 
 public:
@@ -569,6 +582,30 @@ public:
         }
         
         return dict;
+    }
+
+    void ai_init() {
+        ::ai_init();
+    }
+
+    void ai_update(double delta_ms) {
+        ::ai_update(static_cast<float>(delta_ms));
+    }
+
+    void ai_reset() {
+        ::ai_reset();
+    }
+
+    void ai_set_faction_id(int64_t faction_id) {
+        ::ai_set_faction_id(static_cast<int>(faction_id));
+    }
+
+    int64_t ai_get_visible_unit_count() const {
+        return ::ai_get_visible_unit_count();
+    }
+
+    int64_t ai_get_enemy_unit_count() const {
+        return ::ai_get_enemy_unit_count();
     }
 
     int economy_get_resource_node_count() const {
