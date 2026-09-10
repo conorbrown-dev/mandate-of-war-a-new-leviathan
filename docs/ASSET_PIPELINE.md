@@ -4,6 +4,29 @@
 
 Build an automated asset pipeline centered on Blender, enabling content expansion without hand-authoring every asset. The pipeline must not require proprietary cloud services.
 
+## Asset Generation Verification (2026-09-09)
+
+### Pipeline Output
+
+| Asset Type | Files Generated | Description |
+|------------|-----------------|-------------|
+| Mesh JSON | 61 | Unit/building geometry definitions in `data/generated_units/meshes/*.mesh.json` |
+| Blender Models | 33 | 3D models in `data/generated_units/blender/*.blend` |
+
+### Script Reference
+
+- `scripts/generate_all_assets.py`: Generates mesh JSON definitions (geometry, faction, tier, materials)
+- `scripts/generate_all_blender.py`: Generates Blender `.blend` models via CLI (`blender --background --python scripts/generate_all_blender.py -- --all`)
+
+### Coverage
+
+- Elite units, Faction A/B/C T2-T4 units (all factions)
+- 4 building types across 3 factions (command center, resource extractors, power generators, factories)
+
+### Bug Fix
+
+Fixed Blender script arg parsing (`--all` flag handling) via `if "--all" in sys.argv:` logic.
+
 ## Pipeline Architecture
 
 ```

@@ -24,7 +24,7 @@ bool EntityManager::destroy_entity(Entity entity) {
     if (it != entities_.end()) {
         std::swap(*it, entities_.back());
         entities_.pop_back();
-        free_list_.push_back(entity.id);
+        if (recycle_ids_) free_list_.push_back(entity.id);
         return true;
     }
     return false;

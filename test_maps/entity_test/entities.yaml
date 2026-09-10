@@ -1,8 +1,0 @@
-entities:
-  - id: "unit_1"
-    type: "unit"
-    content_id: "faction_a|t1_miner"
-    position: [256.0, 256.0]
-    heading: 0.0
-    velocity: [0.0, 0.0]
-    hp: 1.0

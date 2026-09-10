@@ -2,14 +2,20 @@
   "version": 1,
   "id": "two_landmass_skirmish_v1",
   "display_name": "Broken Strait",
-  "description": "Establish control across a wide sea lane and eliminate the opposing force.",
+  "description": "Establish control across a wide sea lane and destroy the opposing command center.",
   "theater": {
     "width": 320,
     "height": 320,
     "landmasses": [
       {"id": "west_landmass", "center": [-105, 0], "size": [110, 300]},
       {"id": "east_landmass", "center": [105, 0], "size": [110, 300]}
-    ]
+    ],
+    "terrain": {
+      "type": "heightmap",
+      "data": "res://scenarios/terrain.bin",
+      "tiles_x": 320,
+      "tiles_y": 320
+    }
   },
   "player": {
     "faction_id": 0,
@@ -29,8 +35,14 @@
       {"unit_type": 5, "count": 4}
     ]
   },
+  "logistics": {
+    "causeway_half_width": 8,
+    "aircraft_count": 2,
+    "aircraft_fuel": 12,
+    "naval_spawn": [-45, 20]
+  },
   "victory": {
-    "type": "last_faction_standing",
-    "description": "Destroy every opposing combat unit."
+    "type": "command_center",
+    "description": "Destroy the opposing command center. Losing yours ends the match. If both survive 1,000 seconds, the match is a draw."
   }
 }

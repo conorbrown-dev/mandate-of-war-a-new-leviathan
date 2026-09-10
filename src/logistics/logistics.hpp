@@ -38,8 +38,9 @@ public:
     SafeReturnEstimate estimate_safe_return(EntityId aircraft_id, const Pathfinding& pathfinding);
 
     // Recovery facility lookup
-    EntityId find_nearest_recovery_facility(float x, float y, RecoveryFacility::Type type);
-    EntityId find_nearest_aircraft_recovery_facility(float x, float y);
+    EntityId find_nearest_recovery_facility(float x, float y, RecoveryFacility::Type type, EntityId observer = INVALID_ENTITY);
+    EntityId find_nearest_aircraft_recovery_facility(float x, float y, EntityId observer = INVALID_ENTITY);
+    bool compatible_facility(EntityId observer, EntityId facility) const;
     bool update_recovery_facility_position(EntityId facility_id, float x, float y);
     bool set_airbase_runway_usable(EntityId airbase_id, bool usable);
 
@@ -125,9 +126,10 @@ private:
         int x = 0;
         int y = 0;
         RecoveryFacility::Type type = RecoveryFacility::Type::AIRBASE;
+        int faction = -1;
 
         bool operator<(const FacilityLookupKey& other) const {
-            return std::tie(type, x, y) < std::tie(other.type, other.x, other.y);
+            return std::tie(type, faction, x, y) < std::tie(other.type, other.faction, other.x, other.y);
         }
     };
 

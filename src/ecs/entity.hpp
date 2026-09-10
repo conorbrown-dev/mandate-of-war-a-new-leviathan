@@ -25,7 +25,7 @@ public:
 
 class EntityManager {
 public:
-    EntityManager() = default;
+    explicit EntityManager(bool recycle_ids = true) : recycle_ids_(recycle_ids) {}
     
     Entity create_entity();
     bool destroy_entity(Entity entity);
@@ -36,6 +36,7 @@ public:
     const std::vector<EntityId>& get_entities() const { return entities_; }
     
 private:
+    bool recycle_ids_;
     std::vector<EntityId> entities_;
     std::vector<EntityId> free_list_;
     EntityId next_id_{1};

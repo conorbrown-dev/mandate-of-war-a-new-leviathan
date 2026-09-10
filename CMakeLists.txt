@@ -17,6 +17,8 @@ set(SIMULATION_SOURCES
     src/spatial/spatial_grid.cpp
     src/pathfinding/pathfinding.cpp
     src/simulation/simulation.cpp
+    src/simulation/skirmish.cpp
+    src/simulation/terrain.cpp
     src/simulation/command_manager.cpp
     src/simulation/tick_manager.cpp
     src/logistics/logistics.cpp
@@ -33,7 +35,8 @@ set(SIMULATION_SOURCES
     src/replay/replay_reader.cpp
     src/render/mesh.cpp
     src/render/renderer.cpp
-    src/ecs/components/factions.cpp
+     src/ecs/components/factions.cpp
+     src/ecs/components/territorial_control.cpp
     src/data/json_parser.cpp
     src/content_id/content_id.cpp
     src/mod/mod_manifest.cpp
@@ -140,6 +143,9 @@ add_executable(rts_integration_tests
     tests/test_logistics_ecs.cpp
     tests/test_logistics_scenario.cpp
     tests/test_logistics_visibility.cpp
+    tests/test_ai.cpp
+    tests/test_commands.cpp
+    tests/test_skirmish.cpp
     tests/test_pathfinding.cpp
     tests/test_content_id.cpp
     tests/test_combat.cpp
@@ -148,6 +154,8 @@ add_executable(rts_integration_tests
     tests/test_map_loader.cpp
     tests/test_replay.cpp
     tests/test_economy.cpp
+    tests/test_terrain.cpp
+    tests/test_territorial_control.cpp
     tests/test_framework.hpp
 )
 target_link_libraries(rts_integration_tests rts_simulation)
@@ -159,3 +167,11 @@ set_tests_properties(rts_integration_tests PROPERTIES WORKING_DIRECTORY ${CMAKE_
 add_executable(rts_logistics_benchmark benchmark/logistics_benchmark.cpp)
 target_link_libraries(rts_logistics_benchmark rts_simulation)
 target_include_directories(rts_logistics_benchmark PUBLIC ${CMAKE_SOURCE_DIR}/src)
+
+add_executable(rts_skirmish_benchmark benchmark/skirmish_benchmark.cpp)
+target_link_libraries(rts_skirmish_benchmark rts_simulation)
+target_include_directories(rts_skirmish_benchmark PUBLIC ${CMAKE_SOURCE_DIR}/src)
+
+# Empty or corrupt executables must not be mistaken for passing suites.
+set_tests_properties(rts_tests rts_integration_tests PROPERTIES PASS_REGULAR_EXPRESSION "Results: [1-9][0-9]* passed, 0 failed")
+set_tests_properties(test_portable_snapshot PROPERTIES PASS_REGULAR_EXPRESSION "All portable_snapshot tests passed")

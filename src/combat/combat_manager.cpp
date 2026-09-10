@@ -167,7 +167,7 @@ FireSolution CombatManager::find_target(
         float dist = std::sqrt(dx * dx + dy * dy);
         
 
-        if (dist <= view_range && (!solution.valid || dist < solution.lead_bias)) {
+        if (dist <= view_range && (!solution.valid || (dist < solution.lead_bias || (dist == solution.lead_bias && entity_id < solution.target_id)))) {
             auto* target_vel = component_manager.get_component<Velocity>(entity_id);
             float target_vel_x = target_vel ? target_vel->x : 0.0f;
             float target_vel_y = target_vel ? target_vel->y : 0.0f;
@@ -270,11 +270,15 @@ void CombatManager::resolve_fire(
             continue;
         }
         
+        const auto* aircraft=component_manager.get_component<Aircraft>(entity_id);
+        if(aircraft && aircraft->status!=Aircraft::Status::AIRBORNE) continue;
         if (weapon->cooldown_remaining <= 0.0f) {
             FireSolution target = find_target(
-                pos->x, pos->y, weapon->range, faction->faction_id,
+                pos->x, pos->y, component_manager.get_component<UnitData>(entity_id)
+                    ? std::min(weapon->range, component_manager.get_component<UnitData>(entity_id)->view_range)
+                    : weapon->range, faction->faction_id,
                 spatial_grid, component_manager,
-                explicit_attack_targets_.count(entity_id) > 0 ? entity_id : 0
+                explicit_attack_targets_.count(entity_id) > 0 ? pending_fire_.at(entity_id).target_id : 0
             );
             
             if (target.valid) {

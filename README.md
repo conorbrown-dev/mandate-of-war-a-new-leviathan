@@ -36,6 +36,20 @@ cmake --build build
 
 See [EXTENSION_STATUS.md](EXTENSION_STATUS.md) for the working GDExtension layout and [docs/NEXT_TASKS.md](docs/NEXT_TASKS.md) for the ordered remaining work.
 
+## Demo
+
+From a Linux desktop session, launch the playable Broken Strait presentation
+with:
+
+```bash
+./scripts/run_demo.sh
+```
+
+It rebuilds the native extension, opens Godot, and starts the 20-versus-26
+skirmish automatically. Blue units are Elite Precision; red units are Mass
+Warfare. Drag-select blue units, right-click to issue a move, use the wheel to
+zoom, WASD/arrow keys to pan, and `X` to stop.
+
 ## Canonical Milestone Order
 
 1. `01_ENGINE_AND_ARCHITECTURE.md`

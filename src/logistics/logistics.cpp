@@ -6,6 +6,7 @@
 
 #include "ecs/component_manager.hpp"
 #include "spatial/spatial_grid.hpp"
+#include "ecs/components/faction.hpp"
 
 namespace rts {
 
@@ -146,19 +147,32 @@ SafeReturnEstimate LogisticsManager::estimate_safe_return(
     return estimate;
 }
 
-EntityId LogisticsManager::find_nearest_recovery_facility(float x, float y, RecoveryFacility::Type type) {
+bool LogisticsManager::compatible_facility(EntityId observer, EntityId facility) const {
+    if (!component_manager_) return false;
+    const auto* health = component_manager_->get_component<Health>(facility);
+    if (health && (health->is_dead || health->current <= 0)) return false;
+    const auto* owner = component_manager_->get_component<Faction>(observer);
+    const auto* facility_owner = component_manager_->get_component<Faction>(facility);
+    // Unowned prototype facilities are neutral; owned facilities are faction restricted.
+    return !facility_owner || (owner && owner->faction_id == facility_owner->faction_id) || observer == INVALID_ENTITY;
+}
+
+EntityId LogisticsManager::find_nearest_recovery_facility(float x, float y, RecoveryFacility::Type type, EntityId observer) {
     if (!component_manager_ || !std::isfinite(x) || !std::isfinite(y)) {
         return INVALID_ENTITY;
     }
 
+    const auto* owner = component_manager_->get_component<Faction>(observer);
     const FacilityLookupKey key{
         static_cast<int>(std::floor(x / FACILITY_LOOKUP_CELL_SIZE)),
         static_cast<int>(std::floor(y / FACILITY_LOOKUP_CELL_SIZE)),
-        type
+        type,
+        owner ? static_cast<int>(owner->faction_id) : -1
     };
     auto cached = facility_lookup_cache_.find(key);
     if (cached != facility_lookup_cache_.end() &&
-        cached->second.facility_revision == facility_revision_) {
+        cached->second.facility_revision == facility_revision_ &&
+        compatible_facility(observer, cached->second.facility_id)) {
         const float dx = x - cached->second.origin_x;
         const float dy = y - cached->second.origin_y;
         if (dx * dx + dy * dy <= cached->second.stable_radius * cached->second.stable_radius) {
@@ -185,7 +199,7 @@ EntityId LogisticsManager::find_nearest_recovery_facility(float x, float y, Reco
 
     for (EntityId entity_id : facilities->second) {
         auto* facility = component_manager_->get_component<RecoveryFacility>(entity_id);
-        if (!facility || facility->type != type) {
+        if (!facility || facility->type != type || !compatible_facility(observer, entity_id)) {
             continue;
         }
         if (type == RecoveryFacility::Type::AIRBASE) {
@@ -224,9 +238,9 @@ EntityId LogisticsManager::find_nearest_recovery_facility(float x, float y, Reco
     return nearest;
 }
 
-EntityId LogisticsManager::find_nearest_aircraft_recovery_facility(float x, float y) {
-    const EntityId airbase = find_nearest_recovery_facility(x, y, RecoveryFacility::Type::AIRBASE);
-    const EntityId carrier = find_nearest_recovery_facility(x, y, RecoveryFacility::Type::CARRIER);
+EntityId LogisticsManager::find_nearest_aircraft_recovery_facility(float x, float y, EntityId observer) {
+    const EntityId airbase = find_nearest_recovery_facility(x, y, RecoveryFacility::Type::AIRBASE, observer);
+    const EntityId carrier = find_nearest_recovery_facility(x, y, RecoveryFacility::Type::CARRIER, observer);
     if (airbase == INVALID_ENTITY) {
         return carrier;
     }
@@ -513,11 +527,12 @@ EntityId LogisticsManager::find_aircraft_recovery_facility(
     EntityId aircraft_id,
     const Aircraft& aircraft) {
     if (aircraft.target_base != INVALID_ENTITY &&
+        compatible_facility(aircraft_id, aircraft.target_base) &&
         component_manager_->get_component<Carrier>(aircraft.target_base) &&
         carrier_has_recovery_reservation(aircraft.target_base, aircraft_id)) {
         return aircraft.target_base;
     }
-    return find_nearest_aircraft_recovery_facility(aircraft.x, aircraft.y);
+    return find_nearest_aircraft_recovery_facility(aircraft.x, aircraft.y, aircraft_id);
 }
 
 void LogisticsManager::sync_carrier_diagnostics(
@@ -530,7 +545,7 @@ void LogisticsManager::sync_carrier_diagnostics(
 }
 
 bool LogisticsManager::embark_aircraft(EntityId aircraft_id, EntityId carrier_id) {
-    if (!component_manager_) {
+    if (!component_manager_ || !compatible_facility(aircraft_id, carrier_id)) {
         return false;
     }
     auto* aircraft = component_manager_->get_component<Aircraft>(aircraft_id);
@@ -564,7 +579,7 @@ bool LogisticsManager::embark_aircraft(EntityId aircraft_id, EntityId carrier_id
 }
 
 bool LogisticsManager::queue_aircraft_for_takeoff(EntityId aircraft_id, EntityId facility_id) {
-    if (!component_manager_) {
+    if (!component_manager_ || !compatible_facility(aircraft_id, facility_id)) {
         return false;
     }
 
@@ -595,7 +610,7 @@ bool LogisticsManager::queue_aircraft_for_takeoff(EntityId aircraft_id, EntityId
 }
 
 bool LogisticsManager::order_aircraft_return(EntityId aircraft_id, EntityId facility_id) {
-    if (!component_manager_) {
+    if (!component_manager_ || !compatible_facility(aircraft_id, facility_id)) {
         return false;
     }
 
@@ -614,7 +629,7 @@ bool LogisticsManager::order_aircraft_return(EntityId aircraft_id, EntityId faci
 }
 
 bool LogisticsManager::queue_aircraft_for_landing(EntityId aircraft_id, EntityId facility_id) {
-    if (!component_manager_) {
+    if (!component_manager_ || !compatible_facility(aircraft_id, facility_id)) {
         return false;
     }
 
@@ -797,11 +812,13 @@ void LogisticsManager::update_recovering_aircraft(
             flight_deck->current_munitions -= ammunition_transfer;
 
             const bool serviced = aircraft->fuel >= aircraft->max_fuel &&
-                                   aircraft->material >= aircraft->max_material &&
-                                   aircraft->ammunition >= aircraft->max_ammunition;
+                                    aircraft->material >= aircraft->max_material &&
+                                    aircraft->ammunition >= aircraft->max_ammunition;
             if (serviced) {
                 aircraft->status = Aircraft::Status::ON_GROUND;
                 aircraft->queue_slot = -1;
+            } else {
+                aircraft->status = Aircraft::Status::RECOVERING;
             }
             return serviced;
         }

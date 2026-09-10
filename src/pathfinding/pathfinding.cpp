@@ -332,6 +332,10 @@ bool Pathfinding::has_line_of_sight(float sx, float sy, float dx, float dy) cons
     const double delta_y = step_y == 0 ? infinity : static_cast<double>(cell_size_) / std::abs(ray_y);
 
     while (x != destination_x || y != destination_y) {
+        // An endpoint on a grid boundary belongs to its destination cell.
+        // Do not step past that cell while the other axis catches up.
+        if (x == destination_x) next_x = infinity;
+        if (y == destination_y) next_y = infinity;
         if (next_x < next_y) {
             x += step_x;
             next_x += delta_x;

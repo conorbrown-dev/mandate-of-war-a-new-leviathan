@@ -1,6 +1,0 @@
-map_version: "1.0"
-id: "entity_test"
-dimensions:
-  width: 512
-  height: 512
-  tile_size: 16

@@ -5,8 +5,33 @@
 #include <iostream>
 #include <openssl/sha.h>
 #include <regex>
+#include <unordered_map>
 
 namespace rts {
+
+// Map unit_type (0-11) to content_id string for .mesh.json files
+static std::string unit_type_to_content_id(uint8_t unit_type) {
+    static const std::unordered_map<uint8_t, std::string> mapping = {
+        {0, "elite_main_battle_tank"},
+        {1, "elite_long_range_artillery"},
+        {2, "elite_anti_air"},
+        {3, "mass_swarm_tank"},
+        {4, "mass_assault_vehicle"},
+        {5, "mass_anti_air"},
+        {6, "industrial_mbt"},
+        {7, "industrial_missile_platform"},
+        {8, "industrial_engineering"},
+        {9, "elite_t1_fighter"},
+        {10, "elite_t1_vtol"},
+        {11, "elite_patrol_boat"}
+    };
+    
+    auto it = mapping.find(unit_type);
+    if (it != mapping.end()) {
+        return it->second;
+    }
+    return "";
+}
 
 MapLoader::MapLoader() {}
 
@@ -562,10 +587,30 @@ bool MapLoader::load_json_scenario(const fs::path& json_path, MapData& map_data)
             if (landmass_value.type() == rts::data::JsonValue::Type::Object) {
                 const auto& landmass_obj = landmass_value.as_object();
                 auto landmass_id_opt = landmass_obj.find("id");
+                auto center_opt = landmass_obj.find("center");
+                auto size_opt = landmass_obj.find("size");
                 if (landmass_id_opt != landmass_obj.end() && 
                     landmass_id_opt->second.type() == rts::data::JsonValue::Type::String) {
                     std::string landmass_id = landmass_id_opt->second.as_string();
                     map_data.biomes["landmass_" + std::to_string(i)] = landmass_id;
+                }
+                if (center_opt != landmass_obj.end() && center_opt->second.type() == rts::data::JsonValue::Type::Array) {
+                    const auto& center_arr = center_opt->second.as_array();
+                    if (center_arr.size() >= 2) {
+                        map_data.landmass_centers.push_back(std::make_pair(
+                            static_cast<float>(center_arr[0].as_number()),
+                            static_cast<float>(center_arr[1].as_number())
+                        ));
+                    }
+                }
+                if (size_opt != landmass_obj.end() && size_opt->second.type() == rts::data::JsonValue::Type::Array) {
+                    const auto& size_arr = size_opt->second.as_array();
+                    if (size_arr.size() >= 2) {
+                        map_data.landmass_sizes.push_back(std::make_pair(
+                            static_cast<float>(size_arr[0].as_number()),
+                            static_cast<float>(size_arr[1].as_number())
+                        ));
+                    }
                 }
             }
         }
@@ -593,6 +638,32 @@ bool MapLoader::load_json_scenario(const fs::path& json_path, MapData& map_data)
                 map_data.spawn_points.push_back(spawn);
             }
         }
+        
+        auto units_opt = player.find("units");
+        if (units_opt != player.end() && units_opt->second.type() == rts::data::JsonValue::Type::Array) {
+            const auto& units_arr = units_opt->second.as_array();
+             for (size_t i = 0; i < units_arr.size(); ++i) {
+                 if (units_arr[i].type() == rts::data::JsonValue::Type::Object) {
+                     const auto& unit_obj = units_arr[i].as_object();
+                     auto unit_type_opt = unit_obj.find("unit_type");
+                     auto count_opt = unit_obj.find("count");
+                      if (unit_type_opt != unit_obj.end() && count_opt != unit_obj.end() &&
+                          unit_type_opt->second.type() == rts::data::JsonValue::Type::Number &&
+                          count_opt->second.type() == rts::data::JsonValue::Type::Number) {
+                          int unit_type = static_cast<int>(unit_type_opt->second.as_number());
+                          int count = static_cast<int>(count_opt->second.as_number());
+                          for (int j = 0; j < count; ++j) {
+                              MapEntity entity;
+                              entity.id = "player_unit_" + std::to_string(map_data.initial_entities.size());
+                              entity.type = "unit";
+                              entity.content_id = unit_type_to_content_id(static_cast<uint8_t>(unit_type));
+                              entity.unit_type = static_cast<uint8_t>(unit_type);
+                              map_data.initial_entities.push_back(entity);
+                          }
+                      }
+                 }
+             }
+        }
     }
     
     auto ai_opt = root_obj.find("ai");
@@ -616,6 +687,32 @@ bool MapLoader::load_json_scenario(const fs::path& json_path, MapData& map_data)
                 spawn.type = "land";
                 map_data.spawn_points.push_back(spawn);
             }
+        }
+        
+        auto units_opt = ai.find("units");
+        if (units_opt != ai.end() && units_opt->second.type() == rts::data::JsonValue::Type::Array) {
+            const auto& units_arr = units_opt->second.as_array();
+             for (size_t i = 0; i < units_arr.size(); ++i) {
+                 if (units_arr[i].type() == rts::data::JsonValue::Type::Object) {
+                     const auto& unit_obj = units_arr[i].as_object();
+                     auto unit_type_opt = unit_obj.find("unit_type");
+                     auto count_opt = unit_obj.find("count");
+                     if (unit_type_opt != unit_obj.end() && count_opt != unit_obj.end() &&
+                         unit_type_opt->second.type() == rts::data::JsonValue::Type::Number &&
+                         count_opt->second.type() == rts::data::JsonValue::Type::Number) {
+                         int unit_type = static_cast<int>(unit_type_opt->second.as_number());
+                         int count = static_cast<int>(count_opt->second.as_number());
+                          for (int j = 0; j < count; ++j) {
+                              MapEntity entity;
+                              entity.id = "ai_unit_" + std::to_string(map_data.initial_entities.size());
+                              entity.type = "unit";
+                              entity.content_id = unit_type_to_content_id(static_cast<uint8_t>(unit_type));
+                              entity.unit_type = static_cast<uint8_t>(unit_type);
+                              map_data.initial_entities.push_back(entity);
+                          }
+                     }
+                 }
+             }
         }
     }
     

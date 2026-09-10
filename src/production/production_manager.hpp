@@ -46,7 +46,9 @@ public:
     std::unordered_map<EntityId, ResourceNode>& resource_nodes() { return resource_nodes_; }
     std::unordered_map<EntityId, Extractor>& extractors() { return extractors_; }
     std::unordered_map<EntityId, Storage>& storages() { return storages_; }
+    const std::unordered_map<EntityId, Storage>& storages() const { return storages_; }
     std::unordered_map<EntityId, ProductionLine>& production_lines() { return production_lines_; }
+    const std::unordered_map<EntityId, ProductionLine>& production_lines() const { return production_lines_; }
     std::unordered_map<EntityId, Transport>& transports() { return transports_; }
 
     bool verify_extraction_rate(EntityId extractor_id, float expected_rate, float tolerance = 0.01f);
@@ -56,9 +58,21 @@ public:
     // Faction-specific methods
     void add_faction_production_line(FactionId faction_id, EntityId line_id);
     bool can_produce_unit(FactionId faction_id, UnitType unit_type);
-    float get_unit_metal_cost(FactionId faction_id, UnitType unit_type);
-    float get_unit_energy_cost(FactionId faction_id, UnitType unit_type);
-    float get_unit_research_cost(FactionId faction_id, UnitType unit_type);
+    bool can_queue_unit(EntityId line, FactionId faction, UnitType type) const;
+    bool queue_unit(EntityId line, FactionId faction, UnitType type, float x = 0.0f, float y = 0.0f);
+    bool can_queue_structure(EntityId line, FactionId faction, uint8_t structure_type) const;
+    bool queue_structure(EntityId line, FactionId faction, uint8_t structure_type, float x = 0.0f, float y = 0.0f);
+    EntityId faction_line(FactionId faction) const;
+    const FactionResearch& research(FactionId faction) const;
+    bool can_research(FactionId faction, const std::string& project) const;
+    bool begin_research(FactionId faction, const std::string& project);
+    
+    // Economy: deduct resources from faction's production line storage
+    bool deduct_faction_resources(FactionId faction, float metal, float energy);
+    float research_progress(FactionId faction) const;
+    float get_unit_metal_cost(FactionId faction_id, UnitType unit_type) const;
+    float get_unit_energy_cost(FactionId faction_id, UnitType unit_type) const;
+    float get_unit_research_cost(FactionId faction_id, UnitType unit_type) const;
     
     void set_faction_research(FactionId faction_id, const FactionResearch& research);
     
@@ -69,6 +83,10 @@ public:
     int get_extraction_count() const { return extraction_count_; }
     int get_construction_count() const { return construction_count_; }
     int get_transport_count() const { return transport_count_; }
+    
+    // Extractor lookup/creation for HARVEST command
+    bool find_or_create_extractor(float x, float y, EntityId& extractor_id, EntityId& node_id);
+    bool destroy_resource_site(float x, float y);
 
 private:
     std::unordered_map<EntityId, ResourceNode> resource_nodes_;
@@ -86,6 +104,7 @@ private:
     
     // Research state per faction
     std::unordered_map<FactionId, FactionResearch> faction_research_;
+    std::unordered_map<FactionId, float> research_elapsed_;
     
     // Queue of completed constructions (to be spawned by Simulation)
     std::vector<CompletedConstruction> completed_constructions_;

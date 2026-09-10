@@ -23,13 +23,6 @@ window/size/window_width_override=1280
 window/size/window_height_override=720
 window/stretch/mode="canvas_items"
 
-[rendering]
-
-renderer/rendering_method="gl_compatibility"
-renderer/rendering_method.mobile="gl_compatibility"
-textures/vram_compression/import_etc2_astc=true
-environment/defaults/default_environment="res://default_env.tres"
-
 [gdscript]
 
 warnings/ignore_class_has_no_scene_path=true
@@ -38,3 +31,10 @@ warnings/ignore_missing_return=true
 warnings/ignore_unused_variable=true
 warnings/ignore_unused_argument=true
 warnings/ignore_implicit_string_conversion=true
+
+[rendering]
+
+renderer/rendering_method="gl_compatibility"
+renderer/rendering_method.mobile="gl_compatibility"
+textures/vram_compression/import_etc2_astc=true
+environment/defaults/default_environment="res://default_env.tres"

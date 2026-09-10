@@ -19,6 +19,7 @@
       "name": "Elite Artillery",
       "visual_id": "visual.elite.artillery.prototype",
       "type": "ELITE_LONG_RANGE_ARTILLERY",
+      "research_prerequisites": ["advance_ballistics"],
       "faction": "ELITE_PRECISION",
       "material_cost": 800.0,
       "energy_cost": 400.0,
@@ -174,6 +175,13 @@
       "max_airborne_time_seconds": 150.0,
       "energy_consumption_rate": 0.75,
       "material_consumption_rate": 0.05
+    },
+    {
+      "name": "Breakwater Patrol Boat", "type": "ELITE_PATROL_BOAT", "faction": "ELITE_PRECISION",
+      "material_cost": 400.0, "energy_cost": 200.0, "research_cost": 0.0,
+      "build_time_seconds": 15.0, "hp": 300.0, "speed": 8.0, "range": 60.0,
+      "view_range": 30.0, "is_naval": true, "operational_energy": 100.0,
+      "energy_consumption_rate": 5.0
     }
   ],
   "faction_start_data": [

@@ -45,6 +45,7 @@ struct MapEntity {
     float heading;
     float velocity_x, velocity_y;
     float hp;
+    uint8_t unit_type;
 };
 
 struct FactionSpawnData {
@@ -76,6 +77,8 @@ struct MapData {
     std::unordered_map<std::string, std::string> biomes;
     
     std::optional<std::string> generation_seed;
+    std::vector<std::pair<float, float>> landmass_centers;
+    std::vector<std::pair<float, float>> landmass_sizes;
 };
 
 struct MapLoadError {

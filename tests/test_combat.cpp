@@ -510,14 +510,8 @@ TEST(command_manager_process_attack) {
         throw std::runtime_error("Target should have position, faction, and health components");
     }
     
-    sim.command_manager().process_command(
-        static_cast<uint32_t>(shooter.id),
-        static_cast<uint8_t>(CommandType::ATTACK),
-        0, 0, 0, 0,
-        static_cast<uint32_t>(target.id)
-    );
-    
-    sim.process_commands();
+    sim.issue_attack_commands({shooter.id}, FactionId::ELITE_PRECISION, target.id);
+    sim.update(50);
     
     auto pending = sim.combat_manager().pending_fire();
     if (pending.find(shooter.id) == pending.end() || !pending.find(shooter.id)->second.valid) {
@@ -542,14 +536,8 @@ TEST(command_manager_reject_invalid_attack) {
     Entity alive_target = sim.create_unit(150.0f, 100.0f);
     sim.set_unit_faction(alive_target.id, FactionId::ELITE_PRECISION);
     
-    sim.command_manager().process_command(
-        static_cast<uint32_t>(shooter.id),
-        static_cast<uint8_t>(CommandType::ATTACK),
-        0, 0, 0, 0,
-        static_cast<uint32_t>(alive_target.id)
-    );
-    
-    sim.process_commands();
+    sim.issue_attack_commands({shooter.id}, FactionId::ELITE_PRECISION, alive_target.id);
+    sim.update(50);
     
     auto pending = sim.combat_manager().pending_fire();
     if (pending.find(shooter.id) != pending.end()) {
@@ -559,14 +547,8 @@ TEST(command_manager_reject_invalid_attack) {
     sim.combat_manager().pending_fire().clear();
     
     EntityId nonexistent_target = EntityId{9999};
-    sim.command_manager().process_command(
-        static_cast<uint32_t>(shooter.id),
-        static_cast<uint8_t>(CommandType::ATTACK),
-        0, 0, 0, 0,
-        static_cast<uint32_t>(nonexistent_target)
-    );
-    
-    sim.process_commands();
+    sim.issue_attack_commands({shooter.id}, FactionId::ELITE_PRECISION, nonexistent_target);
+    sim.update(50);
     
     auto pending2 = sim.combat_manager().pending_fire();
     if (pending2.find(shooter.id) != pending2.end()) {
@@ -588,14 +570,8 @@ TEST(command_manager_unregister_clears_attack_target) {
     Entity target = sim.create_unit(150.0f, 100.0f);
     sim.set_unit_faction(target.id, FactionId::MASS_WARFARE);
     
-    sim.command_manager().process_command(
-        static_cast<uint32_t>(shooter.id),
-        static_cast<uint8_t>(CommandType::ATTACK),
-        0, 0, 0, 0,
-        static_cast<uint32_t>(target.id)
-    );
-    
-    sim.process_commands();
+    sim.issue_attack_commands({shooter.id}, FactionId::ELITE_PRECISION, target.id);
+    sim.update(50);
     
     auto before = sim.combat_manager().explicit_attack_targets().find(shooter.id);
     if (before == sim.combat_manager().explicit_attack_targets().end()) {
