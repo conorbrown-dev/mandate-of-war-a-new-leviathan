@@ -560,11 +560,19 @@ void NetworkManager::send_handshake(const ConnectionHandshake& handshake) {
 
 bool NetworkManager::receive_handshake(ConnectionHandshake& handshake) {
     bool result = tcp_transport_.recv_handshake(handshake);
+    if (result && expected_handshake_.has_value() &&
+        !connection_handshake_visual_pack_compatible(expected_handshake_.value(), handshake)) {
+        return false;
+    }
     if (result) {
         bytes_received_ += sizeof(ConnectionHandshake) + 8;
         packets_received_++;
     }
     return result;
+}
+
+void NetworkManager::set_expected_handshake(const ConnectionHandshake& handshake) {
+    expected_handshake_ = handshake;
 }
 
 void NetworkManager::send_frame_command_batch(const FrameCommandBatch& batch) {

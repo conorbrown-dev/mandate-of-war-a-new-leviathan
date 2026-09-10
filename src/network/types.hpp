@@ -4,6 +4,7 @@
 #include <array>
 #include <cmath>
 #include <limits>
+#include <cstring>
 
 #include "../ecs/entity.hpp"
 #include "../spatial/spatial_grid.hpp"
@@ -39,6 +40,8 @@ enum class TransportType : uint8_t {
 
 constexpr size_t MAX_SERVER_NAME_LENGTH = 64;
 constexpr size_t MAP_HASH_LENGTH = 64;
+constexpr size_t VISUAL_PACK_ID_LENGTH = 64;
+constexpr size_t VISUAL_PACK_HASH_LENGTH = 64;
 constexpr uint32_t DISCOVERY_PORT = 50000;
 constexpr uint32_t DISCOVERY_INTERVAL_MS = 500;
 constexpr size_t MAX_TRANSPORT_PACKET_SIZE = 65536;
@@ -131,8 +134,30 @@ struct ConnectionHandshake {
     uint32_t content_version_major;
     uint32_t content_version_minor;
     uint32_t content_version_patch;
+    uint8_t visual_pack_id[VISUAL_PACK_ID_LENGTH];
+    uint32_t visual_pack_version;
+    uint8_t visual_pack_hash[VISUAL_PACK_HASH_LENGTH];
     uint8_t padding[4];
 };
+
+inline bool connection_handshake_visual_pack_compatible(
+    const ConnectionHandshake& local,
+    const ConnectionHandshake& remote) {
+    if (local.visual_pack_version != remote.visual_pack_version ||
+        std::memcmp(local.visual_pack_id, remote.visual_pack_id, VISUAL_PACK_ID_LENGTH) != 0 ||
+        std::memcmp(local.visual_pack_hash, remote.visual_pack_hash, VISUAL_PACK_HASH_LENGTH) != 0) {
+        return false;
+    }
+    bool has_id = false;
+    bool has_hash = false;
+    for (size_t i = 0; i < VISUAL_PACK_ID_LENGTH; ++i) {
+        has_id = has_id || local.visual_pack_id[i] != 0;
+    }
+    for (size_t i = 0; i < VISUAL_PACK_HASH_LENGTH; ++i) {
+        has_hash = has_hash || local.visual_pack_hash[i] != 0;
+    }
+    return has_id && has_hash;
+}
 
 struct FrameCommandBatch {
     uint32_t tick;
@@ -147,7 +172,7 @@ struct alignas(8) SnapshotChecksum {
     uint8_t padding[8];
 };
 
-static_assert(sizeof(ConnectionHandshake) == 88, "ConnectionHandshake should be 88 bytes");
+static_assert(sizeof(ConnectionHandshake) == 220, "ConnectionHandshake should be 220 bytes");
 static_assert(sizeof(FrameCommandBatch) == 5128, "FrameCommandBatch should be 5128 bytes");
 static_assert(sizeof(SnapshotChecksum) == 24, "SnapshotChecksum should be 24 bytes");
 

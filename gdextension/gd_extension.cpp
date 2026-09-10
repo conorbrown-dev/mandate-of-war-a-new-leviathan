@@ -12,6 +12,7 @@
 #include <godot_cpp/variant/dictionary.hpp>
 
 #include "map/map_loader.hpp"
+#include "ecs/components/factions.hpp"
 
 using namespace godot;
 
@@ -131,6 +132,8 @@ void ai_reset();
 void ai_set_faction_id(int faction_id);
 int ai_get_visible_unit_count();
 int ai_get_enemy_unit_count();
+void network_send_visual_pack_handshake(const char* pack_id, uint32_t pack_version, const char* pack_hash);
+void network_set_expected_visual_pack(const char* pack_id, uint32_t pack_version, const char* pack_hash);
 }
 
 class RtsExtension final : public RefCounted {
@@ -188,6 +191,9 @@ protected:
         ClassDB::bind_method(D_METHOD("get_unit_positions", "entity_ids"), &RtsExtension::get_unit_positions);
         ClassDB::bind_method(D_METHOD("initialize_faction", "faction_id", "x", "y"), &RtsExtension::initialize_faction);
         ClassDB::bind_method(D_METHOD("create_unit_with_type", "x", "y", "unit_type", "faction_id"), &RtsExtension::create_unit_with_type);
+        ClassDB::bind_method(D_METHOD("get_unit_visual_id", "unit_type"), &RtsExtension::get_unit_visual_id);
+        ClassDB::bind_method(D_METHOD("send_visual_pack_handshake", "pack_id", "pack_version", "sha256"), &RtsExtension::send_visual_pack_handshake);
+        ClassDB::bind_method(D_METHOD("set_expected_visual_pack", "pack_id", "pack_version", "sha256"), &RtsExtension::set_expected_visual_pack);
         ClassDB::bind_method(D_METHOD("logistics_carrier_deck_occupancy", "facility_id"), &RtsExtension::logistics_carrier_deck_occupancy);
         ClassDB::bind_method(D_METHOD("logistics_takeoff_queue_size", "facility_id"), &RtsExtension::logistics_takeoff_queue_size);
         ClassDB::bind_method(D_METHOD("logistics_landing_queue_size", "facility_id"), &RtsExtension::logistics_landing_queue_size);
@@ -673,6 +679,29 @@ public:
     
     int64_t get_unit_faction_id(int64_t entity_id) const {
          return ::combat_get_unit_faction_id(static_cast<int>(entity_id));
+    }
+
+    String get_unit_visual_id(int64_t unit_type) const {
+        if (unit_type < 0 || unit_type > 255) return String();
+        const auto& prototypes = rts::get_unit_prototypes();
+        const auto it = prototypes.find(static_cast<rts::UnitType>(unit_type));
+        return it == prototypes.end() ? String() : String(it->second.visual_id.c_str());
+    }
+
+    bool send_visual_pack_handshake(const String& pack_id, int64_t pack_version, const String& sha256) const {
+        if (pack_id.is_empty() || sha256.length() != 64 || pack_version < 0) return false;
+        const CharString id = pack_id.utf8();
+        const CharString hash = sha256.utf8();
+        ::network_send_visual_pack_handshake(id.get_data(), static_cast<uint32_t>(pack_version), hash.get_data());
+        return true;
+    }
+
+    bool set_expected_visual_pack(const String& pack_id, int64_t pack_version, const String& sha256) const {
+        if (pack_id.is_empty() || sha256.length() != 64 || pack_version < 0) return false;
+        const CharString id = pack_id.utf8();
+        const CharString hash = sha256.utf8();
+        ::network_set_expected_visual_pack(id.get_data(), static_cast<uint32_t>(pack_version), hash.get_data());
+        return true;
     }
 
 private:

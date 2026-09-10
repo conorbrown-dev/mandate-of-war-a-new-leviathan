@@ -1,0 +1,7 @@
+{
+  "pack_id": "mandate_of_war.prototype_visuals",
+  "pack_version": 1,
+  "definitions_path": "godot/project/visuals/visual_definitions.json",
+  "sha256": "1ac1f7d7a4dabbe6e04a271bc2eb19fa9e3ac82a8514dfbde49280ffd18427f",
+  "gameplay_identity": "Simulation unit type and entity ID remain authoritative; this pack only selects presentation assets."
+}

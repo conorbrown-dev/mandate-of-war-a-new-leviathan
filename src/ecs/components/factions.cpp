@@ -68,9 +68,10 @@ static UnitPrototype parse_unit_prototype(const rts::data::JsonValue& obj) {
     auto speed_opt = obj.get("speed");
     auto range_opt = obj.get("range");
     auto view_opt = obj.get("view_range");
+    auto visual_id_opt = obj.get("visual_id");
 
     if (!name_opt || !type_opt || !faction_opt || !mat_cost_opt || !en_cost_opt ||
-        !res_cost_opt || !build_time_opt || !hp_opt || !speed_opt || !range_opt || !view_opt) {
+        !res_cost_opt || !build_time_opt || !hp_opt || !speed_opt || !range_opt || !view_opt || !visual_id_opt) {
         throw std::runtime_error("Missing required field in unit prototype");
     }
 
@@ -95,6 +96,7 @@ static UnitPrototype parse_unit_prototype(const rts::data::JsonValue& obj) {
         faction.value(),
         {}
     };
+    prototype.visual_id = visual_id_opt.value().as_string();
 
     if (auto prerequisites = obj.get("research_prerequisites");
         prerequisites && prerequisites->type() == rts::data::JsonValue::Type::Array) {

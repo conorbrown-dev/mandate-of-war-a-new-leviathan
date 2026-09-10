@@ -1,0 +1,12 @@
+{
+  "visual_definitions": [
+    {
+      "visual_id": "test.shipping.visual_without_imported_lods",
+      "model_path": "res://assets/source_3d/cc0/ground/freeciv/armor.glb",
+      "scale": [1, 1, 1],
+      "lod": {"mode": "imported_nodes"},
+      "hardpoints": [],
+      "status": "shipping"
+    }
+  ]
+}

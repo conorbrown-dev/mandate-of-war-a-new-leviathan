@@ -59,6 +59,9 @@ struct UnitPrototype {
     float max_airborne_time_seconds = 0.0f;
     float energy_consumption_rate = 0.0f;
     float material_consumption_rate = 0.0f;
+    // Presentation-only stable reference. Gameplay never derives behavior
+    // from a donor model path, mesh name, or dimensions.
+    std::string visual_id;
 };
 
 // Unit production data keyed by UnitType
