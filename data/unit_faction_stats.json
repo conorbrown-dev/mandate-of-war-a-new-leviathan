@@ -3,6 +3,7 @@
   "unit_types": [
     {
       "name": "Elite MBT",
+      "visual_id": "visual.elite.mbt.prototype",
       "type": "ELITE_MAIN_BATTLE_TANK",
       "faction": "ELITE_PRECISION",
       "material_cost": 500.0,
@@ -16,6 +17,7 @@
     },
     {
       "name": "Elite Artillery",
+      "visual_id": "visual.elite.artillery.prototype",
       "type": "ELITE_LONG_RANGE_ARTILLERY",
       "faction": "ELITE_PRECISION",
       "material_cost": 800.0,
@@ -29,6 +31,7 @@
     },
     {
       "name": "Elite AA Vehicle",
+      "visual_id": "visual.elite.anti_air.prototype",
       "type": "ELITE_ANTI_AIR",
       "faction": "ELITE_PRECISION",
       "material_cost": 350.0,
@@ -42,6 +45,7 @@
     },
     {
       "name": "Swarm Tank",
+      "visual_id": "visual.mass.swarm_tank.prototype",
       "type": "MASS_SWARM_TANK",
       "faction": "MASS_WARFARE",
       "material_cost": 150.0,
@@ -55,6 +59,7 @@
     },
     {
       "name": "Assault Vehicle",
+      "visual_id": "visual.mass.assault_vehicle.prototype",
       "type": "MASS_ASSAULT_VEHICLE",
       "faction": "MASS_WARFARE",
       "material_cost": 250.0,
@@ -68,6 +73,7 @@
     },
     {
       "name": "Mass AA Vehicle",
+      "visual_id": "visual.mass.anti_air.prototype",
       "type": "MASS_ANTI_AIR",
       "faction": "MASS_WARFARE",
       "material_cost": 180.0,
@@ -81,6 +87,7 @@
     },
     {
       "name": "Industrial MBT",
+      "visual_id": "visual.industrial.mbt.prototype",
       "type": "INDUSTRIAL_MBT",
       "faction": "INDUSTRIAL_EXPERIMENTAL",
       "material_cost": 300.0,
@@ -94,6 +101,7 @@
     },
     {
       "name": "Missile Platform",
+      "visual_id": "visual.industrial.missile_platform.prototype",
       "type": "INDUSTRIAL_MISSILE_PLATFORM",
       "faction": "INDUSTRIAL_EXPERIMENTAL",
       "material_cost": 500.0,
@@ -107,6 +115,7 @@
     },
     {
       "name": "Engineering Unit",
+      "visual_id": "visual.industrial.engineering.prototype",
       "type": "INDUSTRIAL_ENGINEERING",
       "faction": "INDUSTRIAL_EXPERIMENTAL",
       "material_cost": 200.0,
@@ -120,6 +129,7 @@
     },
     {
       "name": "Kestrel T1 Fighter",
+      "visual_id": "visual.elite.fighter.prototype",
       "type": "ELITE_T1_FIGHTER",
       "faction": "ELITE_PRECISION",
       "material_cost": 400.0,
@@ -143,6 +153,7 @@
     },
     {
       "name": "Harrierwing T1 VTOL",
+      "visual_id": "visual.elite.vtol.prototype",
       "type": "ELITE_T1_VTOL",
       "faction": "ELITE_PRECISION",
       "material_cost": 475.0,
@@ -202,7 +213,7 @@
   ],
   "schema_validation": {
     "unit_types": {
-      "required_fields": ["name", "type", "faction", "material_cost", "energy_cost", "research_cost", "build_time_seconds", "hp", "speed", "range", "view_range"],
+      "required_fields": ["name", "type", "faction", "visual_id", "material_cost", "energy_cost", "research_cost", "build_time_seconds", "hp", "speed", "range", "view_range"],
       "float_fields": ["material_cost", "energy_cost", "research_cost", "build_time_seconds", "hp", "speed", "range", "view_range", "production_bonus_metal", "production_bonus_energy", "unit_cost_discount"],
       "enum_fields": {
         "type": ["ELITE_MAIN_BATTLE_TANK", "ELITE_LONG_RANGE_ARTILLERY", "ELITE_ANTI_AIR", "MASS_SWARM_TANK", "MASS_ASSAULT_VEHICLE", "MASS_ANTI_AIR", "INDUSTRIAL_MBT", "INDUSTRIAL_MISSILE_PLATFORM", "INDUSTRIAL_ENGINEERING", "ELITE_T1_FIGHTER", "ELITE_T1_VTOL"],

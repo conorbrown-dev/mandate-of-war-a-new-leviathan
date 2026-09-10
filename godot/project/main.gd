@@ -11,6 +11,11 @@ const HUMAN_PLAYER_ID := 0
 const CAMERA_MIN_DISTANCE := 24.0
 const CAMERA_MAX_DISTANCE := 260.0
 const SIMULATION_WORLD_CENTER_SPAN := 319.0
+const VisualRegistryScript = preload("res://visual_definition_registry.gd")
+const VisualRootScript = preload("res://unit_visual_root.gd")
+const VisualSpawnBridgeScript = preload("res://visual_spawn_bridge.gd")
+const VisualPresentationPolicyScript = preload("res://visual_presentation_policy.gd")
+const VisualPackCompatibilityScript = preload("res://visual_pack_compatibility.gd")
 
 @onready var camera: Camera3D = $Camera3D
 @onready var unit_view: MultiMeshInstance3D = $Units
@@ -37,6 +42,11 @@ var ai_entity_ids := PackedInt32Array()
 var unit_positions := PackedFloat32Array()
 var scenario_definition: Dictionary = {}
 var match_started := false
+var prototype_visuals_enabled := false
+var prototype_visual_limit := 200
+var visual_registry
+var visual_spawn_bridge
+var prototype_visual_views: Dictionary = {}
 
 func _get_visible_unit_count() -> int:
 	var env_count := OS.get_environment("UNIT_COUNT")
@@ -85,6 +95,22 @@ func _setup_economy_for_player_1() -> void:
 	extension.call("economy_add_production_line", 1, 1, 100.0, 100.0, 5)
 
 
+func _configure_visual_pack_handshake() -> void:
+	var pack_handshake: Dictionary = VisualPackCompatibilityScript.handshake()
+	var pack_id := String(pack_handshake.get("pack_id", ""))
+	var pack_version := int(pack_handshake.get("pack_version", -1))
+	var pack_hash := String(pack_handshake.get("sha256", ""))
+	if pack_id.is_empty() or pack_hash.length() != 64 or pack_version < 0:
+		push_error("Visual-pack handshake metadata is invalid; multiplayer compatibility is disabled")
+		return
+	if extension.has_method("set_expected_visual_pack"):
+		extension.call("set_expected_visual_pack", pack_id, pack_version, pack_hash)
+	if extension.has_method("send_visual_pack_handshake"):
+		# The join transport invokes this when a peer connection is established.
+		# Keeping the manifest extraction here prevents simulation code from reading files.
+		print("Visual-pack handshake ready: %s v%d" % [pack_id, pack_version])
+
+
 func _ready() -> void:
 	var content_data_root := ProjectSettings.globalize_path("res://../../data").simplify_path()
 	OS.set_environment("RTS_DATA_ROOT", content_data_root)
@@ -99,9 +125,27 @@ func _ready() -> void:
 		push_error("RtsExtension is registered but could not be instantiated.")
 		set_process(false)
 		return
-
+	_configure_visual_pack_handshake()
 	var profile_frames := OS.get_environment("RTS_PROFILE_FRAMES")
-	if profile_frames.is_valid_int() and int(profile_frames) > 0:
+	var is_scale_profile := profile_frames.is_valid_int() and int(profile_frames) > 0
+	var prototype_visuals_requested := OS.get_environment("RTS_PROTOTYPE_VISUALS") == "1"
+	prototype_visuals_enabled = VisualPresentationPolicyScript.use_prototype_wrappers(
+		prototype_visuals_requested,
+		is_scale_profile
+	)
+	if prototype_visuals_requested and is_scale_profile:
+		push_warning("Prototype visual wrappers are disabled for scale profiles; retaining batched MultiMesh presentation")
+	if OS.get_environment("RTS_PROTOTYPE_VISUAL_LIMIT").is_valid_int():
+		prototype_visual_limit = maxi(1, int(OS.get_environment("RTS_PROTOTYPE_VISUAL_LIMIT")))
+	if prototype_visuals_enabled:
+		visual_registry = VisualRegistryScript.new()
+		if not visual_registry.load_definitions():
+			push_warning("Prototype visual registry failed; retaining MultiMesh presentation")
+			prototype_visuals_enabled = false
+		else:
+			visual_spawn_bridge = VisualSpawnBridgeScript.new()
+
+	if is_scale_profile:
 		profile_target_frames = int(profile_frames)
 		_start_scale_profile()
 		return
@@ -228,6 +272,9 @@ func _on_start_skirmish_pressed() -> void:
 	match_started = true
 	_setup_economy_for_player_1()
 	var total_units := _scenario_unit_count(scenario_definition.player) + _scenario_unit_count(scenario_definition.ai)
+	if prototype_visuals_enabled and total_units > prototype_visual_limit:
+		push_warning("Prototype visual wrappers capped at %d units; retaining batched MultiMesh presentation" % prototype_visual_limit)
+		prototype_visuals_enabled = false
 	_create_unit_multimesh(total_units)
 	if not _spawn_skirmish_units():
 		push_error("Failed to create the validated skirmish starting forces")
@@ -308,6 +355,9 @@ func _unhandled_input(event: InputEvent) -> void:
 
 
 func _create_unit_multimesh(instance_count: int) -> void:
+	for wrapper in prototype_visual_views.values():
+		if is_instance_valid(wrapper):
+			wrapper.queue_free()
 	entity_ids.clear()
 	entity_to_instance.clear()
 	entity_base_colors.clear()
@@ -315,6 +365,7 @@ func _create_unit_multimesh(instance_count: int) -> void:
 	player_entity_ids.clear()
 	ai_entity_ids.clear()
 	unit_positions.clear()
+	prototype_visual_views.clear()
 
 	var material := StandardMaterial3D.new()
 	material.vertex_color_use_as_albedo = true
@@ -331,6 +382,7 @@ func _create_unit_multimesh(instance_count: int) -> void:
 	unit_multimesh.instance_count = instance_count
 	unit_multimesh.visible_instance_count = instance_count
 	unit_view.multimesh = unit_multimesh
+	unit_view.visible = not prototype_visuals_enabled
 
 
 func _spawn_units(count: int) -> void:
@@ -396,6 +448,10 @@ func _spawn_faction_units(side: Dictionary, color: Color, player_controlled: boo
 			unit_positions.append(world_y)
 			unit_multimesh.set_instance_transform(instance_index, Transform3D(Basis.IDENTITY, Vector3(world_x, 0.4, world_y)))
 			unit_multimesh.set_instance_color(instance_index, color)
+			if prototype_visuals_enabled:
+				var visual_id := String(extension.call("get_unit_visual_id", unit_type))
+				var wrapper = visual_spawn_bridge.spawn(self, visual_registry, visual_id, Transform3D(Basis.IDENTITY, Vector3(world_x, 0.4, world_y)), color)
+				prototype_visual_views[entity_id] = wrapper
 			if player_controlled:
 				player_entity_ids.append(entity_id)
 			else:
@@ -416,7 +472,12 @@ func _sync_unit_transforms() -> Vector2:
 	for index in range(entity_ids.size()):
 		var x := unit_positions[index * 2]
 		var z := unit_positions[index * 2 + 1]
-		unit_multimesh.set_instance_transform(index, Transform3D(Basis.IDENTITY, Vector3(x, 0.4, z)))
+		if prototype_visuals_enabled and prototype_visual_views.has(entity_ids[index]):
+			var wrapper = prototype_visual_views[entity_ids[index]]
+			wrapper.apply_simulation_transform(Transform3D(Basis.IDENTITY, Vector3(x, 0.4, z)))
+			wrapper.update_lod(camera_distance)
+		else:
+			unit_multimesh.set_instance_transform(index, Transform3D(Basis.IDENTITY, Vector3(x, 0.4, z)))
 	var upload_ms := float(Time.get_ticks_usec() - upload_start_us) / 1000.0
 	return Vector2(fetch_ms, upload_ms)
 

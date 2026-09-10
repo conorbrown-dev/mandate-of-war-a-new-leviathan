@@ -2,6 +2,7 @@
 #include <chrono>
 #include <cmath>
 #include <cstdarg>
+#include <cstring>
 #include <iostream>
 
 #include "simulation/simulation.hpp"
@@ -1024,6 +1025,26 @@ extern "C" {
 }
 
 extern "C" {
+    void network_send_visual_pack_handshake(const char* pack_id, uint32_t pack_version, const char* pack_hash) {
+        if (!pack_id || !pack_hash) return;
+        rts::ConnectionHandshake handshake{};
+        handshake.protocol_version = rts::NETWORK_PROTOCOL_VERSION;
+        handshake.visual_pack_version = pack_version;
+        std::strncpy(reinterpret_cast<char*>(handshake.visual_pack_id), pack_id, rts::VISUAL_PACK_ID_LENGTH);
+        std::strncpy(reinterpret_cast<char*>(handshake.visual_pack_hash), pack_hash, rts::VISUAL_PACK_HASH_LENGTH);
+        get_simulation()->network_manager().send_handshake(handshake);
+    }
+
+    void network_set_expected_visual_pack(const char* pack_id, uint32_t pack_version, const char* pack_hash) {
+        if (!pack_id || !pack_hash) return;
+        rts::ConnectionHandshake handshake{};
+        handshake.protocol_version = rts::NETWORK_PROTOCOL_VERSION;
+        handshake.visual_pack_version = pack_version;
+        std::strncpy(reinterpret_cast<char*>(handshake.visual_pack_id), pack_id, rts::VISUAL_PACK_ID_LENGTH);
+        std::strncpy(reinterpret_cast<char*>(handshake.visual_pack_hash), pack_hash, rts::VISUAL_PACK_HASH_LENGTH);
+        get_simulation()->network_manager().set_expected_handshake(handshake);
+    }
+
     void network_update(float delta_ms) {
         get_simulation()->network_manager().update(delta_ms);
     }

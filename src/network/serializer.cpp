@@ -378,7 +378,8 @@ size_t serialize_connection_handshake(const ConnectionHandshake& handshake, uint
         return 0;
     }
 
-    uint8_t* ptr = buffer;
+	std::memset(buffer, 0, sizeof(ConnectionHandshake));
+	uint8_t* ptr = buffer;
     write_u32_le(ptr, handshake.protocol_version);
     ptr += sizeof(uint32_t);
     
@@ -394,10 +395,17 @@ size_t serialize_connection_handshake(const ConnectionHandshake& handshake, uint
     write_u32_le(ptr, handshake.content_version_minor);
     ptr += sizeof(uint32_t);
     
-    write_u32_le(ptr, handshake.content_version_patch);
-    ptr += sizeof(uint32_t);
-    
-    std::memcpy(ptr, handshake.padding, 4);
+	write_u32_le(ptr, handshake.content_version_patch);
+	ptr += sizeof(uint32_t);
+
+
+	std::memcpy(ptr, handshake.visual_pack_id, VISUAL_PACK_ID_LENGTH);
+	ptr += VISUAL_PACK_ID_LENGTH;
+	write_u32_le(ptr, handshake.visual_pack_version);
+	ptr += sizeof(uint32_t);
+	std::memcpy(ptr, handshake.visual_pack_hash, VISUAL_PACK_HASH_LENGTH);
+	ptr += VISUAL_PACK_HASH_LENGTH;
+	std::memcpy(ptr, handshake.padding, 4);
     
     return sizeof(ConnectionHandshake);
 }
@@ -423,10 +431,17 @@ size_t deserialize_connection_handshake(const uint8_t* buffer, size_t buffer_siz
     handshake.content_version_minor = read_u32_le(ptr);
     ptr += sizeof(uint32_t);
     
-    handshake.content_version_patch = read_u32_le(ptr);
-    ptr += sizeof(uint32_t);
-    
-    std::memcpy(handshake.padding, ptr, 4);
+	handshake.content_version_patch = read_u32_le(ptr);
+	ptr += sizeof(uint32_t);
+
+
+	std::memcpy(handshake.visual_pack_id, ptr, VISUAL_PACK_ID_LENGTH);
+	ptr += VISUAL_PACK_ID_LENGTH;
+	handshake.visual_pack_version = read_u32_le(ptr);
+	ptr += sizeof(uint32_t);
+	std::memcpy(handshake.visual_pack_hash, ptr, VISUAL_PACK_HASH_LENGTH);
+	ptr += VISUAL_PACK_HASH_LENGTH;
+	std::memcpy(handshake.padding, ptr, 4);
     
     return sizeof(ConnectionHandshake);
 }

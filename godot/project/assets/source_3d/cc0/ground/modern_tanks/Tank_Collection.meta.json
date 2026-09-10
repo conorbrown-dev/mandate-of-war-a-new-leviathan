@@ -1,0 +1,13 @@
+{
+  "category": "ground",
+  "godot_forward": "-Z",
+  "godot_up": "+Y",
+  "bounds_m": {
+    "x": 560.6885375976562,
+    "y": 389.8521423339844,
+    "z": 23.875652313232422
+  },
+  "triangles_all_exported_meshes": 73188,
+  "collision_recommendation": "Use simple BoxShape3D/CapsuleShape3D or custom RTS footprint data; do not use render mesh collision per unit.",
+  "source_pipeline": "Mandate of War CC0 Asset Import Pack"
+}

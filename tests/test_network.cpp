@@ -62,6 +62,62 @@ TEST(input_command_serialization) {
     }
 }
 
+TEST(connection_handshake_visual_pack_round_trip) {
+    using namespace rts;
+
+    ConnectionHandshake handshake{};
+    handshake.protocol_version = NETWORK_PROTOCOL_VERSION;
+    handshake.client_version = 7;
+    handshake.content_version_major = 1;
+    handshake.content_version_minor = 2;
+    handshake.content_version_patch = 3;
+    handshake.visual_pack_version = 4;
+    std::memcpy(handshake.visual_pack_id, "mandate_of_war.prototype_visuals", 32);
+    for (size_t i = 0; i < VISUAL_PACK_HASH_LENGTH; ++i) {
+        handshake.visual_pack_hash[i] = static_cast<uint8_t>(i);
+    }
+
+    uint8_t buffer[sizeof(ConnectionHandshake)]{};
+    if (serialize_connection_handshake(handshake, buffer, sizeof(buffer)) != sizeof(ConnectionHandshake)) {
+        throw std::runtime_error("Visual-pack handshake should serialize at its fixed wire size");
+    }
+    ConnectionHandshake decoded{};
+    if (deserialize_connection_handshake(buffer, sizeof(buffer), decoded) != sizeof(ConnectionHandshake) ||
+        decoded.visual_pack_version != handshake.visual_pack_version ||
+        std::memcmp(decoded.visual_pack_id, handshake.visual_pack_id, VISUAL_PACK_ID_LENGTH) != 0 ||
+        std::memcmp(decoded.visual_pack_hash, handshake.visual_pack_hash, VISUAL_PACK_HASH_LENGTH) != 0) {
+        throw std::runtime_error("Visual-pack handshake fields must round-trip exactly");
+    }
+}
+
+TEST(connection_handshake_visual_pack_compatibility_rejects_mismatch) {
+    using namespace rts;
+
+    ConnectionHandshake local{};
+    ConnectionHandshake remote{};
+    local.visual_pack_version = remote.visual_pack_version = 1;
+    std::memcpy(local.visual_pack_id, "pack", 4);
+    std::memcpy(remote.visual_pack_id, "pack", 4);
+    std::memset(local.visual_pack_hash, 0xAB, VISUAL_PACK_HASH_LENGTH);
+    std::memcpy(remote.visual_pack_hash, local.visual_pack_hash, VISUAL_PACK_HASH_LENGTH);
+    if (!connection_handshake_visual_pack_compatible(local, remote)) {
+        throw std::runtime_error("Matching visual-pack identities should be accepted");
+    }
+    remote.visual_pack_version++;
+    if (connection_handshake_visual_pack_compatible(local, remote)) {
+        throw std::runtime_error("Mismatched visual-pack versions must be rejected");
+    }
+    remote.visual_pack_version = local.visual_pack_version;
+    remote.visual_pack_hash[0]++;
+    if (connection_handshake_visual_pack_compatible(local, remote)) {
+        throw std::runtime_error("Mismatched visual-pack hashes must be rejected");
+    }
+    std::memset(remote.visual_pack_hash, 0, VISUAL_PACK_HASH_LENGTH);
+    if (connection_handshake_visual_pack_compatible(local, remote)) {
+        throw std::runtime_error("Empty visual-pack hashes must be rejected");
+    }
+}
+
 TEST(input_command_signed_position_codec) {
     using namespace rts;
 

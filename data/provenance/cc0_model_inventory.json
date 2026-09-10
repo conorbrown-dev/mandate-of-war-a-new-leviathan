@@ -1,0 +1,414 @@
+{
+  "schema_version": 1,
+  "purpose": "prototype/donor visuals only",
+  "models": [
+    {
+      "asset_id": "cc0.air.fighters.basic_replacements",
+      "glb_path": "downloaded_assets/Mandate_of_War_CC0_Asset_Import_Pack/godot_ready/air/fighters/basic_replacements.glb",
+      "meta_path": "downloaded_assets/Mandate_of_War_CC0_Asset_Import_Pack/godot_ready/air/fighters/basic_replacements.meta.json",
+      "category": "air",
+      "prototype_role": "air_prototype",
+      "bounds_m": {
+        "x": 711.5575561523438,
+        "y": 1210.17041015625,
+        "z": 19.45716667175293
+      },
+      "triangle_count": 77843,
+      "provenance_source_id": "oga_fighter_jets",
+      "alternate_or_duplicate": true,
+      "status": "needs_cleanup",
+      "validation": "metadata-present"
+    },
+    {
+      "asset_id": "cc0.air.freeciv.awacs",
+      "glb_path": "downloaded_assets/Mandate_of_War_CC0_Asset_Import_Pack/godot_ready/air/freeciv/awacs.glb",
+      "meta_path": "downloaded_assets/Mandate_of_War_CC0_Asset_Import_Pack/godot_ready/air/freeciv/awacs.meta.json",
+      "category": "air",
+      "prototype_role": "air_prototype",
+      "bounds_m": {
+        "x": 14.737144470214844,
+        "y": 16.000255584716797,
+        "z": 6.848928928375244
+      },
+      "triangle_count": 28832,
+      "provenance_source_id": "oga_freeciv_units",
+      "alternate_or_duplicate": false,
+      "status": "needs_cleanup",
+      "validation": "metadata-present"
+    },
+    {
+      "asset_id": "cc0.air.freeciv.bomber01",
+      "glb_path": "downloaded_assets/Mandate_of_War_CC0_Asset_Import_Pack/godot_ready/air/freeciv/bomber01.glb",
+      "meta_path": "downloaded_assets/Mandate_of_War_CC0_Asset_Import_Pack/godot_ready/air/freeciv/bomber01.meta.json",
+      "category": "air",
+      "prototype_role": "bomber",
+      "bounds_m": {
+        "x": 16.0,
+        "y": 12.59580135345459,
+        "z": 7.437960624694824
+      },
+      "triangle_count": 40127,
+      "provenance_source_id": "oga_freeciv_units",
+      "alternate_or_duplicate": false,
+      "status": "needs_cleanup",
+      "validation": "metadata-present"
+    },
+    {
+      "asset_id": "cc0.air.freeciv.fighter",
+      "glb_path": "downloaded_assets/Mandate_of_War_CC0_Asset_Import_Pack/godot_ready/air/freeciv/fighter.glb",
+      "meta_path": "downloaded_assets/Mandate_of_War_CC0_Asset_Import_Pack/godot_ready/air/freeciv/fighter.meta.json",
+      "category": "air",
+      "prototype_role": "fighter",
+      "bounds_m": {
+        "x": 8.576680183410645,
+        "y": 12.482404708862305,
+        "z": 4.177309036254883
+      },
+      "triangle_count": 8312,
+      "provenance_source_id": "oga_freeciv_units",
+      "alternate_or_duplicate": false,
+      "status": "usable",
+      "validation": "metadata-present"
+    },
+    {
+      "asset_id": "cc0.air.freeciv.helicopter02",
+      "glb_path": "downloaded_assets/Mandate_of_War_CC0_Asset_Import_Pack/godot_ready/air/freeciv/helicopter02.glb",
+      "meta_path": "downloaded_assets/Mandate_of_War_CC0_Asset_Import_Pack/godot_ready/air/freeciv/helicopter02.meta.json",
+      "category": "air",
+      "prototype_role": "rotary_air",
+      "bounds_m": {
+        "x": 160.12246704101562,
+        "y": 589.8096923828125,
+        "z": 571.196533203125
+      },
+      "triangle_count": 97879,
+      "provenance_source_id": "oga_freeciv_units",
+      "alternate_or_duplicate": false,
+      "status": "needs_cleanup",
+      "validation": "metadata-present"
+    },
+    {
+      "asset_id": "cc0.air.freeciv.stealth_bomber1",
+      "glb_path": "downloaded_assets/Mandate_of_War_CC0_Asset_Import_Pack/godot_ready/air/freeciv/stealth_bomber1.glb",
+      "meta_path": "downloaded_assets/Mandate_of_War_CC0_Asset_Import_Pack/godot_ready/air/freeciv/stealth_bomber1.meta.json",
+      "category": "air",
+      "prototype_role": "bomber",
+      "bounds_m": {
+        "x": 16.0,
+        "y": 9.502846717834473,
+        "z": 1.4736496210098267
+      },
+      "triangle_count": 19428,
+      "provenance_source_id": "oga_freeciv_units",
+      "alternate_or_duplicate": false,
+      "status": "usable",
+      "validation": "metadata-present"
+    },
+    {
+      "asset_id": "cc0.air.freeciv.stealthfighter",
+      "glb_path": "downloaded_assets/Mandate_of_War_CC0_Asset_Import_Pack/godot_ready/air/freeciv/stealthfighter.glb",
+      "meta_path": "downloaded_assets/Mandate_of_War_CC0_Asset_Import_Pack/godot_ready/air/freeciv/stealthfighter.meta.json",
+      "category": "air",
+      "prototype_role": "fighter",
+      "bounds_m": {
+        "x": 12.532191276550293,
+        "y": 16.000507354736328,
+        "z": 4.289722919464111
+      },
+      "triangle_count": 3178,
+      "provenance_source_id": "oga_freeciv_units",
+      "alternate_or_duplicate": false,
+      "status": "usable",
+      "validation": "metadata-present"
+    },
+    {
+      "asset_id": "cc0.fighter_jets.basic_replacements",
+      "glb_path": "downloaded_assets/Mandate_of_War_CC0_Asset_Import_Pack/godot_ready/fighter_jets/basic_replacements.glb",
+      "meta_path": "downloaded_assets/Mandate_of_War_CC0_Asset_Import_Pack/godot_ready/fighter_jets/basic_replacements.meta.json",
+      "category": "air",
+      "prototype_role": "air_prototype",
+      "bounds_m": {
+        "x": 710.6486206054688,
+        "y": 1209.08935546875,
+        "z": 19.312244415283203
+      },
+      "triangle_count": 77842,
+      "provenance_source_id": "oga_fighter_jets",
+      "alternate_or_duplicate": true,
+      "status": "needs_cleanup",
+      "validation": "metadata-present"
+    },
+    {
+      "asset_id": "cc0.ground.freeciv.alpine_troops1",
+      "glb_path": "downloaded_assets/Mandate_of_War_CC0_Asset_Import_Pack/godot_ready/ground/freeciv/alpine_troops1.glb",
+      "meta_path": "downloaded_assets/Mandate_of_War_CC0_Asset_Import_Pack/godot_ready/ground/freeciv/alpine_troops1.meta.json",
+      "category": "ground",
+      "prototype_role": "ground_prototype",
+      "bounds_m": {
+        "x": 8.920873641967773,
+        "y": 8.010917663574219,
+        "z": 17.147052764892578
+      },
+      "triangle_count": 639794,
+      "provenance_source_id": "oga_freeciv_units",
+      "alternate_or_duplicate": false,
+      "status": "needs_cleanup",
+      "validation": "metadata-present"
+    },
+    {
+      "asset_id": "cc0.ground.freeciv.armor",
+      "glb_path": "downloaded_assets/Mandate_of_War_CC0_Asset_Import_Pack/godot_ready/ground/freeciv/armor.glb",
+      "meta_path": "downloaded_assets/Mandate_of_War_CC0_Asset_Import_Pack/godot_ready/ground/freeciv/armor.meta.json",
+      "category": "ground",
+      "prototype_role": "armored_vehicle",
+      "bounds_m": {
+        "x": 9.261805534362793,
+        "y": 4.261075019836426,
+        "z": 5.318233013153076
+      },
+      "triangle_count": 66237,
+      "provenance_source_id": "oga_freeciv_units",
+      "alternate_or_duplicate": false,
+      "status": "needs_cleanup",
+      "validation": "metadata-present"
+    },
+    {
+      "asset_id": "cc0.ground.freeciv.engineer1",
+      "glb_path": "downloaded_assets/Mandate_of_War_CC0_Asset_Import_Pack/godot_ready/ground/freeciv/engineer1.glb",
+      "meta_path": "downloaded_assets/Mandate_of_War_CC0_Asset_Import_Pack/godot_ready/ground/freeciv/engineer1.meta.json",
+      "category": "ground",
+      "prototype_role": "engineering",
+      "bounds_m": {
+        "x": 5.155070781707764,
+        "y": 5.6242265701293945,
+        "z": 4.413857460021973
+      },
+      "triangle_count": 20558,
+      "provenance_source_id": "oga_freeciv_units",
+      "alternate_or_duplicate": false,
+      "status": "needs_cleanup",
+      "validation": "metadata-present"
+    },
+    {
+      "asset_id": "cc0.ground.freeciv.freight_02",
+      "glb_path": "downloaded_assets/Mandate_of_War_CC0_Asset_Import_Pack/godot_ready/ground/freeciv/freight_02.glb",
+      "meta_path": "downloaded_assets/Mandate_of_War_CC0_Asset_Import_Pack/godot_ready/ground/freeciv/freight_02.meta.json",
+      "category": "ground",
+      "prototype_role": "transport",
+      "bounds_m": {
+        "x": 2.0933260917663574,
+        "y": 5.350155353546143,
+        "z": 2.58937931060791
+      },
+      "triangle_count": 10260,
+      "provenance_source_id": "oga_freeciv_units",
+      "alternate_or_duplicate": false,
+      "status": "usable",
+      "validation": "metadata-present"
+    },
+    {
+      "asset_id": "cc0.ground.freeciv.howitzer",
+      "glb_path": "downloaded_assets/Mandate_of_War_CC0_Asset_Import_Pack/godot_ready/ground/freeciv/howitzer.glb",
+      "meta_path": "downloaded_assets/Mandate_of_War_CC0_Asset_Import_Pack/godot_ready/ground/freeciv/howitzer.meta.json",
+      "category": "ground",
+      "prototype_role": "artillery",
+      "bounds_m": {
+        "x": 2.860905885696411,
+        "y": 6.747090816497803,
+        "z": 2.5962555408477783
+      },
+      "triangle_count": 17858,
+      "provenance_source_id": "oga_freeciv_units",
+      "alternate_or_duplicate": false,
+      "status": "usable",
+      "validation": "metadata-present"
+    },
+    {
+      "asset_id": "cc0.ground.freeciv.marines01",
+      "glb_path": "downloaded_assets/Mandate_of_War_CC0_Asset_Import_Pack/godot_ready/ground/freeciv/marines01.glb",
+      "meta_path": "downloaded_assets/Mandate_of_War_CC0_Asset_Import_Pack/godot_ready/ground/freeciv/marines01.meta.json",
+      "category": "ground",
+      "prototype_role": "ground_prototype",
+      "bounds_m": {
+        "x": 21.871353149414062,
+        "y": 18.020530700683594,
+        "z": 45.56425476074219
+      },
+      "triangle_count": 24489,
+      "provenance_source_id": "oga_freeciv_units",
+      "alternate_or_duplicate": false,
+      "status": "needs_cleanup",
+      "validation": "metadata-present"
+    },
+    {
+      "asset_id": "cc0.ground.freeciv.mechinf",
+      "glb_path": "downloaded_assets/Mandate_of_War_CC0_Asset_Import_Pack/godot_ready/ground/freeciv/mechinf.glb",
+      "meta_path": "downloaded_assets/Mandate_of_War_CC0_Asset_Import_Pack/godot_ready/ground/freeciv/mechinf.meta.json",
+      "category": "ground",
+      "prototype_role": "ground_prototype",
+      "bounds_m": {
+        "x": 3.9484081268310547,
+        "y": 7.342368125915527,
+        "z": 2.929584503173828
+      },
+      "triangle_count": 34838,
+      "provenance_source_id": "oga_freeciv_units",
+      "alternate_or_duplicate": false,
+      "status": "needs_cleanup",
+      "validation": "metadata-present"
+    },
+    {
+      "asset_id": "cc0.ground.freeciv.paratrooper01",
+      "glb_path": "downloaded_assets/Mandate_of_War_CC0_Asset_Import_Pack/godot_ready/ground/freeciv/paratrooper01.glb",
+      "meta_path": "downloaded_assets/Mandate_of_War_CC0_Asset_Import_Pack/godot_ready/ground/freeciv/paratrooper01.meta.json",
+      "category": "ground",
+      "prototype_role": "ground_prototype",
+      "bounds_m": {
+        "x": 46.733001708984375,
+        "y": 30.66718292236328,
+        "z": 87.9327163696289
+      },
+      "triangle_count": 643828,
+      "provenance_source_id": "oga_freeciv_units",
+      "alternate_or_duplicate": false,
+      "status": "needs_cleanup",
+      "validation": "metadata-present"
+    },
+    {
+      "asset_id": "cc0.ground.low_poly_tanks.tank_battle_bg",
+      "glb_path": "downloaded_assets/Mandate_of_War_CC0_Asset_Import_Pack/godot_ready/ground/low_poly_tanks/tank battle bg.glb",
+      "meta_path": "downloaded_assets/Mandate_of_War_CC0_Asset_Import_Pack/godot_ready/ground/low_poly_tanks/tank battle bg.meta.json",
+      "category": "ground",
+      "prototype_role": "main_battle_tank",
+      "bounds_m": {
+        "x": 7.829930305480957,
+        "y": 8.036102294921875,
+        "z": 3.8524277210235596
+      },
+      "triangle_count": 1761692,
+      "provenance_source_id": "oga_low_poly_tanks",
+      "alternate_or_duplicate": false,
+      "status": "needs_cleanup",
+      "validation": "metadata-present"
+    },
+    {
+      "asset_id": "cc0.ground.modern_tanks.tank_collection",
+      "glb_path": "downloaded_assets/Mandate_of_War_CC0_Asset_Import_Pack/godot_ready/ground/modern_tanks/Tank_Collection.glb",
+      "meta_path": "downloaded_assets/Mandate_of_War_CC0_Asset_Import_Pack/godot_ready/ground/modern_tanks/Tank_Collection.meta.json",
+      "category": "ground",
+      "prototype_role": "main_battle_tank",
+      "bounds_m": {
+        "x": 560.6885375976562,
+        "y": 389.8521423339844,
+        "z": 23.875652313232422
+      },
+      "triangle_count": 73188,
+      "provenance_source_id": "oga_modern_tanks",
+      "alternate_or_duplicate": true,
+      "status": "needs_cleanup",
+      "validation": "metadata-present"
+    },
+    {
+      "asset_id": "cc0.ground.tanks.quaternius_tank_1",
+      "glb_path": "downloaded_assets/Mandate_of_War_CC0_Asset_Import_Pack/godot_ready/ground/tanks/quaternius_tank_1.glb",
+      "meta_path": "downloaded_assets/Mandate_of_War_CC0_Asset_Import_Pack/godot_ready/ground/tanks/quaternius_tank_1.meta.json",
+      "category": "ground",
+      "prototype_role": "main_battle_tank",
+      "bounds_m": {
+        "x": 8.0,
+        "y": 4.563412666320801,
+        "z": 2.646946430206299
+      },
+      "triangle_count": 13136,
+      "provenance_source_id": null,
+      "alternate_or_duplicate": false,
+      "status": "usable",
+      "validation": "metadata-present"
+    },
+    {
+      "asset_id": "cc0.ground.tanks.t34_seed",
+      "glb_path": "downloaded_assets/Mandate_of_War_CC0_Asset_Import_Pack/godot_ready/ground/tanks/t34_seed.glb",
+      "meta_path": "downloaded_assets/Mandate_of_War_CC0_Asset_Import_Pack/godot_ready/ground/tanks/t34_seed.meta.json",
+      "category": "ground",
+      "prototype_role": "ground_prototype",
+      "bounds_m": {
+        "x": 3.564601421356201,
+        "y": 7.382403373718262,
+        "z": 3.283336877822876
+      },
+      "triangle_count": 7665,
+      "provenance_source_id": "oga_t34",
+      "alternate_or_duplicate": false,
+      "status": "usable",
+      "validation": "metadata-present"
+    },
+    {
+      "asset_id": "cc0.naval.carrier_seed",
+      "glb_path": "downloaded_assets/Mandate_of_War_CC0_Asset_Import_Pack/godot_ready/naval/carrier_seed.glb",
+      "meta_path": "downloaded_assets/Mandate_of_War_CC0_Asset_Import_Pack/godot_ready/naval/carrier_seed.meta.json",
+      "category": "naval",
+      "prototype_role": "carrier",
+      "bounds_m": {
+        "x": 81.68785095214844,
+        "y": 271.970947265625,
+        "z": 37.493980407714844
+      },
+      "triangle_count": 1546,
+      "provenance_source_id": null,
+      "alternate_or_duplicate": false,
+      "status": "usable",
+      "validation": "metadata-present"
+    },
+    {
+      "asset_id": "cc0.naval.destroyer_seed",
+      "glb_path": "downloaded_assets/Mandate_of_War_CC0_Asset_Import_Pack/godot_ready/naval/destroyer_seed.glb",
+      "meta_path": "downloaded_assets/Mandate_of_War_CC0_Asset_Import_Pack/godot_ready/naval/destroyer_seed.meta.json",
+      "category": "naval",
+      "prototype_role": "destroyer",
+      "bounds_m": {
+        "x": 27.773380279541016,
+        "y": 160.8175048828125,
+        "z": 38.57078170776367
+      },
+      "triangle_count": 8436,
+      "provenance_source_id": null,
+      "alternate_or_duplicate": false,
+      "status": "usable",
+      "validation": "metadata-present"
+    },
+    {
+      "asset_id": "cc0.naval.submarine_seed",
+      "glb_path": "downloaded_assets/Mandate_of_War_CC0_Asset_Import_Pack/godot_ready/naval/submarine_seed.glb",
+      "meta_path": "downloaded_assets/Mandate_of_War_CC0_Asset_Import_Pack/godot_ready/naval/submarine_seed.meta.json",
+      "category": "naval",
+      "prototype_role": "submarine",
+      "bounds_m": {
+        "x": 12.729970932006836,
+        "y": 100.0,
+        "z": 14.677560806274414
+      },
+      "triangle_count": 4686,
+      "provenance_source_id": null,
+      "alternate_or_duplicate": false,
+      "status": "usable",
+      "validation": "metadata-present"
+    },
+    {
+      "asset_id": "cc0.tanks.tank_collection",
+      "glb_path": "downloaded_assets/Mandate_of_War_CC0_Asset_Import_Pack/godot_ready/tanks/Tank_Collection.glb",
+      "meta_path": "downloaded_assets/Mandate_of_War_CC0_Asset_Import_Pack/godot_ready/tanks/Tank_Collection.meta.json",
+      "category": "ground",
+      "prototype_role": "main_battle_tank",
+      "bounds_m": {
+        "x": 560.6885375976562,
+        "y": 389.8521423339844,
+        "z": 23.875652313232422
+      },
+      "triangle_count": 73188,
+      "provenance_source_id": null,
+      "alternate_or_duplicate": true,
+      "status": "needs_cleanup",
+      "validation": "metadata-present"
+    }
+  ]
+}

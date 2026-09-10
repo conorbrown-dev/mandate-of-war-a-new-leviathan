@@ -2,6 +2,7 @@
 
 #include <deque>
 #include <vector>
+#include <optional>
 
 #include "buffer.hpp"
 #include "serializer.hpp"
@@ -59,6 +60,7 @@ public:
      
      void send_handshake(const ConnectionHandshake& handshake);
      bool receive_handshake(ConnectionHandshake& handshake);
+     void set_expected_handshake(const ConnectionHandshake& handshake);
      
      void send_frame_command_batch(const FrameCommandBatch& batch);
      bool receive_frame_command_batch(FrameCommandBatch& batch);
@@ -122,7 +124,8 @@ private:
       TcpTransport tcp_transport_;
       
      SnapshotChecksum pending_remote_checksum_{};
-     bool has_pending_remote_checksum_{false};
+      bool has_pending_remote_checksum_{false};
+      std::optional<ConnectionHandshake> expected_handshake_;
       uint32_t desync_count_{0};
       uint32_t last_desync_tick_{0};
       
