@@ -40,3 +40,6 @@ docs/adr/006_safe_return.md
 # OS-specific
 .DS_Store
 Thumbs.db
+
+godot-linux-install
+downloaded_assets/*.zip
