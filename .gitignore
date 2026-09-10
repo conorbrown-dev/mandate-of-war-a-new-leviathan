@@ -23,6 +23,8 @@ godot/project/godot_bin
 godot/project/rts.gdextension
 godot/project/rts.gdextension.uid
 godot/lib/
+godot-linux-install
+Godot_v4.7.2-stable_linux.x86_64
 
 # Test probes
 test_dl
