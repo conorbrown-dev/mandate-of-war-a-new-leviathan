@@ -81,7 +81,12 @@ func _run() -> void:
 	check(production_queue.size() == 1, "selected Command Walker queues a timed MBT build")
 	var active_build: Dictionary = production_queue[0] if not production_queue.is_empty() else {}
 	check(float(active_build.get("remaining_seconds", 0.0)) > 0.0 and float(active_build.get("reserved_material", 0.0)) > 0.0, "production queue exposes remaining time and authoritative reserved resources")
-	check(view.command_hud.snapshot.get("build_catalog", []).size() >= 3 and view.construction_frames.get_child_count() == 1, "build menu and visible construction skeleton are driven by the queue")
+	var build_catalog: Array = view.command_hud.snapshot.get("build_catalog", [])
+	var catalog_types: Array[int] = []
+	for entry in build_catalog:
+		if not bool(entry.get("is_structure", false)):
+			catalog_types.append(int(entry.get("type", -1)))
+	check(catalog_types.has(9) and catalog_types.has(10) and catalog_types.has(11) and view.construction_frames.get_child_count() == 1, "build menu exposes the added fighter, VTOL, and patrol boat alongside the active queue")
 	if OS.get_environment("RTS_CAPTURE_SCREENSHOT") == "1":
 		await RenderingServer.frame_post_draw
 		var production_image := view.get_viewport().get_texture().get_image()
@@ -90,8 +95,20 @@ func _run() -> void:
 		view.extension.call("update_simulation", 50.0)
 		view._sync_new_entities()
 	check(view.player_entity_ids.size() == 2, "completed Command Walker production adds a player unit")
-	check(view.demo_unit_views.size() >= 3 and view.demo_unit_views.has(view.player_entity_ids[1]), "completed unit receives a visible 3D model")
+	check((view.demo_unit_views.has(view.player_entity_ids[1]) or view.prototype_visual_views.has(view.player_entity_ids[1])) and view.demo_unit_views.size() + view.prototype_visual_views.size() >= 3, "completed unit receives a visible 3D model")
 	check(view.extension.call("get_unit_x", view.player_entity_ids[1]) != view.extension.call("get_unit_x", commander_id), "completed unit spawns at a visible factory rally point")
+	view._set_selected(commander_id, true)
+	check(view._build_unit_type_at_index(3) == 9 and view._build_unit_type_at_index(4) == 10 and view._build_unit_type_at_index(5) == 11, "new unit shortcuts resolve from the native catalog rather than hard-coded unit types")
+	view._queue_commander_unit(9)
+	view.extension.call("update_simulation", 50.0)
+	view._update_hud()
+	production_queue = view.command_hud.snapshot.get("queue", [])
+	active_build = production_queue[0] if not production_queue.is_empty() else {}
+	check(int(active_build.get("type", -1)) == 9, "Command Walker queues the added fighter through the gameplay build path")
+	for _tick in range(410):
+		view.extension.call("update_simulation", 50.0)
+		view._sync_new_entities()
+	check(view.player_entity_ids.size() == 3 and (view.prototype_visual_views.has(view.player_entity_ids[2]) or view.demo_unit_views.has(view.player_entity_ids[2])), "completed fighter joins the player force with its registered gameplay visual")
 	view._clear_selection()
 	var drag_bounds := Rect2(view.camera.unproject_position(view._entity_world_position(view.player_entity_ids[0])), Vector2.ZERO)
 	for index in range(1, view.player_entity_ids.size()):
@@ -104,6 +121,25 @@ func _run() -> void:
 	for entity_id in view.selected_ids:
 		all_selected_are_player = all_selected_are_player and view.player_entity_ids.has(entity_id)
 	check(view.selected_ids.size() >= 2 and all_selected_are_player, "drag-box selection acquires multiple player units")
+	var engineer_id: int = view.extension.call("create_unit_with_type", 30.0, 30.0, 8, 0)
+	check(engineer_id > 0, "engineering-unit FOB fixture is created")
+	view._register_presented_unit(engineer_id, 8, 0, Vector2(30.0, 30.0))
+	view._clear_selection()
+	view._set_selected(engineer_id, true)
+	var fob_target := Vector2(36.0, 36.0)
+	view.fob_build_mode = true
+	var fob_screen: Vector2 = view.camera.unproject_position(Vector3(fob_target.x, 0.0, fob_target.y))
+	view._order_fob(fob_screen)
+	view.extension.call("update_simulation", 50.0)
+	view._update_hud()
+	var fob_state: Array = view.command_hud.snapshot.get("fob_installation", [])
+	check(fob_state.size() >= 6 and int(fob_state[3]) == 1 and float(fob_state[4]) > 0.0 and float(fob_state[4]) < 1.0, "FOB HUD reports authoritative construction progress")
+	for _tick in range(200):
+		view.extension.call("update_simulation", 50.0)
+	view._update_hud()
+	fob_state = view.command_hud.snapshot.get("fob_installation", [])
+	check(fob_state.size() >= 6 and int(fob_state[2]) == 1 and int(fob_state[3]) == 0 and float(fob_state[4]) == 1.0, "FOB HUD reports completed active installation")
+	check(String(view.command_hud.snapshot.get("fob_completion_notification", "")) == "FOB ONLINE  //  LOGISTICS LINK ESTABLISHED", "FOB HUD reports completion notification")
 	print("GODOT_SKIRMISH_PRESENTATION checks=%d failures=%d" % [checks, failures])
 	view.queue_free()
 	await process_frame

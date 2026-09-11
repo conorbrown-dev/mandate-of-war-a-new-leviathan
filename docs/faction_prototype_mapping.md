@@ -1,5 +1,14 @@
 # Temporary Faction Prototype Mapping
 
+The active visual paths for the ground, air, and logistics rows below have been
+replaced by the user-provided reference pack and converted into
+`godot/project/assets/source_3d/reference_models/`. Stable visual IDs and
+gameplay identities are unchanged. The authoritative source-to-output record is
+`data/provenance/reference_model_mapping.json`; the two naval slots remain on
+the existing lightweight placeholders because the reference directory contains
+no destroyer-class source and its carrier import is not yet lightweight enough
+for the current validator.
+
 All entries are CC0 donor/prototype visuals. Their `prototype_unit_id` and
 `visual_id` are stable Mandate of War identifiers; donor filenames and history
 do not determine balance, unit identity, orders, replay identity, or lore.

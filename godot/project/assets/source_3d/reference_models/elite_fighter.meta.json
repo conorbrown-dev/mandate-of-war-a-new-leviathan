@@ -1,0 +1,13 @@
+{
+  "category": "air",
+  "godot_forward": "-Z",
+  "godot_up": "+Y",
+  "bounds_m": {
+    "x": 19.093835830688477,
+    "y": 19.156192779541016,
+    "z": 5.286050200462341
+  },
+  "triangles_all_exported_meshes": 19999,
+  "collision_recommendation": "Use simple BoxShape3D/CapsuleShape3D or custom RTS footprint data; do not use render mesh collision per unit.",
+  "source_pipeline": "User-provided reference_models conversion"
+}

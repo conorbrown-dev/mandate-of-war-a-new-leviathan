@@ -1,15 +1,22 @@
-# Next Tasks — Goal 11 Active, Forward Seizure Feature Foundation
+# Next Tasks — Goal 11 Verified, Forward Seizure Feature Foundation
 
-**Updated:** 2026-09-10. Goal 11 is ACTIVE. Territorial control domain model, unit-to-zone assignment, zone progression tracking, and FOB construction tracking complete and tested.
+**Updated:** 2026-09-10. Goal 11 is VERIFIED. Territorial control domain model, unit-to-zone assignment, zone progression tracking, deterministic FOB construction progress, content-authored unit capability assignment, rendered FOB placement/progress, and completion notification are verified.
 
-## Goal 11 Zone Progression Tests — PENDING
+## Latest Gameplay Integration
 
-Zone progression logic needs verification:
+The reachable Command Walker catalog includes all six Elite unit prototypes;
+fighter, VTOL, and patrol-boat entries are no longer hidden after the first
+three cards. Validation is CTest 3/3 and `test_skirmish.gd` with 42 passing
+checks, including fighter queue, completion, and presentation registration.
+
+## Goal 11 Verification Record
+
+Zone progression logic is verified:
 Further economy work should add range/contestation rules and construction
 feedback before introducing separate material inventories; the demo deliberately
 does not track oil, silicon, plastic, or metal as distinct balances.
 
-## Goal 11 Active
+## Goal 11 Verified
 
 | Criterion | Status |
 |---|---|
@@ -46,17 +53,16 @@ does not track oil, silicon, plastic, or metal as distinct balances.
 Goal 09 was deferred in favor of Goal 10 to address terrain system integration first.
 Goal 10 (terrain system) is now deferred in favor of Goal 11 (Forward Seizure feature foundation).
 
-## Future Work — Goal 11 Continue
+## Future Work — No Active Goal 12
 
 ### Next tasks:
-- Add unit capability assignment based on unit type/faction
-- Add FOB construction UI feedback (progress bar, cost display, completion notification)
+- Author and select the next canonical numbered goal before starting new milestone work
 
 ## Verification
 
 | Criterion | Status |
 |---|---|
-| All 147 integration tests | ✅ PASS |
+| All configured tests | ✅ PASS: CTest 3/3; direct integration runner 150/150 |
 | Skirmish match loop (AI production/research) | ✅ PASS: `skirmish_validated_setup_and_repeatable_legal_terminal` passes with 934 checks |
 | Mesh JSON generation (61 assets) | ✅ PASS |
 | Blender model generation (33 assets) | ✅ PASS |
@@ -68,7 +74,7 @@ Goal 10 (terrain system) is now deferred in favor of Goal 11 (Forward Seizure fe
 ### Verification Commands
 
 ```bash
-cd /home/conor/repos/near-future-rts-game
+cd /home/conor/repos/mandate-of-war
 cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
 cmake --build build
 ctest --test-dir build --output-on-failure
@@ -97,7 +103,7 @@ Goal 10 (terrain system) is no longer active.
 - Verify zone progression logic with test cases (security thresholds, state transitions)
 - Add territory visualization in Godot (zone boundaries, control state colors)
 - Add unit capability assignment based on unit type/faction
-- Add FOB construction UI feedback (progress bar, cost display, completion notification)
+- Completion notification coverage for the rendered FOB construction flow is verified
 - Add economy integration for materials deduction during construction
 - Add construction progress animation/tick updates
 
@@ -113,7 +119,7 @@ Goal 10 (terrain system) is no longer active.
 ## Verification Commands
 
 ```bash
-cd /home/conor/repos/near-future-rts-game
+cd /home/conor/repos/mandate-of-war
 cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
 cmake --build build
 ctest --test-dir build --output-on-failure

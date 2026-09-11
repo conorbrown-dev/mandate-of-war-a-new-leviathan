@@ -1,0 +1,13 @@
+{
+  "category": "naval",
+  "godot_forward": "-Z",
+  "godot_up": "+Y",
+  "bounds_m": {
+    "x": 12125.985107421875,
+    "y": 5720.627685546875,
+    "z": 21121.553833007812
+  },
+  "triangles_all_exported_meshes": 286209,
+  "collision_recommendation": "Use simple BoxShape3D/CapsuleShape3D or custom RTS footprint data; do not use render mesh collision per unit.",
+  "source_pipeline": "User-provided reference_models conversion"
+}

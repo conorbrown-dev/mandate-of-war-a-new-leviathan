@@ -20,7 +20,7 @@ Do not trust older claims that Goals 04–06 or milestones 05–12 are complete.
 
 ## Working Directory
 
-This repository (`/home/conor/repos/near-future-rts-game`) is the working directory for this project.
+This repository (`/home/conor/repos/mandate-of-war`) is the working directory for this project.
 
 ## Required Reading Order
 

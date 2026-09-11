@@ -56,6 +56,18 @@ static std::optional<FactionId> parse_faction_id(const std::string& name) {
     return std::nullopt;
 }
 
+static std::optional<SeizureCapability> parse_seizure_capability(const std::string& name) {
+    if (name == "RECON") return SeizureCapability::RECON;
+    if (name == "SEIZURE") return SeizureCapability::SEIZURE;
+    if (name == "SECURE") return SeizureCapability::SECURE;
+    if (name == "CONSTRUCT_FOB") return SeizureCapability::CONSTRUCT_FOB;
+    if (name == "CONSTRUCT_LOGISTICS") return SeizureCapability::CONSTRUCT_LOGISTICS;
+    if (name == "ESTABLISH_BASE") return SeizureCapability::ESTABLISH_BASE;
+    if (name == "DEFEND") return SeizureCapability::DEFEND;
+    if (name == "HARVEST_SECURED") return SeizureCapability::HARVEST_SECURED;
+    return std::nullopt;
+}
+
 static std::unordered_map<std::string, ResearchProject> load_research_projects_from_json();
 
 static UnitPrototype parse_unit_prototype(const rts::data::JsonValue& obj) {
@@ -104,6 +116,17 @@ static UnitPrototype parse_unit_prototype(const rts::data::JsonValue& obj) {
 
     if (auto content_id_opt = obj.get("content_id"); content_id_opt && content_id_opt->type() == rts::data::JsonValue::Type::String) {
         prototype.content_id = content_id_opt->as_string();
+    }
+
+    if (auto capabilities = obj.get("capabilities");
+        capabilities && capabilities->type() == rts::data::JsonValue::Type::Array) {
+        for (const auto& capability : capabilities->as_array()) {
+            auto parsed_capability = parse_seizure_capability(capability.as_string());
+            if (!parsed_capability) {
+                throw std::runtime_error("Invalid seizure capability in unit prototype");
+            }
+            prototype.capabilities.push_back(*parsed_capability);
+        }
     }
 
     if (auto prerequisites = obj.get("research_prerequisites");

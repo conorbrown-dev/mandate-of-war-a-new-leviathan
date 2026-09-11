@@ -126,6 +126,9 @@ void TerritorialControlManager::add_installation(float x, float y, InstallationT
     installation.type = type;
     installation.faction = faction;
     installation.built_tick = 0; // TODO: Replace with actual tick count
+    installation.constructing = type == InstallationType::FORWARD_OPERATING_BASE;
+    installation.construction_progress = installation.constructing ? 0.0f : 1.0f;
+    installation.construction_cost = installation.constructing ? 500.0f : 0.0f;
     installations_.push_back(installation);
 }
 
@@ -150,8 +153,11 @@ InstallationState TerritorialControlManager::get_installation_at(float x, float 
         if (dx * dx + dy * dy <= INSTALLATION_RADIUS_SQ) {
             InstallationState state;
             state.type = inst.type;
-            state.active = true;
+            state.active = !inst.constructing;
+            state.constructing = inst.constructing;
             state.faction = inst.faction;
+            state.construction_progress = inst.construction_progress;
+            state.construction_cost = inst.construction_cost;
             
             // Setup bonuses based on installation type
             switch (inst.type) {
@@ -271,8 +277,11 @@ float TerritorialControlManager::get_security_score(float x, float y, FactionId 
         }
     }
     
-    // Check installations
+    // Check completed installations only; construction is not yet an active bonus.
     for (const auto& inst : installations_) {
+        if (inst.constructing) {
+            continue;
+        }
         float dx = inst.x - x;
         float dy = inst.y - y;
         if (dx * dx + dy * dy <= 100.0f) { // 10x10 cell radius
@@ -394,7 +403,8 @@ void TerritorialControlManager::process_zone_progression() {
                     float dx = inst.x - zone.center_x;
                     float dy = inst.y - zone.center_y;
                     if (dx * dx + dy * dy <= 100.0f && 
-                        inst.type == InstallationType::FORWARD_OPERATING_BASE) {
+                        inst.type == InstallationType::FORWARD_OPERATING_BASE &&
+                        !inst.constructing) {
                         has_fob = true;
                         break;
                     }
@@ -409,6 +419,9 @@ void TerritorialControlManager::process_zone_progression() {
                 // Check for additional infrastructure
                 int installed_count = 0;
                 for (const auto& inst : installations_) {
+                    if (inst.constructing) {
+                        continue;
+                    }
                     float dx = inst.x - zone.center_x;
                     float dy = inst.y - zone.center_y;
                     if (dx * dx + dy * dy <= 100.0f && inst.faction == zone.controlling_faction) {
@@ -442,7 +455,27 @@ void TerritorialControlManager::reset() {
 }
 
 void TerritorialControlManager::update(float delta_ms) {
-    (void)delta_ms;
+    if (!std::isfinite(delta_ms) || delta_ms <= 0.0f) {
+        return;
+    }
+
+    // FOB assembly is deliberately manager-owned and deterministic: ten
+    // seconds of simulation time completes a paid construction. The
+    // installation remains queryable while constructing, but contributes no
+    // active installation bonuses until completion.
+    constexpr float FOB_BUILD_TIME_MS = 10000.0f;
+    for (auto& installation : installations_) {
+        if (!installation.constructing) {
+            continue;
+        }
+        installation.construction_progress = std::min(
+            1.0f,
+            installation.construction_progress + delta_ms / FOB_BUILD_TIME_MS);
+        if (installation.construction_progress >= 1.0f) {
+            installation.constructing = false;
+            installation.built_tick = 1;
+        }
+    }
 }
 
 } // namespace rts

@@ -15,6 +15,7 @@ const CYAN := Color("#47d9ff")
 const AMBER := Color("#ffbd52")
 const RED := Color("#ff6d65")
 const GREEN := Color("#7ad99b")
+const BUILD_UNIT_SHORTCUTS := ["1", "4", "5", "9", "0", "P"]
 
 
 func _ready() -> void:
@@ -151,17 +152,22 @@ func _draw() -> void:
 	# exposes exact reservation costs and the active frame exposes time remaining.
 	var build_catalog: Array = snapshot.get("build_catalog", [])
 	if not build_catalog.is_empty() and bool(snapshot.get("can_build", false)):
-		var build_menu := Rect2((w - 540.0) * 0.5, 12.0, 540.0, 114.0)
+		var build_menu := Rect2((w - 540.0) * 0.5, 12.0, 540.0, 202.0)
 		_panel(build_menu, GREEN)
 		_text(build_menu.position + Vector2(10, 15), "COMMAND WALKER // BUILD MENU", 9, GREEN)
 		var units: Array = build_catalog.filter(func(item): return not bool(item.get("is_structure", false)))
+		units.sort_custom(func(left, right): return int(left.get("type", -1)) < int(right.get("type", -1)))
 		var structures: Array = build_catalog.filter(func(item): return bool(item.get("is_structure", false)))
 		_text(build_menu.position + Vector2(10, 29), "UNITS", 8, MUTED)
 		for index in range(mini(3, units.size())):
-			_build_cell(Rect2(build_menu.position + Vector2(8 + index * 176, 34), Vector2(168, 32)), units[index], ["1", "4", "5"][index])
-		_text(build_menu.position + Vector2(10, 76), "STRUCTURES", 8, MUTED)
+			_build_cell(Rect2(build_menu.position + Vector2(8 + index * 176, 34), Vector2(168, 32)), units[index], BUILD_UNIT_SHORTCUTS[index])
+		for index in range(3, mini(6, units.size())):
+			_build_cell(Rect2(build_menu.position + Vector2(8 + (index - 3) * 176, 76), Vector2(168, 32)), units[index], BUILD_UNIT_SHORTCUTS[index])
+		for index in range(6, mini(9, units.size())):
+			_build_cell(Rect2(build_menu.position + Vector2(8 + (index - 6) * 176, 118), Vector2(168, 32)), units[index], BUILD_UNIT_SHORTCUTS[index])
+		_text(build_menu.position + Vector2(10, 160), "STRUCTURES", 8, MUTED)
 		for index in range(mini(2, structures.size())):
-			_build_cell(Rect2(build_menu.position + Vector2(8 + index * 176, 81), Vector2(168, 26)), structures[index], ["6", "7"][index])
+			_build_cell(Rect2(build_menu.position + Vector2(8 + index * 176, 165), Vector2(168, 26)), structures[index], ["6", "7"][index])
 
 	var queue: Array = snapshot.get("queue", [])
 	if not queue.is_empty():
@@ -174,3 +180,20 @@ func _draw() -> void:
 		draw_rect(Rect2(fabrication.position + Vector2(10, 27), Vector2(520 * progress, 8)), GREEN, true)
 		_text(fabrication.position + Vector2(10, 55), "%s  %.0f%%  //  %.1f SEC REMAINING" % [String(active.get("name", "UNIT")).to_upper(), progress * 100.0, float(active.get("remaining_seconds", 0.0))], 10, INK)
 		_text(fabrication.position + Vector2(10, 73), "RESERVED: M %.0f  E %.0f  R %.0f" % [float(active.get("reserved_material", 0.0)), float(active.get("reserved_energy", 0.0)), float(active.get("reserved_research", 0.0))], 9, AMBER)
+
+	var fob_installation: Array = snapshot.get("fob_installation", [])
+	if fob_installation.size() >= 6:
+		var fob_card := Rect2((w - 540.0) * 0.5, h - 392.0, 540.0, 78.0)
+		var constructing := int(fob_installation[3]) == 1
+		var progress := clampf(float(fob_installation[4]), 0.0, 1.0)
+		_panel(fob_card, AMBER if constructing else GREEN)
+		_text(fob_card.position + Vector2(10, 16), "FORWARD OPERATING BASE // %s" % ("ASSEMBLY" if constructing else "ACTIVE"), 9, AMBER if constructing else GREEN)
+		draw_rect(Rect2(fob_card.position + Vector2(10, 27), Vector2(520, 8)), Color("#132a35"), true)
+		draw_rect(Rect2(fob_card.position + Vector2(10, 27), Vector2(520 * progress, 8)), AMBER if constructing else GREEN, true)
+		_text(fob_card.position + Vector2(10, 55), "%.0f%%  //  M %.0f  //  %s" % [progress * 100.0, float(fob_installation[5]), "CONSTRUCTING" if constructing else "ONLINE"], 10, INK)
+
+	var fob_notification := String(snapshot.get("fob_completion_notification", ""))
+	if not fob_notification.is_empty():
+		var notification_card := Rect2((w - 540.0) * 0.5, h - 450.0, 540.0, 42.0)
+		_panel(notification_card, GREEN)
+		_text(notification_card.position + Vector2(10, 26), fob_notification, 11, GREEN)

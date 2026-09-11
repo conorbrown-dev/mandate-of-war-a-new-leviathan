@@ -8,7 +8,7 @@
       "command": [
         "/usr/bin/clangd",
         "--background-index",
-        "--compile-commands-dir=/home/conor/repos/near-future-rts-game/build"
+        "--compile-commands-dir=/home/conor/repos/mandate-of-war/build"
       ],
       "extensions": [
         ".c",

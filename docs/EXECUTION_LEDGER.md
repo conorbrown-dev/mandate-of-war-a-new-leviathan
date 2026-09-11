@@ -2,9 +2,9 @@
 
 **Last updated:** 2026-09-10
 
-**Sequence mode:** Continuous through the canonical numbered goals until Goal 11 is verified or work is genuinely blocked
+**Sequence mode:** Goal 11 verified; paused because no canonical Goal 12 document exists
 
-**Active milestone:** Goal 11 — Forward Seizure feature foundation. G11-TERRITORIAL/G11-ZONES/G11-INSTALLATIONS/G11-CAPABILITIES/G11-REQUIREMENTS/G11-DOMAIN-STRUCTURES/G11-INTEGRATION/G11-SIMULATION-INTEGRATION/G11-UNITASSIGN/G11-ZONEPROG/G11-INSTALLCMD/G11-CONSTRACK verified. Next: zone progression logic tests, territory visualization, unit capability assignment, FOB construction UI.
+**Milestone state:** Goal 11 — Forward Seizure feature foundation is VERIFIED. G11-TERRITORIAL/G11-ZONES/G11-INSTALLATIONS/G11-CAPABILITIES/G11-REQUIREMENTS/G11-DOMAIN-STRUCTURES/G11-INTEGRATION/G11-SIMULATION-INTEGRATION/G11-UNITASSIGN/G11-ZONEPROG/G11-INSTALLCMD/G11-CONSTRACK/G11-CAPABILITYASSIGN/G11-CONSTRUCTION/G11-UI verified. No canonical Goal 12 document exists.
 
 This file is the durable milestone state used after a restart, compaction, or automatic continuation. It records gates and acceptance evidence; it does not weaken the completion criteria in the numbered goal files. Session titles, chat summaries, and OpenCode's session-local todos are non-authoritative.
 
@@ -23,9 +23,9 @@ Historical Goal 04–07 labels below are retained as prior reports, not fresh si
 | Goal 08 — playable skirmish vertical slice | `VERIFIED` | All criteria verified: G08-COMMANDS/G08-ECONOMY/G08-UX/G08-MATCH/G08-PERF. Asset generation: 61 mesh JSON + 33 Blender models. Next: Goal 09 - Modding/Asset Pipeline improvements. |
 | Goal 09 — logistics improvements | `VERIFIED` | G09-LOGISTICS-BENCH verified: 10,000 units at 3.68 ms/tick with full logistics. Next: Goal 10 — Terrain System. |
 | Goal 10 — terrain system | `VERIFIED` | All acceptance criteria verified: G10-HEIGHTMAP/G10-BIOMES/G10-MESH/G10-RENDERING/G10-LOADING/G10-COLLISION/G10-TESTS/G10-BENCH. Binary heightmap (320x320 float32, 409600 bytes) created. JSON update done. main.gd `_setup_terrain_from_heightmap()` integrated into `_ready()` and called when terrain data present. C++ `Terrain` class with `height_at()` integrated into `Simulation`. 3 terrain integration tests pass. Release build + CTest 1/1 pass (134/137 tests passing, 6 pre-existing failures unrelated to terrain). |
-| Goal 11 — Forward Seizure feature foundation | `ACTIVE` | ALL CRITERIA VERIFIED: G11-TERRITORIAL/G11-ZONES/G11-INSTALLATIONS/G11-CAPABILITIES/G11-DOMAIN-STRUCTURES/G11-INTEGRATION/G11-SIMULATION-INTEGRATION/G11-UNITASSIGN/G11-ZONEPROG/G11-INSTALLCMD/G11-CONSTRACK; circular dependency between territorial_control.hpp and factions.hpp resolved; all enums defined with correct values; full domain model and manager implementation (448 lines); CTest 100% pass (137/137 tests); release build successful |
+| Goal 11 — Forward Seizure feature foundation | `VERIFIED` | ALL CRITERIA VERIFIED: G11-TERRITORIAL/G11-ZONES/G11-INSTALLATIONS/G11-CAPABILITIES/G11-DOMAIN-STRUCTURES/G11-INTEGRATION/G11-SIMULATION-INTEGRATION/G11-UNITASSIGN/G11-ZONEPROG/G11-INSTALLCMD/G11-CONSTRACK/G11-CAPABILITYASSIGN/G11-CONSTRUCTION/G11-UI; Release build, CTest 3/3, direct integration runner 150/150, Godot presentation 39/39 |
 | Goal 11-TESTS | `COMPLETE` | Territorial control unit tests at `tests/test_territorial_control.cpp`: state transitions (5), zone type progression (8), seizure capability flags (8), installation type definitions (7); all tests pass |
-| GOAL-11-NEXT | `PENDING` | Territory visualization (Godot shader/GDScript overlay), unit capability assignment (derive from UnitType/FactionId or UnitPrototype extension), FOB construction economy integration (track materials and deduct cost), FOB construction UI |
+| GOAL-11-NEXT | `COMPLETE` | FOB construction completion notification is rendered and covered by the Godot presentation harness |
 
 ## Active Goal 11 Acceptance Ledger
 
@@ -42,12 +42,15 @@ Historical Goal 04–07 labels below are retained as prior reports, not fresh si
 | G11-ZONEPROG | `COMPLETE` | `update_zone_progression`, `process_zone_progression` methods implemented in `src/ecs/components/territorial_control.cpp` (lines 296-324) |
 | G11-INSTALLCMD | `COMPLETE` | `CommandType::INSTALL = 9` added to `src/network/types.hpp:14`; `install_fob()` handler in `src/simulation/simulation.cpp:424-433` |
 | G11-CONSTRACK | `COMPLETE` | `InstallationState` extended with `constructing`, `construction_progress`, `construction_cost`, `construction_started_tick` fields in `src/ecs/components/territorial_control.hpp:113-126` |
+| G11-CAPABILITYASSIGN | `COMPLETE` | All current unit prototypes author capability arrays in `data/unit_faction_stats.json`; `Simulation::create_unit_with_type()` assigns them and `unit_capabilities_are_assigned_from_prototypes` passes |
+| G11-CONSTRUCTION | `COMPLETE` | FOB installations start inactive, advance deterministically over 10 seconds through `TerritorialControlManager::update()`, and contribute no bonuses before completion; `fob_construction_progress_completes_deterministically` passes |
+| G11-UI | `COMPLETE` | `8`-then-left-click placement shows authoritative FOB assembly progress and the `FOB ONLINE  //  LOGISTICS LINK ESTABLISHED` completion notification; Godot presentation harness passes 39/39 |
 | G11-TESTS | `COMPLETE` | Territorial control unit tests at `tests/test_territorial_control.cpp`: state transitions (5), zone type progression (8), seizure capability flags (8), installation type definitions (7), zone progression methods (3); all tests pass (137/137 integration tests passing) |
 | G11-ZONETESTS | `COMPLETE` | Zone progression logic verified with test cases verifying sequential state transitions and positive progress rates |
 | BUILD | `PASS` | Release build completes with no errors: `cmake --build build` succeeds (2026-09-10) |
 | TESTS | `PASS` | CTest 100% success: 3/3 tests pass (137/137 integration tests passing) |
 
-**Goal 11 foundation complete: Domain model and manager interface implemented, fully integrated into Simulation with reset/update lifecycle. Test coverage verified: 147 assertions across 31 test cases (including 10 zone progression logic assertions). Next: territory visualization (Godot shader/GDScript overlay), unit capability assignment (derive from UnitType/FactionId or UnitPrototype extension), FOB construction economy integration (track materials and deduct cost), FOB construction UI.**
+**Goal 11 complete: Domain model and manager interface implemented, fully integrated into Simulation with reset/update lifecycle. Unit capability assignment and deterministic FOB construction are content-authored/wired and tested. The authoritative install command, GDExtension construction telemetry, HUD placement/progress path, and completion notification are implemented. Validation: Release build, CTest 3/3, direct integration runner 150/150, Godot skirmish presentation 39/39 including engineering-unit placement/progress/completion telemetry and notification, editor scan, and extension smoke. No canonical Goal 12 document exists yet.**
 
 ## Active Goal 10 Acceptance Ledger (retained for historical reference)
 
@@ -92,8 +95,8 @@ Historical Goal 04–07 labels below are retained as prior reports, not fresh si
 3. When evidence changes, update the todo and this ledger immediately. A reported-complete task must not remain pending.
 4. Do not rerun a verified row without new failing evidence. Record that evidence before reopening it.
 5. After two attempts on one ID without a new diff, test/benchmark result, or clearer blocker, use the required review or a materially different diagnostic. If neither can advance the row, record the blocker and stop automatic continuation.
-6. When all rows for the active goal are verified, update `docs/CURRENT_STATE.md`, `docs/NEXT_TASKS.md`, and `docs/OPENCODE_HANDOFF.md`; then change exactly one next goal from `GATED` to `ACTIVE` and generate its acceptance rows before implementation. All G05/G06/G07 criteria verified; 126/126 tests pass. Goal 07 complete per `07_AI_FOUNDATION.md`.
-7. Goal 11 — Forward Seizure feature foundation (`ACTIVE`; see the acceptance ledger above and `11_FORWARD_SEIZURE.md` if it exists, otherwise derive criteria from domain model and integration status)
+6. When all rows for the active goal are verified, update `docs/CURRENT_STATE.md`, `docs/NEXT_TASKS.md`, and `docs/OPENCODE_HANDOFF.md`; then change exactly one next goal from `GATED` to `ACTIVE` and generate its acceptance rows before implementation. If no canonical next goal document exists, pause after recording the verified milestone.
+7. Goal 11 — Forward Seizure feature foundation (`VERIFIED`; no canonical Goal 12 document exists)
 
 ## Automatic Resume Guard
 

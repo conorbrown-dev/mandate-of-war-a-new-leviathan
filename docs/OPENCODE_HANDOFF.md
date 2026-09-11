@@ -23,9 +23,16 @@
 - Implemented full territorial control domain model (`src/ecs/components/territorial_control.{hpp,cpp}`)
 - Integrated `TerritorialControlManager` into `Simulation` class (`src/simulation/simulation.hpp:225`)
 - Updated documentation: `CURRENT_STATE.md`, `NEXT_TASKS.md`, `EXECUTION_LEDGER.md`, `OPENCODE_HANDOFF.md`
-- Build and tests pass (137/137 integration tests passing)
+- Wired content-authored unit territorial capabilities from all current unit prototypes, with a compatibility mapping for older content
+- Added deterministic FOB construction progress and inactive-before-completion bonus behavior
+- Added authoritative FOB install command validation and GDExtension installation telemetry
+- Added `8`-then-left-click FOB placement and telemetry-backed HUD progress card
+- Exposed all six native Elite prototypes in the Command Walker build menu;
+  fighter, VTOL, and patrol boat are reachable with `9`, `0`, and `P` and the
+  presentation harness verifies an end-to-end fighter build.
+- Build and tests pass: Release build, CTest 3/3, direct integration runner 150/150
 
-**Ready for next action:** Sector grid implementation, zone advancement logic, FOB construction commands.
+**Goal 11 status:** VERIFIED. Completion notification coverage passes in the Godot presentation harness. No canonical Goal 12 document exists yet, so future work should pause until one is authored and selected.
 
 **Build commands:**
 

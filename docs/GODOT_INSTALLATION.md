@@ -5,7 +5,7 @@
 The checked-in executable reports Godot `4.7.2.stable.official`.
 
 ```bash
-cd /home/conor/repos/near-future-rts-game
+cd /home/conor/repos/mandate-of-war
 cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
 cmake --build build
 ```

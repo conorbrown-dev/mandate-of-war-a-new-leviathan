@@ -158,4 +158,4 @@ if tier == 4:
 Expected - `bpy` is only available inside Blender runtime. Ignore in IDE.
 
 ### Path Issues
-All scripts use relative paths from project root. Verify working directory is `/home/conor/repos/near-future-rts-game`.
+All scripts use relative paths from project root. Verify working directory is `/home/conor/repos/mandate-of-war`.

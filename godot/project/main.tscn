@@ -58,7 +58,7 @@ script = ExtResource("1_main")
 
 [node name="Ocean" type="MeshInstance3D" parent="."]
 mesh = SubResource("TerrainMesh")
-material_override = SubResource("TerrainShaderMaterial")
+material_override = SubResource("TerritoryShaderMaterial")
 
 [node name="WestLandmass" type="MeshInstance3D" parent="."]
 position = Vector3(-105, 0.12, 0)

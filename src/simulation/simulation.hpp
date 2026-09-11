@@ -118,6 +118,13 @@ public:
         float defend_x,
         float defend_y
     );
+    size_t issue_install_commands(
+        const std::vector<EntityId>& entities,
+        FactionId player_id,
+        float install_x,
+        float install_y,
+        InstallationType installation_type
+    );
 
     // Rendering
     void render_add_unit(float x, float y, uint32_t unit_type);

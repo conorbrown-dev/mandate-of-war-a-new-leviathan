@@ -1,7 +1,7 @@
-# Current State — Goal 11 Active, Forward Seizure Feature Foundation
+# Current State — Goal 11 Verified, Forward Seizure Feature Foundation
 
 **Date:** 2026-09-10  
-**Active milestone:** Goal 11 is **ACTIVE** (Forward Seizure & Base Establishment, including territory visualization). Goal 10 (terrain system) is complete.
+**Milestone state:** Goal 11 is **VERIFIED** (Forward Seizure & Base Establishment, including territory visualization). Goal 10 (terrain system) is complete. No canonical Goal 12 document exists yet.
 
 ## Forward Seizure Feature Foundation — 2026-09-10
 
@@ -10,6 +10,32 @@ The Forward Seizure & Base Establishment feature foundation is fully implemented
 - **Territorial Control State:** `TerritorialControlState` enum (NEUTRAL, CLAIMED, SECURED, CONSOLIDATED, ESTABLISHED, CONTESTED) in `src/ecs/components/territorial_control.hpp:13-20`
 - **Zone Types:** `ZoneType` enum with 7 progressive types (RECONZONE through HELIPADZONE) in `src/ecs/components/territorial_control.hpp:23-32`
 - **Installations:** `InstallationType` enum (COMMAND_POST, FORWARD_OPERATING_BASE, LOGISTICS_HUB, RECON_STATION, DEFENSIVE_BATTERY, AIRFIELD, NAVAL_BASE) with `InstallationState` struct in `src/ecs/components/territorial_control.hpp:41-51,113-126`
+
+## Reference Model Replacement — 2026-09-10
+
+The visual-definition layer now points 13 active prototype slots at converted
+models from `downloaded_assets/reference_models`. Blender conversion is
+reproducible with `scripts/import_reference_models.py`; selected GLB archives
+were re-exported with embedded textures, prototype triangle reduction, and
+sidecar bounds metadata. `test_visual_asset_validator.gd` passes 16 checks with
+15 definitions and no missing GLBs. The reference carrier conversion is kept
+outside the active registry because its imported scene remains too heavy for
+the current material-instantiation validator; the naval destroyer and carrier
+slots retain the existing lightweight placeholders until a lighter naval pass.
+Normal small-skirmish presentation enables these reference wrappers by default;
+set `RTS_PROTOTYPE_VISUALS=0` for the procedural fallback. Scale profiles still
+force the batched MultiMesh path.
+
+## Playable Unit Production — 2026-09-10
+
+The Command Walker's build menu now exposes every Elite prototype returned by
+the native catalog, sorted by stable unit type rather than unordered-map
+iteration. The player can select the six unit entries with `1`, `4`, `5`, `9`,
+`0`, and `P` (or click their cards), then place the rally/build target as
+before. This includes the fighter, VTOL, and patrol boat that were previously
+present in simulation data but unreachable from gameplay. The Godot skirmish
+harness queues and completes a fighter through this player command path and
+confirms its registered presentation wrapper.
 - **Unit Capabilities:** `SeizureCapability` enum (RECON, SEIZURE, SECURE, CONSTRUCT_FOB, CONSTRUCT_LOGISTICS, ESTABLISH_BASE, DEFEND, HARVEST_SECURED) in `src/ecs/components/territorial_control.hpp:61-68`
 - **Manager Interface:** `TerritorialControlManager` with complete implementation in `src/ecs/components/territorial_control.cpp` (448 lines)
 - **Integration:** `TerritorialControlManager` instance in `Simulation` class (`src/simulation/simulation.hpp:226`); lifecycle calls in `start()` and `environment_phase()`
@@ -27,7 +53,19 @@ Territory visualization is fully implemented in Godot:
 - **Debug UI:** Territory debug label showing zone count, position, state, type for top 5 zones
 - **Scene Wiring:** `TerritoryShaderMaterial` bound to shader parameters in `main.tscn:24-33`
 
-Build: CMake Release build succeeds with no errors. Tests: CTest 100% success (147/147 integration tests passing).
+Build: CMake Release build succeeds with no errors. Tests: CTest 100% success (3/3 configured tests); the direct integration runner reports 150 passed, 0 failed.
+
+## Unit Capability Assignment — 2026-09-10
+
+Unit prototypes now parse the optional `capabilities` array from
+`data/unit_faction_stats.json`, and `Simulation::create_unit_with_type()`
+assigns those capabilities to the territorial-control manager. Older content
+without the field receives a bounded compatibility mapping: ordinary units
+receive seizure/secure/defend capabilities, while an Industrial engineering
+unit receives construction, establishment, defense, and secured-harvest
+capabilities. `unit_capabilities_are_assigned_from_prototypes` also verifies
+the authored Industrial engineering capability set. All current unit
+definitions now provide explicit capability arrays.
 
 ## Zone Progression Logic — Pending
 
@@ -292,8 +330,30 @@ ls data/generated_units/blender/*.blend | wc -l
 | `src/ecs/components/territorial_control.hpp` | Added SeizureCapability enum, resolved circular dependency with factions.hpp |
 | `src/ecs/components/territorial_control.cpp` | Implementation for TerritorialControlManager (448 lines) |
 | `08_PLAYABLE_SKIRMISH_VERTICAL_SLICE.md` | Updated to mark Goal 08 as VERIFIED; Goal 10 to VERIFIED |
-| `docs/EXECUTION_LEDGER.md` | Updated to mark Goal 11 as ACTIVE with all acceptance criteria |
+| `docs/EXECUTION_LEDGER.md` | Updated to mark Goal 11 as VERIFIED with all acceptance criteria |
 | `docs/CURRENT_STATE.md` | Updated to reflect Goal 11 foundation implementation |
 | `docs/NEXT_TASKS.md` | Updated to reflect Goal 11 completion progress |
+| `scripts/import_reference_models.py` | Added reproducible Blender conversion for user-provided reference GLBs |
+| `godot/project/visuals/visual_definitions.json` | Replaced active ground, air, and logistics prototype paths with converted reference models |
+| `data/provenance/reference_model_mapping.json` | Recorded source-to-output reference mappings and naval limitations |
 
-Next tasks: zone progression logic tests, territory visualization, unit capability assignment, FOB construction UI.
+FOB installations now begin inactive with a 500-material construction cost
+and deterministic ten-second progress. `TerritorialControlManager::update()`
+advances construction and activates completed FOBs; incomplete installations
+do not contribute security or installation bonuses. The focused
+`fob_construction_progress_completes_deterministically` test covers the
+initial, halfway, and completed states.
+
+The authoritative command path now exposes `issue_install_commands()` for
+FOB placement, rejects issuers without `CONSTRUCT_FOB`, and exposes
+`territory_get_installation_info(x, y)` through GDExtension for UI progress
+telemetry. The playable HUD now has an `8`-then-left-click FOB placement
+affordance and a visible installation-progress card driven by that telemetry.
+The repaired skirmish presentation smoke now completes with 38/38 checks and
+zero failures, including an Industrial Engineering fixture that places a FOB
+and observes authoritative in-progress and completed HUD telemetry; editor
+scanning and the native extension smoke also pass.
+
+Goal 11 completion-notification coverage is now verified. No canonical Goal 12
+document exists yet; future work remains non-active until the next numbered goal
+is authored and selected.

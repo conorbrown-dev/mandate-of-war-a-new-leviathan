@@ -1,0 +1,13 @@
+{
+  "category": "ground",
+  "godot_forward": "-Z",
+  "godot_up": "+Y",
+  "bounds_m": {
+    "x": 7.211999893188477,
+    "y": 3.9099007844924927,
+    "z": 3.238701235735789
+  },
+  "triangles_all_exported_meshes": 9533,
+  "collision_recommendation": "Use simple BoxShape3D/CapsuleShape3D or custom RTS footprint data; do not use render mesh collision per unit.",
+  "source_pipeline": "User-provided reference_models conversion"
+}

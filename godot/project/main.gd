@@ -8,6 +8,7 @@ const UNIT_SELECTED_COLOR := Color(1.0, 0.72, 0.08, 1.0)
 const PLAYER_FACTION_COLOR := Color(0.12, 0.62, 1.0, 1.0)
 const AI_FACTION_COLOR := Color(0.92, 0.20, 0.18, 1.0)
 const HUMAN_PLAYER_ID := 0
+const BUILD_UNIT_SHORTCUTS := ["1", "4", "5", "9", "0", "P"]
 const CAMERA_MIN_DISTANCE := 24.0
 const CAMERA_MAX_DISTANCE := 520.0
 const SIMULATION_WORLD_CENTER_SPAN := 319.0
@@ -50,7 +51,7 @@ const MATERIAL_SITES := [
 @onready var scenario_status: Label = $HUD/StartupOverlay/Panel/VBox/ScenarioStatus
 @onready var start_button: Button = $HUD/StartupOverlay/Panel/VBox/StartButton
 @onready var territory_debug_label: Label = $HUD/TerritoryDebugLabel
-@onready var territory_material: ShaderMaterial = $TerritoryShaderMaterial.material
+@onready var territory_material: ShaderMaterial = $Ocean.material_override
 
 var extension: Object
 var unit_multimesh: MultiMesh
@@ -170,6 +171,10 @@ var pending_completed_structures: Array[Dictionary] = []
 var pending_build_order: Dictionary = {}
 var material_site_state: Dictionary = {}
 var material_order_mode := 0 # 0 normal, 1 claim/capture, 2 demolish
+var fob_build_mode := false
+var fob_build_target := Vector2.INF
+var fob_was_constructing := false
+var fob_completion_notification := ""
 
 func _get_visible_unit_count() -> int:
 	var env_count := OS.get_environment("UNIT_COUNT")
@@ -207,13 +212,6 @@ var profile_max_multimesh_upload_ms := 0.0
 
 
 func _setup_economy_for_player_1() -> void:
-	var NODE_METAL := 0
-	var NODE_ENERGY := 1
-
-	extension.call("economy_add_resource_node", NODE_METAL, 0.0, 0.0, 1000.0, 1)
-	extension.call("economy_add_resource_node", NODE_ENERGY, 0.0, 0.0, 1000.0, 2)
-	extension.call("economy_add_extractor", 1, 0.0, 0.0, NODE_METAL, 10.0)
-	extension.call("economy_add_extractor", 2, 0.0, 0.0, NODE_ENERGY, 10.0)
 	extension.call("economy_add_storage", 1, 0.0, 0.0, 5000.0, 5000.0, 1000.0)
 	extension.call("economy_add_production_line", 1, 1, 100.0, 100.0, 5)
 
@@ -251,7 +249,10 @@ func _ready() -> void:
 	_configure_visual_pack_handshake()
 	var profile_frames := OS.get_environment("RTS_PROFILE_FRAMES")
 	var is_scale_profile := profile_frames.is_valid_int() and int(profile_frames) > 0
-	var prototype_visuals_requested := OS.get_environment("RTS_PROTOTYPE_VISUALS") == "1"
+	# User-provided reference visuals are the normal small-skirmish default
+	# until bespoke models replace them. Set RTS_PROTOTYPE_VISUALS=0 to return
+	# to the procedural presentation; scale profiles still force MultiMesh.
+	var prototype_visuals_requested := OS.get_environment("RTS_PROTOTYPE_VISUALS") != "0"
 	prototype_visuals_enabled = VisualPresentationPolicyScript.use_prototype_wrappers(
 		prototype_visuals_requested,
 		is_scale_profile
@@ -384,7 +385,7 @@ func _start_scale_profile() -> void:
 	extension.call("start_simulation")
 	match_started = true
 	var unit_count := _get_visible_unit_count()
-	_create_unit_multimesh(unit_count, 0)
+	_create_unit_multimesh(unit_count)
 	_spawn_units(unit_count)
 	startup_overlay.visible = false
 	debug_panel.visible = false
@@ -403,16 +404,8 @@ func _on_start_skirmish_pressed() -> void:
 	extension.call("start_simulation")
 	match_started = true
 	_setup_economy_for_player_1()
-	var total_units := _scenario_unit_count(scenario_definition.player) + _scenario_unit_count(scenario_definition.ai)
-	if prototype_visuals_enabled and total_units > prototype_visual_limit:
-		push_warning("Prototype visual wrappers capped at %d units; retaining batched MultiMesh presentation" % prototype_visual_limit)
-		prototype_visuals_enabled = false
-	_create_unit_multimesh(total_units)
-	if not _spawn_skirmish_units():
-		push_error("Failed to create the validated skirmish starting forces")
+	_create_unit_multimesh(2)
 	demo_mode = true
-	_clear_demo_units()
-	unit_view.multimesh = null
 	entity_ids.clear()
 	entity_to_instance.clear()
 	entity_base_colors.clear()
@@ -482,7 +475,7 @@ func _process(delta: float) -> void:
 
 
 func _update_territory() -> void:
-	var zone_count := extension.territory_get_zone_count()
+	var zone_count: int = int(extension.territory_get_zone_count())
 	if zone_count <= 0:
 		return
 	
@@ -493,12 +486,12 @@ func _update_territory() -> void:
 	image.create(width, height, false, Image.FORMAT_RGBA8)
 	
 	for i in range(zone_count):
-		var zone_info := extension.territory_get_zone_info(i)
+		var zone_info: Array = extension.territory_get_zone_info(i)
 		if zone_info.size() >= 5:
-			var x := zone_info[0]
-			var y := zone_info[1]
-			var state := zone_info[2]
-			var type := zone_info[3]
+			var x: float = float(zone_info[0])
+			var y: float = float(zone_info[1])
+			var state: int = int(zone_info[2])
+			var type: int = int(zone_info[3])
 			
 			var color := Color(0.5, 0.5, 0.5, 0.3)
 			if state == 0:
@@ -517,19 +510,19 @@ func _update_territory() -> void:
 	territory_texture = ImageTexture.create_from_image(image)
 	territory_material.setShaderParameter("territory_texture", territory_texture)
 	
-	var state_names := ["NEUTRAL", "RECON", "CLIMBING", "CLAIMED", "SECURED", "CONSOLIDATED", "ESTABLISHED"]
-	var type_names := ["RECONZONE", "HELIPADZONE", "FOBZONE", "BASEZONE", "NAVALZONE", "AIRBASEZONE", "COMMANDZONE"]
+	var state_names: Array[String] = ["NEUTRAL", "RECON", "CLIMBING", "CLAIMED", "SECURED", "CONSOLIDATED", "ESTABLISHED"]
+	var type_names: Array[String] = ["RECONZONE", "HELIPADZONE", "FOBZONE", "BASEZONE", "NAVALZONE", "AIRBASEZONE", "COMMANDZONE"]
 	var debug_text := "Territory Zones: %d\n" % zone_count
 	debug_text += "%-15s %-15s %-12s %-12s\n" % ["X", "Y", "State", "Type"]
 	for i in range(min(zone_count, 5)):
-		var zone_info := extension.territory_get_zone_info(i)
+		var zone_info: Array = extension.territory_get_zone_info(i)
 		if zone_info.size() >= 5:
-			var x := zone_info[0]
-			var y := zone_info[1]
-			var state := zone_info[2]
-			var type := zone_info[3]
-			var state_name := state_names[state] if state < state_names.size() else "UNKNOWN"
-			var type_name := type_names[type] if type < type_names.size() else "UNKNOWN"
+			var x: float = float(zone_info[0])
+			var y: float = float(zone_info[1])
+			var state: int = int(zone_info[2])
+			var type: int = int(zone_info[3])
+			var state_name: String = state_names[state] if state >= 0 and state < state_names.size() else "UNKNOWN"
+			var type_name: String = type_names[type] if type >= 0 and type < type_names.size() else "UNKNOWN"
 			debug_text += "%-15.1f %-15.1f %-12s %-12s\n" % [x, y, state_name, type_name]
 	territory_debug_label.text = debug_text
 
@@ -542,14 +535,16 @@ func _unhandled_input(event: InputEvent) -> void:
 		_issue_stop_order()
 		return
 	if event is InputEventKey and event.pressed:
-		if event.keycode == KEY_1:
-			_begin_build_placement(0)
+		if event.keycode == KEY_8:
+			fob_build_mode = selected_ids.size() > 0
+			material_order_mode = 0
+			_update_hud()
 			return
-		if event.keycode == KEY_4:
-			_begin_build_placement(1)
-			return
-		if event.keycode == KEY_5:
-			_begin_build_placement(2)
+		var unit_shortcut_index := _build_unit_shortcut_index(event.keycode)
+		if unit_shortcut_index >= 0:
+			var unit_type := _build_unit_type_at_index(unit_shortcut_index)
+			if unit_type >= 0:
+				_begin_build_placement(unit_type)
 			return
 		if event.keycode == KEY_6:
 			_begin_build_placement(100)
@@ -573,6 +568,8 @@ func _unhandled_input(event: InputEvent) -> void:
 			panning = event.pressed
 		elif event.button_index == MOUSE_BUTTON_LEFT:
 			if event.pressed:
+				if fob_build_mode:
+					return
 				var selected_blueprint := _blueprint_at_screen(event.position)
 				if selected_blueprint >= 0:
 					_begin_build_placement(selected_blueprint)
@@ -585,6 +582,9 @@ func _unhandled_input(event: InputEvent) -> void:
 				selection_end = event.position
 				_update_selection_rect()
 			else:
+				if fob_build_mode:
+					_order_fob(event.position)
+					return
 				if blueprint_pointer_down:
 					blueprint_pointer_down = false
 					return
@@ -636,7 +636,7 @@ func _create_unit_multimesh(instance_count: int) -> void:
 	material.vertex_color_use_as_albedo = true
 	material.roughness = 0.68
 
-	var content_id: String = UNIT_TYPE_TO_CONTENT_ID.get(fallback_unit_type, "elite_main_battle_tank")
+	var content_id: String = UNIT_TYPE_TO_CONTENT_ID.get(0, "elite_main_battle_tank")
 	var mesh: ArrayMesh = _load_mesh_from_json(content_id)
 	if mesh == null:
 		print("WARNING: Using fallback BoxMesh for content_id: %s" % content_id)
@@ -811,7 +811,14 @@ func _register_presented_unit(entity_id: int, unit_type: int, faction_id: int, w
 	entity_base_colors[entity_id] = color
 	unit_positions.append(world.x)
 	unit_positions.append(world.y)
-	_create_demo_unit(entity_id, unit_type, color, Vector3(world.x, _terrain_height_at(world.x, world.y), world.y))
+	unit_multimesh.instance_count = entity_ids.size()
+	unit_multimesh.visible_instance_count = entity_ids.size()
+	if prototype_visuals_enabled and unit_type != 12:
+		var visual_id := String(extension.call("get_unit_visual_id", unit_type))
+		var wrapper = visual_spawn_bridge.spawn(self, visual_registry, visual_id, Transform3D(Basis.IDENTITY, Vector3(world.x, 0.4, world.y)), color)
+		prototype_visual_views[entity_id] = wrapper
+	else:
+		_create_demo_unit(entity_id, unit_type, color, Vector3(world.x, _terrain_height_at(world.x, world.y), world.y))
 	if player_controlled:
 		player_entity_ids.append(entity_id)
 	else:
@@ -1351,6 +1358,27 @@ func _issue_stop_order() -> void:
 		push_warning("Stop order rejected by authoritative command validation")
 
 
+func _order_fob(screen_position: Vector2) -> void:
+	var commander_id := int(commander_ids.get(HUMAN_PLAYER_ID, -1))
+	if selected_ids.is_empty() or commander_id < 0:
+		fob_build_mode = false
+		return
+	var ray_origin := camera.project_ray_origin(screen_position)
+	var ray_direction := camera.project_ray_normal(screen_position)
+	var intersection = Plane(Vector3.UP, 0.0).intersects_ray(ray_origin, ray_direction)
+	if intersection == null:
+		return
+	var target: Vector3 = intersection
+	var accepted := int(extension.call("issue_install_commands", selected_ids, HUMAN_PLAYER_ID, target.x, target.z, 1))
+	if accepted == selected_ids.size():
+		fob_build_target = Vector2(target.x, target.z)
+		fob_was_constructing = false
+		fob_completion_notification = ""
+	else:
+		push_warning("FOB placement rejected: select a unit with CONSTRUCT_FOB capability")
+	fob_build_mode = false
+
+
 func _queue_commander_unit(unit_type: int, target: Vector2 = Vector2.ZERO) -> void:
 	var commander_id := int(commander_ids.get(HUMAN_PLAYER_ID, -1))
 	if commander_id < 0 or not selected_ids.has(commander_id):
@@ -1422,11 +1450,42 @@ func _blueprint_at_screen(pos: Vector2) -> int:
 	var logical := pos / ui_scale
 	var logical_size := size / ui_scale
 	var origin := Vector2((logical_size.x - 540.0) * 0.5, 12.0)
-	if logical.x < origin.x or logical.x > origin.x + 540.0 or logical.y < origin.y + 30.0 or logical.y > origin.y + 112.0: return -1
+	if logical.x < origin.x or logical.x > origin.x + 540.0 or logical.y < origin.y + 30.0 or logical.y > origin.y + 196.0: return -1
 	var col := int(clampf((logical.x - origin.x - 8.0) / 176.0, 0.0, 2.0))
-	if logical.y < origin.y + 76.0: return [0, 1, 2][col]
-	if col < 2: return 100 + col
+	if logical.y < origin.y + 66.0:
+		return _build_unit_type_at_index(col)
+	if logical.y < origin.y + 108.0:
+		return _build_unit_type_at_index(col + 3)
+	if logical.y < origin.y + 150.0:
+		return _build_unit_type_at_index(col + 6)
+	if logical.y >= origin.y + 160.0 and col < 2:
+		return 100 + col
 	return -1
+
+
+func _build_unit_shortcut_index(keycode: Key) -> int:
+	match keycode:
+		KEY_1: return 0
+		KEY_4: return 1
+		KEY_5: return 2
+		KEY_9: return 3
+		KEY_0: return 4
+		KEY_P: return 5
+	return -1
+
+
+func _build_unit_catalog() -> Array:
+	var catalog: Array = extension.call("get_build_catalog", HUMAN_PLAYER_ID) if extension != null else []
+	var units: Array = catalog.filter(func(entry): return not bool(entry.get("is_structure", false)))
+	units.sort_custom(func(left, right): return int(left.get("type", -1)) < int(right.get("type", -1)))
+	return units
+
+
+func _build_unit_type_at_index(index: int) -> int:
+	var units := _build_unit_catalog()
+	if index < 0 or index >= units.size():
+		return -1
+	return int(units[index].get("type", -1))
 
 func _make_build_ghost(build_type: int) -> Node3D:
 	var root := Node3D.new()
@@ -1575,6 +1634,8 @@ func _update_hud() -> void:
 		selection_detail = "CLAIM MODE  •  RIGHT-CLICK A MATERIAL FACILITY"
 	elif material_order_mode == 2:
 		selection_detail = "DEMOLISH MODE  •  RIGHT-CLICK A MATERIAL FACILITY"
+	elif fob_build_mode:
+		selection_detail = "FOB PLACEMENT  •  LEFT-CLICK TERRAIN"
 	var selected_unit: Dictionary = {}
 	if selected_ids.size() == 1:
 		selected_unit = _selected_unit_snapshot(selected_ids[0])
@@ -1582,6 +1643,14 @@ func _update_hud() -> void:
 	elif selected_ids.size() > 1:
 		selection_detail = "FORMATION READY  •  RIGHT-CLICK TO MOVE"
 	var production_queue: Array = extension.call("get_production_queue", commander_id) if commander_id > 0 else []
+	var fob_installation: Array = []
+	if fob_build_target != Vector2.INF:
+		fob_installation = extension.call("territory_get_installation_info", fob_build_target.x, fob_build_target.y)
+		if not fob_installation.is_empty():
+			var fob_constructing := int(fob_installation[3]) == 1
+			if fob_was_constructing and not fob_constructing:
+				fob_completion_notification = "FOB ONLINE  //  LOGISTICS LINK ESTABLISHED"
+			fob_was_constructing = fob_constructing
 	_sync_construction_frames(production_queue)
 	if production_queue.is_empty() and not pending_completed_structures.is_empty():
 		for structure in pending_completed_structures:
@@ -1600,6 +1669,8 @@ func _update_hud() -> void:
 		"force_status": "READY" if selected_ids.is_empty() else "COMMAND LINKED",
 		"can_build": selected_ids.size() == 1 and selected_ids[0] == commander_id,
 		"queue": production_queue,
+		"fob_installation": fob_installation,
+		"fob_completion_notification": fob_completion_notification,
 		"build_catalog": extension.call("get_build_catalog", HUMAN_PLAYER_ID) if commander_id > 0 else [],
 		"material": _hud_resource(storage, 0),
 		"energy": _hud_resource(storage, 1),

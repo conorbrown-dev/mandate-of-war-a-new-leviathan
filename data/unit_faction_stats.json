@@ -13,7 +13,8 @@
       "hp": 500.0,
       "speed": 3.5,
       "range": 120.0,
-      "view_range": 6.0
+      "view_range": 6.0,
+      "capabilities": ["SEIZURE", "SECURE", "DEFEND"]
     },
     {
       "name": "Elite Artillery",
@@ -28,7 +29,8 @@
       "hp": 300.0,
       "speed": 2.0,
       "range": 300.0,
-      "view_range": 8.0
+      "view_range": 8.0,
+      "capabilities": ["SEIZURE", "SECURE", "DEFEND"]
     },
     {
       "name": "Elite AA Vehicle",
@@ -42,7 +44,8 @@
       "hp": 250.0,
       "speed": 4.0,
       "range": 100.0,
-      "view_range": 7.0
+      "view_range": 7.0,
+      "capabilities": ["SEIZURE", "SECURE", "DEFEND"]
     },
     {
       "name": "Swarm Tank",
@@ -56,7 +59,8 @@
       "hp": 100.0,
       "speed": 5.0,
       "range": 60.0,
-      "view_range": 4.0
+      "view_range": 4.0,
+      "capabilities": ["SEIZURE", "SECURE", "DEFEND"]
     },
     {
       "name": "Assault Vehicle",
@@ -70,7 +74,8 @@
       "hp": 180.0,
       "speed": 4.5,
       "range": 80.0,
-      "view_range": 5.0
+      "view_range": 5.0,
+      "capabilities": ["SEIZURE", "SECURE", "DEFEND"]
     },
     {
       "name": "Mass AA Vehicle",
@@ -84,7 +89,8 @@
       "hp": 150.0,
       "speed": 5.5,
       "range": 80.0,
-      "view_range": 5.0
+      "view_range": 5.0,
+      "capabilities": ["SEIZURE", "SECURE", "DEFEND"]
     },
     {
       "name": "Industrial MBT",
@@ -98,7 +104,8 @@
       "hp": 350.0,
       "speed": 3.0,
       "range": 90.0,
-      "view_range": 5.0
+      "view_range": 5.0,
+      "capabilities": ["SEIZURE", "SECURE", "DEFEND"]
     },
     {
       "name": "Missile Platform",
@@ -112,7 +119,8 @@
       "hp": 250.0,
       "speed": 2.5,
       "range": 200.0,
-      "view_range": 6.0
+      "view_range": 6.0,
+      "capabilities": ["SEIZURE", "SECURE", "DEFEND"]
     },
     {
       "name": "Engineering Unit",
@@ -126,7 +134,8 @@
       "hp": 200.0,
       "speed": 2.0,
       "range": 50.0,
-      "view_range": 5.0
+      "view_range": 5.0,
+      "capabilities": ["RECON", "SEIZURE", "SECURE", "CONSTRUCT_FOB", "CONSTRUCT_LOGISTICS", "ESTABLISH_BASE", "DEFEND", "HARVEST_SECURED"]
     },
     {
       "name": "Kestrel T1 Fighter",
@@ -150,7 +159,8 @@
       "operational_material": 24.0,
       "max_airborne_time_seconds": 240.0,
       "energy_consumption_rate": 0.5,
-      "material_consumption_rate": 0.05
+      "material_consumption_rate": 0.05,
+      "capabilities": ["RECON", "DEFEND"]
     },
     {
       "name": "Harrierwing T1 VTOL",
@@ -174,14 +184,16 @@
       "operational_material": 16.0,
       "max_airborne_time_seconds": 150.0,
       "energy_consumption_rate": 0.75,
-      "material_consumption_rate": 0.05
+      "material_consumption_rate": 0.05,
+      "capabilities": ["RECON", "DEFEND"]
     },
     {
       "name": "Breakwater Patrol Boat", "type": "ELITE_PATROL_BOAT", "faction": "ELITE_PRECISION",
       "material_cost": 400.0, "energy_cost": 200.0, "research_cost": 0.0,
       "build_time_seconds": 15.0, "hp": 300.0, "speed": 8.0, "range": 60.0,
       "view_range": 30.0, "is_naval": true, "operational_energy": 100.0,
-      "energy_consumption_rate": 5.0
+      "energy_consumption_rate": 5.0,
+      "capabilities": ["RECON", "SEIZURE", "SECURE", "DEFEND"]
     }
   ],
   "faction_start_data": [

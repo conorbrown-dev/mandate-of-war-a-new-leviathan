@@ -539,7 +539,7 @@ bool Simulation::is_position_visible_to(FactionId faction, float x, float y) con
 
 bool Simulation::validate_command(const InputCommand& cmd, uint32_t execution_tick) const {
     if (cmd.tick_id != execution_tick || cmd.player_id > 2 ||
-        cmd.cmd_type > static_cast<uint8_t>(CommandType::RESEARCH)) {
+        cmd.cmd_type > static_cast<uint8_t>(CommandType::INSTALL)) {
         fprintf(stderr, "VALIDATE_FAIL: tick_id mismatch or invalid player_id/cmd_type (entity=%u player=%u tick=%u exec=%u type=%u)\n", cmd.entity_id, cmd.player_id, cmd.tick_id, execution_tick, cmd.cmd_type);
         return false;
     }
@@ -561,7 +561,7 @@ bool Simulation::validate_command(const InputCommand& cmd, uint32_t execution_ti
         return cmd.extra == 0;
     }
     const auto type = static_cast<CommandType>(cmd.cmd_type);
-    if (type != CommandType::MOVE && type != CommandType::PATROL && type != CommandType::DEFEND &&
+    if (type != CommandType::MOVE && type != CommandType::PATROL && type != CommandType::DEFEND && type != CommandType::INSTALL &&
         (cmd.target_x != 0 || cmd.target_y != 0)) {
         fprintf(stderr, "VALIDATE_FAIL: invalid target for command type (entity=%u type=%u target=(%d,%d))\n", cmd.entity_id, cmd.cmd_type, cmd.target_x, cmd.target_y);
         return false;
@@ -615,6 +615,14 @@ bool Simulation::validate_command(const InputCommand& cmd, uint32_t execution_ti
                 production_manager_.can_research(owner->faction_id, research_id(cmd.extra));
         if (!ok) fprintf(stderr, "VALIDATE_FAIL: RESEARCH check failed (entity=%u extra=%u)\n", cmd.entity_id, cmd.extra);
         return ok;
+    }
+    if (type == CommandType::INSTALL) {
+        if (cmd.extra != static_cast<uint32_t>(InstallationType::FORWARD_OPERATING_BASE) ||
+            !territorial_control_.has_capability(Entity{cmd.entity_id}, SeizureCapability::CONSTRUCT_FOB)) {
+            fprintf(stderr, "VALIDATE_FAIL: INSTALL requires FOB capability (entity=%u extra=%u)\n", cmd.entity_id, cmd.extra);
+            return false;
+        }
+        return true;
     }
     if (unit && unit->speed <= 0) {
         fprintf(stderr, "VALIDATE_FAIL: unit speed <= 0 (entity=%u speed=%.1f)\n", cmd.entity_id, unit->speed);
@@ -709,6 +717,12 @@ size_t Simulation::issue_harvest_commands(const std::vector<EntityId>& ids, Fact
 }
 size_t Simulation::issue_defend_commands(const std::vector<EntityId>& ids, FactionId player, float x, float y) {
     return issue_commands(ids, player, CommandType::DEFEND, x, y);
+}
+size_t Simulation::issue_install_commands(const std::vector<EntityId>& ids, FactionId player,
+                                          float x, float y, InstallationType installation_type) {
+    if (installation_type != InstallationType::FORWARD_OPERATING_BASE) return 0;
+    return issue_commands(ids, player, CommandType::INSTALL, x, y,
+                          static_cast<uint32_t>(installation_type));
 }
 
 void Simulation::render_add_unit(float x, float y, uint32_t unit_type) {
@@ -1475,6 +1489,20 @@ extern "C" {
         size_t result = sim->issue_defend_commands(entities, static_cast<rts::FactionId>(player_id), x, y);
         return static_cast<int>(result);
     }
+
+    int simulation_issue_install_commands(const int32_t* entity_ids, int entity_count, int player_id, float x, float y, int installation_type) {
+        rts::Simulation* sim = get_simulation();
+        if (!entity_ids || entity_count <= 0 || entity_count > static_cast<int>(MAX_COMMANDS_PER_TICK) || player_id < 0 || player_id > 2) return 0;
+        std::vector<rts::EntityId> entities;
+        entities.reserve(static_cast<std::size_t>(entity_count));
+        for (int index = 0; index < entity_count; ++index) {
+            if (entity_ids[index] <= 0) return 0;
+            entities.push_back(rts::EntityId{static_cast<uint32_t>(entity_ids[index])});
+        }
+        if (installation_type != static_cast<int>(rts::InstallationType::FORWARD_OPERATING_BASE)) return 0;
+        return static_cast<int>(sim->issue_install_commands(entities, static_cast<rts::FactionId>(player_id), x, y,
+            static_cast<rts::InstallationType>(installation_type)));
+    }
 }
 
 // ===== Faction Initialization (inside namespace rts) =====
@@ -1610,6 +1638,29 @@ int rts::Simulation::create_unit_with_type(float x, float y, rts::UnitType unit_
     component_manager_.add_component(entity.id, faction);
     component_manager_.add_component(entity.id, wep);
     component_manager_.add_component(entity.id, UnitData{proto.speed, proto.view_range});
+
+    // Territorial capabilities are authored with the unit prototype. Keep a
+    // small compatibility fallback for older content files that predate the
+    // optional capabilities array.
+    if (!proto.capabilities.empty()) {
+        for (const auto capability : proto.capabilities) {
+            territorial_control_.assign_capability(entity, capability);
+        }
+    } else if (unit_type == UnitType::INDUSTRIAL_ENGINEERING &&
+               faction_id == FactionId::INDUSTRIAL_EXPERIMENTAL) {
+        territorial_control_.assign_capability(entity, SeizureCapability::RECON);
+        territorial_control_.assign_capability(entity, SeizureCapability::SEIZURE);
+        territorial_control_.assign_capability(entity, SeizureCapability::SECURE);
+        territorial_control_.assign_capability(entity, SeizureCapability::CONSTRUCT_FOB);
+        territorial_control_.assign_capability(entity, SeizureCapability::CONSTRUCT_LOGISTICS);
+        territorial_control_.assign_capability(entity, SeizureCapability::ESTABLISH_BASE);
+        territorial_control_.assign_capability(entity, SeizureCapability::DEFEND);
+        territorial_control_.assign_capability(entity, SeizureCapability::HARVEST_SECURED);
+    } else {
+        territorial_control_.assign_capability(entity, SeizureCapability::SEIZURE);
+        territorial_control_.assign_capability(entity, SeizureCapability::SECURE);
+        territorial_control_.assign_capability(entity, SeizureCapability::DEFEND);
+    }
     if (proto.is_naval) {
         component_manager_.add_component(entity.id, NavalVessel{x,y,proto.operational_energy,proto.operational_energy,proto.energy_consumption_rate,false});
     }
@@ -1926,6 +1977,21 @@ extern "C" {
         *out_state = static_cast<int>(zone.state);
         *out_type = static_cast<int>(zone.type);
         *out_security = static_cast<int>(zone.security_score);
+        return true;
+    }
+
+    bool territory_get_installation_info(float x, float y, int* out_type, int* out_faction,
+                                         int* out_active, int* out_constructing,
+                                         float* out_progress, float* out_cost) {
+        if (!out_type || !out_faction || !out_active || !out_constructing || !out_progress || !out_cost) return false;
+        const auto state = get_simulation()->territorial_control_manager().get_installation_at(x, y);
+        if (!state.active && !state.constructing) return false;
+        *out_type = static_cast<int>(state.type);
+        *out_faction = static_cast<int>(state.faction);
+        *out_active = state.active ? 1 : 0;
+        *out_constructing = state.constructing ? 1 : 0;
+        *out_progress = state.construction_progress;
+        *out_cost = state.construction_cost;
         return true;
     }
 }

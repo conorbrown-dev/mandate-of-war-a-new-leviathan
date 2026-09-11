@@ -1,6 +1,7 @@
 #include "test_framework.hpp"
 #include "ecs/components/territorial_control.hpp"
 #include "ecs/components/factions.hpp"
+#include "simulation/simulation.hpp"
 
 TEST(territorial_control_state_transitions) {
     using namespace rts;
@@ -195,5 +196,82 @@ TEST(zone_progression_methods) {
     }
 }
 
+TEST(unit_capabilities_are_assigned_from_prototypes) {
+    using namespace rts;
 
+    const auto& prototypes = get_unit_prototypes();
+    const auto engineer_prototype = prototypes.find(UnitType::INDUSTRIAL_ENGINEERING);
+    if (engineer_prototype == prototypes.end() || engineer_prototype->second.capabilities.size() != 8) {
+        throw std::runtime_error("Industrial engineering capabilities should be authored in content");
+    }
 
+    Simulation simulation;
+    simulation.start();
+    const Entity combat_unit{
+        static_cast<EntityId>(simulation.create_unit_with_type(
+            0.0f, 0.0f, UnitType::ELITE_MAIN_BATTLE_TANK, FactionId::ELITE_PRECISION))};
+    const Entity engineer{
+        static_cast<EntityId>(simulation.create_unit_with_type(
+            10.0f, 0.0f, UnitType::INDUSTRIAL_ENGINEERING,
+            FactionId::INDUSTRIAL_EXPERIMENTAL))};
+
+    if (!simulation.territorial_control().has_capability(combat_unit, SeizureCapability::SEIZURE) ||
+        !simulation.territorial_control().has_capability(combat_unit, SeizureCapability::DEFEND)) {
+        throw std::runtime_error("combat prototype should receive combat territorial capabilities");
+    }
+    if (simulation.territorial_control().has_capability(combat_unit, SeizureCapability::CONSTRUCT_FOB)) {
+        throw std::runtime_error("combat prototype should not construct FOBs");
+    }
+    if (!simulation.territorial_control().has_capability(engineer, SeizureCapability::CONSTRUCT_FOB) ||
+        !simulation.territorial_control().has_capability(engineer, SeizureCapability::CONSTRUCT_LOGISTICS) ||
+        !simulation.territorial_control().has_capability(engineer, SeizureCapability::HARVEST_SECURED)) {
+        throw std::runtime_error("Industrial engineering prototype should receive construction capabilities");
+    }
+}
+
+TEST(fob_construction_progress_completes_deterministically) {
+    using namespace rts;
+
+    TerritorialControlManager manager;
+    manager.add_installation(20.0f, 30.0f, InstallationType::FORWARD_OPERATING_BASE,
+                              FactionId::INDUSTRIAL_EXPERIMENTAL);
+
+    const auto initial = manager.get_installation_at(20.0f, 30.0f);
+    if (initial.active || !initial.constructing || initial.construction_progress != 0.0f ||
+        initial.construction_cost != 500.0f) {
+        throw std::runtime_error("FOB should start as a paid, inactive construction");
+    }
+
+    manager.update(5000.0f);
+    const auto halfway = manager.get_installation_at(20.0f, 30.0f);
+    if (halfway.active || !halfway.constructing || halfway.construction_progress < 0.49f ||
+        halfway.construction_progress > 0.51f) {
+        throw std::runtime_error("FOB should report deterministic halfway progress");
+    }
+
+    manager.update(5000.0f);
+    const auto complete = manager.get_installation_at(20.0f, 30.0f);
+    if (!complete.active || complete.constructing || complete.construction_progress != 1.0f) {
+        throw std::runtime_error("FOB should become active exactly at completion");
+    }
+}
+
+TEST(fob_install_command_requires_construction_capability) {
+    using namespace rts;
+
+    Simulation simulation;
+    simulation.start();
+    const auto combat = static_cast<EntityId>(simulation.create_unit_with_type(
+        0.0f, 0.0f, UnitType::ELITE_MAIN_BATTLE_TANK, FactionId::ELITE_PRECISION));
+    const auto engineer = static_cast<EntityId>(simulation.create_unit_with_type(
+        5.0f, 0.0f, UnitType::INDUSTRIAL_ENGINEERING, FactionId::INDUSTRIAL_EXPERIMENTAL));
+
+    if (simulation.issue_install_commands({combat}, FactionId::ELITE_PRECISION, 20.0f, 30.0f,
+                                           InstallationType::FORWARD_OPERATING_BASE) != 0) {
+        throw std::runtime_error("combat unit without CONSTRUCT_FOB must be rejected");
+    }
+    if (simulation.issue_install_commands({engineer}, FactionId::INDUSTRIAL_EXPERIMENTAL, 20.0f, 30.0f,
+                                           InstallationType::FORWARD_OPERATING_BASE) != 1) {
+        throw std::runtime_error("engineering unit with CONSTRUCT_FOB should be accepted");
+    }
+}

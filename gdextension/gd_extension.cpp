@@ -85,6 +85,14 @@ int simulation_issue_defend_commands(
     float x,
     float y
 );
+int simulation_issue_install_commands(
+    const int32_t* entity_ids,
+    int entity_count,
+    int player_id,
+    float x,
+    float y,
+    int installation_type
+);
 void simulation_destroy_unit(int entity_id);
 int simulation_entity_count();
 float simulation_last_tick_ms();
@@ -123,6 +131,7 @@ int economy_get_queue_size(int line_id);
 int economy_get_completed_build_count();
 int territory_get_zone_count();
 bool territory_get_zone_info(int zone_id, float* out_x, float* out_y, int* out_state, int* out_type, int* out_security);
+bool territory_get_installation_info(float x, float y, int* out_type, int* out_faction, int* out_active, int* out_constructing, float* out_progress, float* out_cost);
 Array territory_get_all_zones();
 
 int simulation_get_unit_health(int entity_id, float* current, float* max);
@@ -201,6 +210,10 @@ protected:
             D_METHOD("issue_defend_commands", "entity_ids", "player_id", "x", "y"),
             &RtsExtension::issue_defend_commands
         );
+        ClassDB::bind_method(
+            D_METHOD("issue_install_commands", "entity_ids", "player_id", "x", "y", "installation_type"),
+            &RtsExtension::issue_install_commands
+        );
         ClassDB::bind_method(D_METHOD("destroy_unit", "entity_id"), &RtsExtension::destroy_unit);
         ClassDB::bind_method(D_METHOD("get_entity_count"), &RtsExtension::get_entity_count);
         ClassDB::bind_method(D_METHOD("get_simulation_tick_ms"), &RtsExtension::get_simulation_tick_ms);
@@ -231,6 +244,7 @@ protected:
         ClassDB::bind_method(D_METHOD("economy_get_queue_size", "line_id"), &RtsExtension::economy_get_queue_size);
         ClassDB::bind_method(D_METHOD("territory_get_zone_count"), &RtsExtension::territory_get_zone_count);
         ClassDB::bind_method(D_METHOD("territory_get_zone_info", "zone_id"), &RtsExtension::territory_get_zone_info);
+        ClassDB::bind_method(D_METHOD("territory_get_installation_info", "x", "y"), &RtsExtension::territory_get_installation_info);
         ClassDB::bind_method(D_METHOD("get_build_catalog", "faction_id"), &RtsExtension::get_build_catalog);
         ClassDB::bind_method(D_METHOD("get_production_queue", "line_id"), &RtsExtension::get_production_queue);
         ClassDB::bind_method(D_METHOD("queue_structure", "line_id", "faction_id", "structure_type", "x", "y"), &RtsExtension::queue_structure);
@@ -265,6 +279,21 @@ protected:
         info.append(state);
         info.append(type);
         info.append(security);
+        return info;
+    }
+
+    Array territory_get_installation_info(double x, double y) const {
+        int type, faction, active, constructing;
+        float progress, cost;
+        if (!::territory_get_installation_info(static_cast<float>(x), static_cast<float>(y), &type, &faction,
+                                               &active, &constructing, &progress, &cost)) return Array();
+        Array info;
+        info.append(type);
+        info.append(faction);
+        info.append(active);
+        info.append(constructing);
+        info.append(progress);
+        info.append(cost);
         return info;
     }
     
@@ -671,6 +700,13 @@ public:
             static_cast<float>(x),
             static_cast<float>(y)
         );
+    }
+
+    int64_t issue_install_commands(const PackedInt32Array& entity_ids, int64_t player_id,
+                                   double x, double y, int64_t installation_type) const {
+        if (player_id < 0 || player_id > 2 || installation_type < 0 || installation_type > 255) return 0;
+        return simulation_issue_install_commands(entity_ids.ptr(), entity_ids.size(), static_cast<int>(player_id),
+                                                  static_cast<float>(x), static_cast<float>(y), static_cast<int>(installation_type));
     }
 
     void initialize_faction(int64_t faction_id, double x, double y) {
