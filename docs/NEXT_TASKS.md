@@ -8,6 +8,8 @@ The reachable Command Walker catalog includes all six Elite unit prototypes;
 fighter, VTOL, and patrol-boat entries are no longer hidden after the first
 three cards. Validation is CTest 3/3 and `test_skirmish.gd` with 42 passing
 checks, including fighter queue, completion, and presentation registration.
+BUILD commands now preserve a nonzero player-selected rally/output target;
+`commands_owned_factory_build_research_and_destruction` covers that contract.
 
 ## Goal 11 Verification Record
 

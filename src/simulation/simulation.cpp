@@ -561,7 +561,11 @@ bool Simulation::validate_command(const InputCommand& cmd, uint32_t execution_ti
         return cmd.extra == 0;
     }
     const auto type = static_cast<CommandType>(cmd.cmd_type);
-    if (type != CommandType::MOVE && type != CommandType::PATROL && type != CommandType::DEFEND && type != CommandType::INSTALL &&
+    // BUILD carries the player-selected rally/output target. It is not a
+    // movement target, but it is authoritative production data and must reach
+    // the queue unchanged.
+    if (type != CommandType::MOVE && type != CommandType::PATROL && type != CommandType::DEFEND &&
+        type != CommandType::BUILD && type != CommandType::INSTALL &&
         (cmd.target_x != 0 || cmd.target_y != 0)) {
         fprintf(stderr, "VALIDATE_FAIL: invalid target for command type (entity=%u type=%u target=(%d,%d))\n", cmd.entity_id, cmd.cmd_type, cmd.target_x, cmd.target_y);
         return false;
@@ -607,7 +611,7 @@ bool Simulation::validate_command(const InputCommand& cmd, uint32_t execution_ti
     }
     if (type == CommandType::BUILD) {
         bool ok = cmd.extra <= 255 && production_manager_.can_queue_unit(cmd.entity_id, owner->faction_id, static_cast<UnitType>(cmd.extra));
-        if (!ok) fprintf(stderr, "VALIDATE_FAIL: BUILD check failed (entity=%u extra=%u type=%u)\n", cmd.entity_id, cmd.extra, static_cast<UnitType>(cmd.extra));
+        if (!ok) fprintf(stderr, "VALIDATE_FAIL: BUILD check failed (entity=%u extra=%u type=%u)\n", cmd.entity_id, cmd.extra, static_cast<unsigned>(cmd.extra));
         return ok;
     }
     if (type == CommandType::RESEARCH) {

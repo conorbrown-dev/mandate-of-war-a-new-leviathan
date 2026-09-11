@@ -36,6 +36,10 @@ before. This includes the fighter, VTOL, and patrol boat that were previously
 present in simulation data but unreachable from gameplay. The Godot skirmish
 harness queues and completes a fighter through this player command path and
 confirms its registered presentation wrapper.
+
+BUILD validation also accepts the nonzero player-selected rally/output target
+carried by the production command. The regression test verifies that this
+target reaches the authoritative queue unchanged.
 - **Unit Capabilities:** `SeizureCapability` enum (RECON, SEIZURE, SECURE, CONSTRUCT_FOB, CONSTRUCT_LOGISTICS, ESTABLISH_BASE, DEFEND, HARVEST_SECURED) in `src/ecs/components/territorial_control.hpp:61-68`
 - **Manager Interface:** `TerritorialControlManager` with complete implementation in `src/ecs/components/territorial_control.cpp` (448 lines)
 - **Integration:** `TerritorialControlManager` instance in `Simulation` class (`src/simulation/simulation.hpp:226`); lifecycle calls in `start()` and `environment_phase()`

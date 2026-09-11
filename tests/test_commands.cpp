@@ -142,9 +142,12 @@ TEST(commands_owned_factory_build_research_and_destruction) {
     check(p.storages().at(base).metal_storage > initial.metal_storage, "claimed territory site credits shared materials to commander storage");
     check(s.issue_build_commands({other}, FactionId::ELITE_PRECISION, 0, 0, 0) == 0, "foreign factory rejects build");
     check(s.issue_build_commands({base}, FactionId::ELITE_PRECISION, 0, 0, 3) == 0, "foreign prototype rejects build");
-    check(s.issue_build_commands({base}, FactionId::ELITE_PRECISION, 0, 0, 0) == 1, "owned factory accepts unit");
+    check(s.issue_build_commands({base}, FactionId::ELITE_PRECISION, -90, 12, 0) == 1, "owned factory accepts unit with a player-selected rally target");
     s.update(50);
     check(p.production_lines().at(base).queue.size() == 1, "build command creates real queue");
+    check(p.production_lines().at(base).queue.front().target_x == -90 &&
+          p.production_lines().at(base).queue.front().target_y == 12,
+          "build command preserves the selected rally target in the queue");
     check(p.storages().at(base).metal_storage < initial.metal_storage, "build reserves material");
     for (int i = 0; i < 310; ++i) s.update(50);
     check(p.get_construction_count() == 1 && s.entity_count() == 3, "paid build produces unit through simulation");

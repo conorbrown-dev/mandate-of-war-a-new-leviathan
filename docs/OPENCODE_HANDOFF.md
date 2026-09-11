@@ -30,6 +30,8 @@
 - Exposed all six native Elite prototypes in the Command Walker build menu;
   fighter, VTOL, and patrol boat are reachable with `9`, `0`, and `P` and the
   presentation harness verifies an end-to-end fighter build.
+- Corrected BUILD validation to accept the nonzero player-selected
+  rally/output target carried by the production command.
 - Build and tests pass: Release build, CTest 3/3, direct integration runner 150/150
 
 **Goal 11 status:** VERIFIED. Completion notification coverage passes in the Godot presentation harness. No canonical Goal 12 document exists yet, so future work should pause until one is authored and selected.
