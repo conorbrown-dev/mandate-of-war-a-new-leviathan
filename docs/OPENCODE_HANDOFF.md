@@ -36,6 +36,9 @@
   `Node3D` `main.gd` script and caused scene-instantiation errors. All 15
   reference models load; the fighter completion test requires an imported
   model rather than a fallback wrapper.
+- The playable scenario now starts with visible Industrial engineering units;
+  hidden faction bases retain economy/production authority. The player engineer
+  is selected at start and can immediately place an FOB with `8` then click.
 - Build and tests pass: Release build, CTest 3/3, direct integration runner 150/150
 
 **Goal 11 status:** VERIFIED. Completion notification coverage passes in the Godot presentation harness. No canonical Goal 12 document exists yet, so future work should pause until one is authored and selected.

@@ -154,7 +154,7 @@ func _draw() -> void:
 	if not build_catalog.is_empty() and bool(snapshot.get("can_build", false)):
 		var build_menu := Rect2((w - 540.0) * 0.5, 12.0, 540.0, 202.0)
 		_panel(build_menu, GREEN)
-		_text(build_menu.position + Vector2(10, 15), "COMMAND WALKER // BUILD MENU", 9, GREEN)
+		_text(build_menu.position + Vector2(10, 15), "FIELD ENGINEER // BUILD MENU", 9, GREEN)
 		var units: Array = build_catalog.filter(func(item): return not bool(item.get("is_structure", false)))
 		units.sort_custom(func(left, right): return int(left.get("type", -1)) < int(right.get("type", -1)))
 		var structures: Array = build_catalog.filter(func(item): return bool(item.get("is_structure", false)))

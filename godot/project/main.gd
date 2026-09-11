@@ -160,6 +160,8 @@ var visual_registry
 var visual_spawn_bridge
 var prototype_visual_views: Dictionary = {}
 var commander_ids: Dictionary = {}
+var engineer_ids: Dictionary = {}
+var hidden_base_ids: Dictionary = {}
 var pending_player_build_types: Array[int] = []
 var pending_structure_type := -1
 var pending_structure_position := Vector2.ZERO
@@ -414,15 +416,18 @@ func _on_start_skirmish_pressed() -> void:
 	ai_entity_ids.clear()
 	unit_positions.clear()
 	commander_ids.clear()
+	engineer_ids.clear()
+	hidden_base_ids.clear()
 	pending_player_build_types.clear()
 	material_site_state.clear()
 	material_order_mode = 0
 	if not _spawn_commander_start():
-		push_error("Failed to create the authoritative commander-start forces")
+		push_error("Failed to create the authoritative engineer-start forces")
 		extension.call("stop_simulation")
 		match_started = false
 		return
 	_spawn_material_sites()
+	_set_selected(_player_engineer_id(), true)
 
 	startup_overlay.visible = false
 	debug_panel.visible = false
@@ -434,7 +439,7 @@ func _on_start_skirmish_pressed() -> void:
 	target_camera_distance = 165.0
 	_update_camera(1.0)
 	_update_hud()
-	print("Started %s with %d player Command Walker and %d AI Command Walker" % [
+	print("Started %s with %d player Field Engineer and %d AI Field Engineer" % [
 		scenario_definition.display_name,
 		player_entity_ids.size(),
 		ai_entity_ids.size(),
@@ -704,8 +709,17 @@ func _spawn_commander_start() -> bool:
 		if entity_id <= 0:
 			return false
 		commander_ids[faction_id] = entity_id
-		_register_presented_unit(entity_id, 12, faction_id, Vector2(float(spawn[0]), float(spawn[1])))
+		hidden_base_ids[entity_id] = true
+		var engineer_id: int = extension.call("create_unit_with_type", float(spawn[0]) + 4.0, float(spawn[1]), 8, faction_id)
+		if engineer_id <= 0:
+			return false
+		engineer_ids[faction_id] = engineer_id
+		_register_presented_unit(engineer_id, 8, faction_id, Vector2(float(spawn[0]) + 4.0, float(spawn[1])))
 	return true
+
+
+func _player_engineer_id() -> int:
+	return int(engineer_ids.get(HUMAN_PLAYER_ID, -1))
 
 
 func _spawn_material_sites() -> void:
@@ -753,7 +767,7 @@ func _rebuild_material_site_views() -> void:
 
 
 func _set_material_order_mode(mode: int) -> void:
-	var commander_id := int(commander_ids.get(HUMAN_PLAYER_ID, -1))
+	var commander_id := _player_engineer_id()
 	if commander_id <= 0:
 		return
 	# Resource actions are commander-level orders. Arm the mode even when the
@@ -784,7 +798,7 @@ func _issue_material_site_order(screen_position: Vector2) -> void:
 			selected_site = site
 	if selected_site.is_empty():
 		return
-	var commander_id := int(commander_ids.get(HUMAN_PLAYER_ID, -1))
+	var commander_id := _player_engineer_id()
 	var site_position: Vector2 = selected_site.position
 	if material_order_mode == 1:
 		var accepted: int = extension.call("issue_harvest_commands", PackedInt32Array([commander_id]), HUMAN_PLAYER_ID, site_position.x, site_position.y)
@@ -828,6 +842,8 @@ func _register_presented_unit(entity_id: int, unit_type: int, faction_id: int, w
 func _sync_new_entities() -> void:
 	var all_ids: PackedInt32Array = extension.call("get_entity_ids")
 	for entity_id in all_ids:
+		if hidden_base_ids.has(entity_id):
+			continue
 		if entity_to_instance.has(entity_id):
 			continue
 		var faction_id := int(extension.call("get_unit_faction_id", entity_id))
@@ -1381,17 +1397,17 @@ func _order_fob(screen_position: Vector2) -> void:
 
 func _queue_commander_unit(unit_type: int, target: Vector2 = Vector2.ZERO) -> void:
 	var commander_id := int(commander_ids.get(HUMAN_PLAYER_ID, -1))
-	if commander_id < 0 or not selected_ids.has(commander_id):
+	if commander_id < 0 or not selected_ids.has(_player_engineer_id()):
 		return
 	var accepted_count: int = extension.call("issue_build_commands", PackedInt32Array([commander_id]), HUMAN_PLAYER_ID, target.x, target.y, unit_type)
 	if accepted_count == 1:
 		pending_player_build_types.append(unit_type)
 		_update_hud()
 	else:
-		push_warning("Command Walker could not queue this unit")
+		push_warning("Field Engineer could not queue this unit")
 
 func _order_commander_to_build(build_type: int, target: Vector2) -> void:
-	var commander_id := int(commander_ids.get(HUMAN_PLAYER_ID, -1))
+	var commander_id := _player_engineer_id()
 	if commander_id < 0:
 		return
 	var commander_position := Vector2(float(extension.call("get_unit_x", commander_id)), float(extension.call("get_unit_y", commander_id)))
@@ -1405,14 +1421,14 @@ func _order_commander_to_build(build_type: int, target: Vector2) -> void:
 	# commander still uses the normal RTS spacing contract used by manual moves.
 	var accepted := int(extension.call("issue_move_commands", PackedInt32Array([commander_id]), HUMAN_PLAYER_ID, approach_target.x, approach_target.y, UNIT_SPACING))
 	if accepted != 1:
-		push_warning("Command Walker could not reach the build location")
+		push_warning("Field Engineer could not reach the build location")
 		return
 	pending_build_order = {"type": build_type, "target": target, "approach": approach_target}
 
 func _process_pending_build_order() -> void:
 	if pending_build_order.is_empty():
 		return
-	var commander_id := int(commander_ids.get(HUMAN_PLAYER_ID, -1))
+	var commander_id := _player_engineer_id()
 	var target: Vector2 = pending_build_order.target
 	var approach: Vector2 = pending_build_order.approach
 	var dx := float(extension.call("get_unit_x", commander_id)) - approach.x
@@ -1436,9 +1452,9 @@ func _screen_to_world(screen_position: Vector2) -> Vector2:
 	return Vector2(intersection.x, intersection.z)
 
 func _begin_build_placement(build_type: int) -> void:
-	var commander_id := int(commander_ids.get(HUMAN_PLAYER_ID, -1))
+	var commander_id := _player_engineer_id()
 	if commander_id < 0 or not selected_ids.has(commander_id):
-		push_warning("Select the Command Walker before placing a build")
+		push_warning("Select the Field Engineer before placing a build")
 		return
 	build_mode_type = build_type
 	selecting = false
@@ -1496,8 +1512,7 @@ func _make_build_ghost(build_type: int) -> Node3D:
 	return root
 
 func _queue_commander_structure(structure_type: int, target: Vector2) -> bool:
-	var commander_id := int(commander_ids.get(HUMAN_PLAYER_ID, -1))
-	if commander_id < 0 or not selected_ids.has(commander_id):
+	if not selected_ids.has(_player_engineer_id()):
 		return false
 	var line_id := int(extension.call("get_faction_production_line", HUMAN_PLAYER_ID))
 	if bool(extension.call("queue_structure", line_id, HUMAN_PLAYER_ID, structure_type, target.x, target.y)):
@@ -1505,7 +1520,7 @@ func _queue_commander_structure(structure_type: int, target: Vector2) -> bool:
 		_update_hud()
 		return true
 	else:
-		push_warning("Command Walker could not queue this structure")
+		push_warning("Field Engineer could not queue this structure")
 		return false
 
 func _spawn_completed_structure_view(structure_type: int, target: Vector2) -> void:
@@ -1667,7 +1682,7 @@ func _update_hud() -> void:
 		"unit_health": selected_unit.get("health", -1.0),
 		"unit_max_health": selected_unit.get("max_health", -1.0),
 		"force_status": "READY" if selected_ids.is_empty() else "COMMAND LINKED",
-		"can_build": selected_ids.size() == 1 and selected_ids[0] == commander_id,
+		"can_build": selected_ids.size() == 1 and selected_ids[0] == _player_engineer_id(),
 		"queue": production_queue,
 		"fob_installation": fob_installation,
 		"fob_completion_notification": fob_completion_notification,
