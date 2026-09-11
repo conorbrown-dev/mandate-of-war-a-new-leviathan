@@ -32,6 +32,10 @@
   presentation harness verifies an end-to-end fighter build.
 - Corrected BUILD validation to accept the nonzero player-selected
   rally/output target carried by the production command.
+- Removed the invalid `TerritoryManager` `Node` child that attached the
+  `Node3D` `main.gd` script and caused scene-instantiation errors. All 15
+  reference models load; the fighter completion test requires an imported
+  model rather than a fallback wrapper.
 - Build and tests pass: Release build, CTest 3/3, direct integration runner 150/150
 
 **Goal 11 status:** VERIFIED. Completion notification coverage passes in the Godot presentation harness. No canonical Goal 12 document exists yet, so future work should pause until one is authored and selected.

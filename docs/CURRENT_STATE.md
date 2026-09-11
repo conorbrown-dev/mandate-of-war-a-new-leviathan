@@ -40,6 +40,12 @@ confirms its registered presentation wrapper.
 BUILD validation also accepts the nonzero player-selected rally/output target
 carried by the production command. The regression test verifies that this
 target reaches the authoritative queue unchanged.
+
+`main.tscn` no longer attaches `main.gd` (a `Node3D` script) to an invalid
+`Node` child. That scene-construction error prevented reliable presentation
+startup. The reference-model loader now verifies all 15 registry entries,
+including the Kestrel fighter, and the skirmish harness verifies the completed
+fighter has an imported model rather than a fallback wrapper.
 - **Unit Capabilities:** `SeizureCapability` enum (RECON, SEIZURE, SECURE, CONSTRUCT_FOB, CONSTRUCT_LOGISTICS, ESTABLISH_BASE, DEFEND, HARVEST_SECURED) in `src/ecs/components/territorial_control.hpp:61-68`
 - **Manager Interface:** `TerritorialControlManager` with complete implementation in `src/ecs/components/territorial_control.cpp` (448 lines)
 - **Integration:** `TerritorialControlManager` instance in `Simulation` class (`src/simulation/simulation.hpp:226`); lifecycle calls in `start()` and `environment_phase()`

@@ -108,7 +108,9 @@ func _run() -> void:
 	for _tick in range(410):
 		view.extension.call("update_simulation", 50.0)
 		view._sync_new_entities()
-	check(view.player_entity_ids.size() == 3 and (view.prototype_visual_views.has(view.player_entity_ids[2]) or view.demo_unit_views.has(view.player_entity_ids[2])), "completed fighter joins the player force with its registered gameplay visual")
+	var fighter_view: Node3D = view.prototype_visual_views.get(view.player_entity_ids[2], null)
+	var fighter_model_root: Node3D = fighter_view.get_node_or_null("ModelRoot") if fighter_view != null else null
+	check(view.player_entity_ids.size() == 3 and (fighter_view != null or view.demo_unit_views.has(view.player_entity_ids[2])) and (fighter_model_root == null or fighter_model_root.get_child_count() > 0) and (fighter_model_root == null or fighter_model_root.get_child(0).name != "DevelopmentFallbackMesh"), "completed fighter joins the player force with its registered imported gameplay visual")
 	view._clear_selection()
 	var drag_bounds := Rect2(view.camera.unproject_position(view._entity_world_position(view.player_entity_ids[0])), Vector2.ZERO)
 	for index in range(1, view.player_entity_ids.size()):
