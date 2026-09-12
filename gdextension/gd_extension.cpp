@@ -104,6 +104,9 @@ int simulation_get_unit_positions(
     float* positions_xy,
     int position_capacity
 );
+int simulation_get_unit_headings(const int32_t* entity_ids, int entity_count, float* headings, int heading_capacity);
+int simulation_get_unit_steering_state(int entity_id, float* heading, float* desired_heading, float* speed);
+int simulation_get_unit_off_road_state(int entity_id, float* wear, float* distance, float* speed_multiplier);
 void render_add_unit(float x, float y, uint32_t unit_type);
 void render_update();
 int render_get_instance_count();
@@ -168,6 +171,15 @@ protected:
         ClassDB::bind_method(D_METHOD("stop_simulation"), &RtsExtension::stop_simulation);
         ClassDB::bind_method(D_METHOD("reset_simulation"), &RtsExtension::reset_simulation);
         ClassDB::bind_method(D_METHOD("configure_world_size", "width", "height"), &RtsExtension::configure_world_size);
+        ClassDB::bind_method(D_METHOD("configure_theater_landmasses", "first_center_x", "first_center_y", "first_width", "first_height", "second_center_x", "second_center_y", "second_width", "second_height"), &RtsExtension::configure_theater_landmasses);
+        ClassDB::bind_method(D_METHOD("load_terrain_heightmap", "path"), &RtsExtension::load_terrain_heightmap);
+        ClassDB::bind_method(D_METHOD("is_land_position", "x", "y"), &RtsExtension::is_land_position);
+        ClassDB::bind_method(D_METHOD("block_civilian_area", "x", "y", "radius"), &RtsExtension::block_civilian_area);
+        ClassDB::bind_method(D_METHOD("validate_structure_placement", "structure_type", "x", "y"), &RtsExtension::validate_structure_placement);
+        ClassDB::bind_method(D_METHOD("validate_engineer_placement", "x", "y"), &RtsExtension::validate_engineer_placement);
+        ClassDB::bind_method(D_METHOD("validate_road_placement", "start_x", "start_y", "end_x", "end_y"), &RtsExtension::validate_road_placement);
+        ClassDB::bind_method(D_METHOD("queue_road", "engineer_id", "faction_id", "start_x", "start_y", "end_x", "end_y"), &RtsExtension::queue_road);
+        ClassDB::bind_method(D_METHOD("get_road_segments"), &RtsExtension::get_road_segments);
         ClassDB::bind_method(D_METHOD("update_simulation", "delta_ms"), &RtsExtension::update_simulation);
         ClassDB::bind_method(D_METHOD("create_unit", "x", "y"), &RtsExtension::create_unit);
         ClassDB::bind_method(D_METHOD("create_faction_base", "faction_id", "x", "y"), &RtsExtension::create_faction_base);
@@ -220,6 +232,9 @@ protected:
         ClassDB::bind_method(D_METHOD("get_unit_x", "entity_id"), &RtsExtension::get_unit_x);
         ClassDB::bind_method(D_METHOD("get_unit_y", "entity_id"), &RtsExtension::get_unit_y);
         ClassDB::bind_method(D_METHOD("get_unit_positions", "entity_ids"), &RtsExtension::get_unit_positions);
+        ClassDB::bind_method(D_METHOD("get_unit_headings", "entity_ids"), &RtsExtension::get_unit_headings);
+        ClassDB::bind_method(D_METHOD("get_unit_steering_state", "entity_id"), &RtsExtension::get_unit_steering_state);
+        ClassDB::bind_method(D_METHOD("get_unit_off_road_state", "entity_id"), &RtsExtension::get_unit_off_road_state);
         ClassDB::bind_method(D_METHOD("initialize_faction", "faction_id", "x", "y"), &RtsExtension::initialize_faction);
         ClassDB::bind_method(D_METHOD("create_unit_with_type", "x", "y", "unit_type", "faction_id"), &RtsExtension::create_unit_with_type);
         ClassDB::bind_method(D_METHOD("get_unit_visual_id", "unit_type"), &RtsExtension::get_unit_visual_id);
@@ -461,6 +476,35 @@ public:
             static_cast<float>(width), static_cast<float>(height));
     }
 
+    void configure_theater_landmasses(double first_center_x, double first_center_y, double first_width, double first_height,
+                                      double second_center_x, double second_center_y, double second_width, double second_height) const {
+        rts::runtime_simulation()->configure_theater_landmasses(
+            static_cast<float>(first_center_x), static_cast<float>(first_center_y), static_cast<float>(first_width), static_cast<float>(first_height),
+            static_cast<float>(second_center_x), static_cast<float>(second_center_y), static_cast<float>(second_width), static_cast<float>(second_height));
+    }
+
+    bool load_terrain_heightmap(const String& path) const {
+        String resolved_path = path;
+        if (path.begins_with("res://")) {
+            resolved_path = ProjectSettings::get_singleton()->globalize_path(path);
+        }
+        try {
+            rts::runtime_simulation()->terrain().load_from_binary(resolved_path.utf8().get_data());
+            return true;
+        } catch (const std::exception&) {
+            return false;
+        }
+    }
+
+    bool is_land_position(double x, double y) const {
+        return rts::runtime_simulation()->is_land_position(static_cast<float>(x), static_cast<float>(y));
+    }
+
+    void block_civilian_area(double x, double y, double radius) const {
+        rts::runtime_simulation()->block_civilian_area(
+            static_cast<float>(x), static_cast<float>(y), static_cast<float>(radius));
+    }
+
     void update_simulation(double delta_ms) const {
         if (started_) {
             simulation_update(static_cast<float>(delta_ms));
@@ -493,20 +537,22 @@ public:
             entry["energy"] = production.get_unit_energy_cost(faction, type);
             entry["research"] = production.get_unit_research_cost(faction, type);
             entry["build_seconds"] = prototype.build_time_seconds;
-            entry["available"] = line != rts::INVALID_ENTITY && production.can_queue_unit(line, faction, type);
+            const bool airfield_ready = !prototype.is_aircraft || !prototype.requires_runway ||
+                rts::runtime_simulation()->territorial_control_manager().has_active_installation(faction, rts::InstallationType::AIRFIELD);
+            entry["available"] = line != rts::INVALID_ENTITY && airfield_ready && production.can_queue_unit(line, faction, type);
             entry["is_structure"] = false;
             catalog.append(entry);
         }
-        for (uint8_t structure = 0; structure < 2; ++structure) {
+        for (uint8_t structure = 0; structure < 4; ++structure) {
             Dictionary entry;
             entry["type"] = 100 + static_cast<int>(structure);
             entry["structure_type"] = static_cast<int>(structure);
             entry["is_structure"] = true;
-            entry["name"] = structure == 0 ? String("FORWARD OUTPOST") : String("RADAR MAST");
-            entry["material"] = structure == 0 ? 300.0 : 450.0;
-            entry["energy"] = structure == 0 ? 150.0 : 250.0;
-            entry["research"] = structure == 0 ? 0.0 : 100.0;
-            entry["build_seconds"] = structure == 0 ? 20.0 : 28.0;
+            entry["name"] = structure == 0 ? String("FORWARD OUTPOST") : structure == 1 ? String("RADAR MAST") : structure == 2 ? String("AIRFIELD") : String("FLOODLIGHT");
+            entry["material"] = structure == 0 ? 300.0 : structure == 1 ? 450.0 : structure == 2 ? 600.0 : 380.0;
+            entry["energy"] = structure == 0 ? 150.0 : structure == 1 ? 250.0 : structure == 2 ? 400.0 : 620.0;
+            entry["research"] = structure == 0 ? 0.0 : structure == 1 ? 100.0 : structure == 2 ? 150.0 : 80.0;
+            entry["build_seconds"] = structure == 0 ? 20.0 : structure == 1 ? 28.0 : structure == 2 ? 36.0 : 24.0;
             entry["available"] = line != rts::INVALID_ENTITY && production.can_queue_structure(line, faction, structure);
             catalog.append(entry);
         }
@@ -514,9 +560,51 @@ public:
     }
 
     bool queue_structure(int64_t line_id, int64_t faction_id, int64_t structure_type, double x, double y) const {
-        if (line_id <= 0 || faction_id < 0 || faction_id > 2 || structure_type < 0 || structure_type > 1) return false;
+        if (line_id <= 0 || faction_id < 0 || faction_id > 2 || structure_type < 0 || structure_type > 3) return false;
+        if (!rts::runtime_simulation()->validate_structure_placement(
+                static_cast<uint8_t>(structure_type), static_cast<float>(x), static_cast<float>(y))) return false;
         return rts::runtime_simulation()->production_manager().queue_structure(
             static_cast<rts::EntityId>(line_id), static_cast<rts::FactionId>(faction_id), static_cast<uint8_t>(structure_type), static_cast<float>(x), static_cast<float>(y));
+    }
+
+    bool validate_structure_placement(int64_t structure_type, double x, double y) const {
+        if (structure_type < 0 || structure_type > 3) return false;
+        return rts::runtime_simulation()->validate_structure_placement(
+            static_cast<uint8_t>(structure_type), static_cast<float>(x), static_cast<float>(y));
+    }
+
+    bool validate_engineer_placement(double x, double y) const {
+        return rts::runtime_simulation()->validate_engineer_placement(
+            static_cast<float>(x), static_cast<float>(y));
+    }
+
+    bool validate_road_placement(double start_x, double start_y, double end_x, double end_y) const {
+        return rts::runtime_simulation()->validate_road_placement(
+            static_cast<float>(start_x), static_cast<float>(start_y),
+            static_cast<float>(end_x), static_cast<float>(end_y));
+    }
+
+    bool queue_road(int64_t engineer_id, int64_t faction_id, double start_x, double start_y,
+                    double end_x, double end_y) const {
+        if (engineer_id <= 0 || faction_id < 0 || faction_id > 2) return false;
+        return rts::runtime_simulation()->queue_road(
+            static_cast<rts::EntityId>(engineer_id), static_cast<rts::FactionId>(faction_id),
+            static_cast<float>(start_x), static_cast<float>(start_y),
+            static_cast<float>(end_x), static_cast<float>(end_y));
+    }
+
+    PackedFloat32Array get_road_segments() const {
+        PackedFloat32Array segments;
+        for (const auto& segment : rts::runtime_simulation()->road_network().segments()) {
+            if (!segment.completed) continue;
+            segments.append(static_cast<float>(segment.id));
+            segments.append(segment.start_x);
+            segments.append(segment.start_y);
+            segments.append(segment.end_x);
+            segments.append(segment.end_y);
+            segments.append(segment.width);
+        }
+        return segments;
     }
 
     int64_t get_faction_production_line(int64_t faction_id) const {
@@ -840,6 +928,37 @@ public:
             positions.clear();
         }
         return positions;
+    }
+
+    PackedFloat32Array get_unit_headings(const PackedInt32Array& entity_ids) const {
+        PackedFloat32Array headings;
+        headings.resize(entity_ids.size());
+        if (simulation_get_unit_headings(entity_ids.ptr(), entity_ids.size(), headings.ptrw(), headings.size()) != entity_ids.size()) {
+            headings.clear();
+        }
+        return headings;
+    }
+
+    PackedFloat32Array get_unit_steering_state(int64_t entity_id) const {
+        PackedFloat32Array state;
+        state.resize(3);
+        float* values = state.ptrw();
+        if (!simulation_get_unit_steering_state(
+                static_cast<int>(entity_id), &values[0], &values[1], &values[2])) {
+            state.clear();
+        }
+        return state;
+    }
+
+    PackedFloat32Array get_unit_off_road_state(int64_t entity_id) const {
+        PackedFloat32Array state;
+        state.resize(3);
+        float* values = state.ptrw();
+        if (!simulation_get_unit_off_road_state(
+                static_cast<int>(entity_id), &values[0], &values[1], &values[2])) {
+            state.clear();
+        }
+        return state;
     }
 
     void render_add_unit_instance(double x, double y, int64_t unit_type) const {

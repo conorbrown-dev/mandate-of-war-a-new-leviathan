@@ -1,4 +1,5 @@
 #include "simulation/terrain.hpp"
+#include <cmath>
 #include <fstream>
 #include <stdexcept>
 
@@ -13,9 +14,16 @@ void Terrain::load_from_binary(const std::string& path) {
     if (!input) throw std::runtime_error("Heightmap file read failed");
 }
 
+void Terrain::set_world_bounds(float width, float height) {
+    if (width > 0.0f && height > 0.0f && std::isfinite(width) && std::isfinite(height)) {
+        world_width_ = width;
+        world_height_ = height;
+    }
+}
+
 float Terrain::height_at(float x, float y) const {
-    int gx = static_cast<int>(x + 160.0f);
-    int gy = static_cast<int>(y + 160.0f);
+    const int gx = static_cast<int>(std::floor((x / world_width_ + 0.5f) * static_cast<float>(GRID_SIZE)));
+    const int gy = static_cast<int>(std::floor((y / world_height_ + 0.5f) * static_cast<float>(GRID_SIZE)));
     
     if (gx < 0 || gx >= GRID_SIZE || gy < 0 || gy >= GRID_SIZE) {
         return 0.0f;

@@ -28,6 +28,12 @@ public:
     bool has_line_of_sight(float sx, float sy, float dx, float dy) const;
     
     void set_cell(int x, int y, bool walkable);
+    void set_traversal_cost(int x, int y, float cost);
+    void clear_traversal_costs();
+    float traversal_cost(int x, int y) const;
+    float movement_speed_multiplier(float world_x, float world_y) const;
+    void block_world_area(float world_x, float world_y, float radius);
+    void block_world_rectangle(float world_x, float world_y, float half_width, float half_height);
     bool is_walkable(int x, int y) const;
     void clear_blocks();
     void clear_cache();
@@ -54,6 +60,7 @@ private:
     float origin_x_;
     float origin_y_;
     std::vector<bool> walkable_;
+    std::vector<float> traversal_costs_;
     
     float heuristic(int x, int y, int dx, int dy) const;
     

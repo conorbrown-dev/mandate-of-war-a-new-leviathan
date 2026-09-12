@@ -53,7 +53,11 @@ static func presentation_height(height: float, world_x: float, world_width := 32
 	# metadata defines two landmasses but the original binary contains no ocean
 	# samples, so derive the visual channel here without changing simulation data.
 	var land_mask := presentation_land_mask(world_x, world_width)
-	var land_height := 0.35 + maxf(0.0, height - 1.0) * 0.12
+	# Heightfield values are authored in meters. The old 5% presentation scale
+	# flattened 1.9 km mountain belts into a nearly featureless 95 m surface.
+	# Preserve mountain-scale relief so ridges, valleys, and ravines read across
+	# the 40 km theater instead of collapsing into a textured plane.
+	var land_height := 0.35 + maxf(0.0, height) * 0.80
 	return lerpf(-0.70, land_height, land_mask)
 
 

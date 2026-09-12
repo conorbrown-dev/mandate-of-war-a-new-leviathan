@@ -1,4 +1,4 @@
-[gd_scene load_steps=16 format=3]
+[gd_scene load_steps=18 format=3]
 
 [ext_resource type="Script" path="res://main.gd" id="1_main"]
 [ext_resource type="Shader" path="res://terrain.gdshader" id="2_terrain_shader"]
@@ -10,6 +10,8 @@
 [ext_resource type="Texture2D" path="res://assets/terrain/downloaded/mud_forest_diff_2k.jpg" id="8_mud"]
 [ext_resource type="Texture2D" path="res://assets/terrain/downloaded/rocky_terrain_03_diff_2k.jpg" id="9_rocky"]
 [ext_resource type="Script" path="res://command_hud.gd" id="6_command_hud"]
+[ext_resource type="Script" path="res://strategic_icon_overlay.gd" id="11_strategic_overlay"]
+[ext_resource type="Environment" path="res://default_env.tres" id="12_battlefield_environment"]
 
 [sub_resource type="ShaderMaterial" id="TerrainShaderMaterial"]
 shader = ExtResource("2_terrain_shader")
@@ -19,7 +21,13 @@ shader_parameter/grassland_texture = ExtResource("5_grassland")
 shader_parameter/forest_texture = ExtResource("7_forest")
 shader_parameter/mud_texture = ExtResource("8_mud")
 shader_parameter/rocky_texture = ExtResource("9_rocky")
-shader_parameter/texture_tiling = 14.0
+shader_parameter/texture_tiling = 384.0
+shader_parameter/water_wave_speed = 0.18
+shader_parameter/water_wave_height = 1.15
+shader_parameter/terrain_brightness = 1.0
+shader_parameter/terrain_daylight = 1.0
+shader_parameter/terrain_ambient_fill = 0.2
+shader_parameter/fog_beacon_lights = PackedVector4Array(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0)
 
 [sub_resource type="ShaderMaterial" id="TerritoryShaderMaterial"]
 shader = ExtResource("10_territory_shader")
@@ -29,7 +37,13 @@ shader_parameter/grassland_texture = ExtResource("5_grassland")
 shader_parameter/forest_texture = ExtResource("7_forest")
 shader_parameter/mud_texture = ExtResource("8_mud")
 shader_parameter/rocky_texture = ExtResource("9_rocky")
-shader_parameter/texture_tiling = 14.0
+shader_parameter/texture_tiling = 384.0
+shader_parameter/water_wave_speed = 0.18
+shader_parameter/water_wave_height = 1.15
+shader_parameter/terrain_brightness = 1.0
+shader_parameter/terrain_daylight = 1.0
+shader_parameter/terrain_ambient_fill = 0.2
+shader_parameter/fog_beacon_lights = PackedVector4Array(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0)
 shader_parameter/territory_texture = null
 shader_parameter/territory_intensity = 0.4
 
@@ -56,6 +70,9 @@ subdivide_depth = 32
 [node name="Main" type="Node3D"]
 script = ExtResource("1_main")
 
+[node name="WorldEnvironment" type="WorldEnvironment" parent="."]
+environment = ExtResource("12_battlefield_environment")
+
 [node name="Ocean" type="MeshInstance3D" parent="."]
 mesh = SubResource("TerrainMesh")
 material_override = SubResource("TerritoryShaderMaterial")
@@ -78,16 +95,36 @@ mesh = SubResource("LandMesh")
 
 [node name="TerrainTrees" type="MultiMeshInstance3D" parent="."]
 
+[node name="StrategicTrees" type="MultiMeshInstance3D" parent="."]
+visible = false
+
 [node name="ForestLandmarks" type="Node3D" parent="."]
+
+[node name="CivilianBuildings" type="Node3D" parent="."]
 
 [node name="Camera3D" type="Camera3D" parent="."]
 transform = Transform3D(1, 0, 0, 0, 0.707107, 0.707107, 0, -0.707107, 0.707107, 0, 70, 70)
 current = true
-far = 2000.0
+# The starting skirmish theater is 40 km across. Keep the full battlefield
+# inside the camera frustum at strategic zoom levels.
+far = 120000.0
 
 [node name="DirectionalLight3D" type="DirectionalLight3D" parent="."]
-rotation_degrees = Vector3(-55, -35, 0)
+rotation_degrees = Vector3(-38, -28, 0)
+light_color = Color(0.94, 0.89, 0.78, 1)
+light_energy = 1.85
 shadow_enabled = true
+directional_shadow_max_distance = 28000.0
+directional_shadow_fade_start = 0.82
+
+[node name="MoonLight3D" type="DirectionalLight3D" parent="."]
+visible = false
+rotation_degrees = Vector3(-32, 145, 0)
+light_color = Color(0.42, 0.52, 0.78, 1)
+light_energy = 0.42
+shadow_enabled = true
+directional_shadow_max_distance = 18000.0
+directional_shadow_fade_start = 0.78
 
 [node name="HUD" type="CanvasLayer" parent="."]
 
@@ -99,8 +136,18 @@ anchor_right = 1.0
 anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
-mouse_filter = 2
+mouse_filter = 0
 script = ExtResource("6_command_hud")
+
+[node name="StrategicIconOverlay" type="Control" parent="HUD"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+script = ExtResource("11_strategic_overlay")
 
 [node name="DebugPanel" type="ColorRect" parent="HUD"]
 visible = false
@@ -136,7 +183,7 @@ offset_right = -12.0
 offset_bottom = -12.0
 grow_horizontal = 2
 grow_vertical = 0
-text = "Drag-select  |  Right-click move  |  Ctrl+Right-click attack  |  X stop  |  Wheel zoom  |  Arrow/WASD pan  |  Esc quit"
+text = "Drag-select  |  Right-click move  |  Ctrl+Right-click attack  |  X stop  |  Wheel zoom  |  Arrow/WASD pan  |  Space + middle mouse free-float  |  Esc quit"
 horizontal_alignment = 1
 
 [node name="SelectionRect" type="ColorRect" parent="HUD"]
@@ -203,6 +250,7 @@ layout_mode = 2
 text = "START SKIRMISH"
 
 [node name="TerritoryDebugLabel" type="Label" parent="HUD"]
+visible = false
 layout_mode = 1
 anchors_preset = 8
 anchor_left = 0.5

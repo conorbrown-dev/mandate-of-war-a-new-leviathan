@@ -1,33 +1,49 @@
 # Execution Ledger
 
-**Last updated:** 2026-09-10
+**Last updated:** 2026-09-12
 
-**Sequence mode:** Goal 11 verified; paused because no canonical Goal 12 document exists
+**Sequence mode:** reconciliation complete; `G03-COMBAT-BENCH` is ACTIVE. Goals 04–11 are GATED.
 
-**Milestone state:** Goal 11 — Forward Seizure feature foundation is VERIFIED. G11-TERRITORIAL/G11-ZONES/G11-INSTALLATIONS/G11-CAPABILITIES/G11-REQUIREMENTS/G11-DOMAIN-STRUCTURES/G11-INTEGRATION/G11-SIMULATION-INTEGRATION/G11-UNITASSIGN/G11-ZONEPROG/G11-INSTALLCMD/G11-CONSTRACK/G11-CAPABILITYASSIGN/G11-CONSTRUCTION/G11-UI verified. No canonical Goal 12 document exists.
+**Milestone state:** No goal later than Goal 02 is currently accepted on this checkout. The current dirty tree contains candidate later-goal work, but it remains uncommitted and cannot bypass sequential acceptance. See `docs/WORKTREE_RECONCILIATION.md`.
 
 This file is the durable milestone state used after a restart, compaction, or automatic continuation. It records gates and acceptance evidence; it does not weaken the completion criteria in the numbered goal files. Session titles, chat summaries, and OpenCode's session-local todos are non-authoritative.
 
+## Reconciliation Authority — 2026-09-12
+
+This section supersedes contradictory historical status claims below. It is based on the current repository object graph and fresh local validation:
+
+- `9c295bf` is absent; claims tied to it are historical and non-verifiable here.
+- Release build, CTest (3/3), direct native runners (18/18, 21/21, 164/164), Godot smoke, Godot presentation (91/91), and the four repository-owned validation scenarios pass on the current dirty tree.
+- `G03-COMBAT-BENCH` fails: `rts_combat_benchmark 2000 100` returns non-zero with zero projectiles and zero destructions.
+- `G04-BENCH` fails: `rts_logistics_benchmark 10000 30 100` returns non-zero at 20.920 ms/tick, above its 15 ms acceptance limit.
+- No canonical Goal 09 or Goal 11 specification exists at repository root. The Goal 06 and Goal 08 specifications also contain explicit TODO/in-progress gates that contradict their historical closure claims.
+
 ## Milestone Queue
 
-Historical Goal 04–07 labels below are retained as prior reports, not fresh sign-off. The 2026-09-08 checkout review found missing Goal 07 tactical/strategic files and placeholder AI actions. Earlier reviews and definitions of done remain prerequisites to Goal 08 acceptance. Actual starting checkout: clean `0c7eebe`, following AI commit `af38bba`; it is not the detached `9c295bf` tree described by AGENTS.md.
+Historical Goal 04–11 labels below are retained as implementation reports, not fresh sign-off. They must not be used to advance the milestone sequence.
 
 | Goal | State | Gate / evidence |
 |---|---|
-| Goal 02 — simulation, scale, rendering, controls | `VERIFIED` in requested checkpoint `9c295bf` | 2026-09-01 Release build, 1/1 CTest, 89 behavior tests, moving scale matrix, Godot checks, and evaluated Codex review; see `docs/CURRENT_STATE.md` |
-| Goal 03 — economy, combat, factions | `VERIFIED` in requested checkpoint `9c295bf` | G03-COMBAT-BENCH, G03-COMBAT-CORRECT, G03-ECONOMY, G03-DATA verified; the Goal 03 closeout suite had 93 passing behavior tests, combat benchmark 2000 vs 2000 at 8.584 ms/tick; research Project struct, FactionResearch state, JSON loader, deduction logic, prerequisite checks integrated |
-| Goal 04 — logistics, air, naval, intelligence | `CLOSED` | All acceptance criteria verified: G04-AIRBASE, G04-AIR_RANGE, G04-AIR_CRASH, G04-VTOL, G04-CARRIER, G04-NAVAL_RANGE, G04-NAVAL_BASE, G04-RECON, G04-INTEL, G04-SCENARIO, G04-UI, G04-BENCH; release build, CTest 1/1, 126 assertions, logistics benchmark 1,000–10,000 units < 15 ms/tick; Codex review deferred; docs/MODDING.md, docs/ASSET_PIPELINE.md, docs/MAP_FORMAT.md created |
-| Goal 05 — modding, asset pipeline, map editor | `VERIFIED` | All criteria verified: G05-SHA256/G05-VALIDATE/G05-LOAD/G05-VERSION/G05-TESTS/G05-MAP/G05-ASSETS. Asset generation verified: 61 mesh definitions + 33 Blender models. |
-| Goal 06 — multiplayer, replays, stats, AI | `VERIFIED` | G06-NETWORKING, G06-REPLAY, G06-AI-DOC, G06-STATS verified. G06-NETWORKING (LAN discovery + TCP transport + InputCommand 20-byte wire format), G06-REPLAY (portable snapshots + CRC32), G06-STATS (MatchStats/FactionStats/MapStats/GlobalStats types + file storage), G06-AI-DOC (strategic/operational/tactical layers). Simulation loop integration (CommandManager + SnapshotBuffer) verified. Snapshot checksum exchange implemented. 108/108 tests pass. Godot integration + benchmark verified. |
-| Goal 07 — deterministic AI foundation | `VERIFIED` | Tactical AI (threat scoring, positioning, retreat, target evaluation), AICommand submission, full build and CTest 3/3 pass; DeterministicRNG seeded from SnapshotChecksum per ADR-007 with `rng->next() & 1` and `rng->next_float()` tie-breaking; operational AI layer complete (army grouping, front determination, staging); strategic AI layer complete (economy state, expansion opportunities, research prioritization with RNG tie-breaking, zone assignment with RNG bucket selection); 126/126 tests passing (including 5 new strategic AI tests). |
-| Goal 08 — playable skirmish vertical slice | `VERIFIED` | All criteria verified: G08-COMMANDS/G08-ECONOMY/G08-UX/G08-MATCH/G08-PERF. Asset generation: 61 mesh JSON + 33 Blender models. Next: Goal 09 - Modding/Asset Pipeline improvements. |
-| Goal 09 — logistics improvements | `VERIFIED` | G09-LOGISTICS-BENCH verified: 10,000 units at 3.68 ms/tick with full logistics. Next: Goal 10 — Terrain System. |
-| Goal 10 — terrain system | `VERIFIED` | All acceptance criteria verified: G10-HEIGHTMAP/G10-BIOMES/G10-MESH/G10-RENDERING/G10-LOADING/G10-COLLISION/G10-TESTS/G10-BENCH. Binary heightmap (320x320 float32, 409600 bytes) created. JSON update done. main.gd `_setup_terrain_from_heightmap()` integrated into `_ready()` and called when terrain data present. C++ `Terrain` class with `height_at()` integrated into `Simulation`. 3 terrain integration tests pass. Release build + CTest 1/1 pass (134/137 tests passing, 6 pre-existing failures unrelated to terrain). |
-| Goal 11 — Forward Seizure feature foundation | `VERIFIED` | ALL CRITERIA VERIFIED: G11-TERRITORIAL/G11-ZONES/G11-INSTALLATIONS/G11-CAPABILITIES/G11-DOMAIN-STRUCTURES/G11-INTEGRATION/G11-SIMULATION-INTEGRATION/G11-UNITASSIGN/G11-ZONEPROG/G11-INSTALLCMD/G11-CONSTRACK/G11-CAPABILITYASSIGN/G11-CONSTRUCTION/G11-UI; Release build, CTest 3/3, direct integration runner 150/150, Godot presentation 39/39 |
+| Goal 02 — simulation, scale, rendering, controls | `HISTORICAL` | Functional scale harnesses remain available, but historical performance rows are not current evidence for this dirty checkout. |
+| Goal 03 — economy, combat, factions | `ACTIVE` | `G03-COMBAT-BENCH`: fresh 2,000-vs-2,000 run has no projectiles/destructions. Diagnose the benchmark/workload and restore meaningful combat before any advancement. |
+| Goal 04 — logistics, air, naval, intelligence | `GATED` | Fresh 10,000-unit logistics benchmark exceeds its 15 ms gate; focused review remains required. |
+| Goal 05 — modding, asset pipeline, map editor | `GATED` | Specification requires a loadable test mod, a spawnable generated unit, map save/load, and evaluated review; current evidence is insufficient. |
+| Goal 06 — multiplayer, replays, stats, AI | `GATED` | Its own numbered specification marks all acceptance criteria TODO. |
+| Goal 07 — deterministic AI foundation | `GATED` | Candidate implementation exists, but it cannot close while earlier goals are gated. |
+| Goal 08 — playable skirmish vertical slice | `GATED` | Its specification retains in-progress rows and requires complete-flow visual/replay/stat evidence. |
+| Goal 09 — logistics improvements | `UNSPECIFIED` | No canonical root goal document exists. |
+| Goal 10 — terrain system | `GATED` | Its specification retains pending roads and terrain-collision criteria. |
+| Goal 11 — Forward Seizure feature foundation | `UNSPECIFIED` | Candidate dirty-tree implementation and tests exist, but no canonical root goal document exists. |
 | Goal 11-TESTS | `COMPLETE` | Territorial control unit tests at `tests/test_territorial_control.cpp`: state transitions (5), zone type progression (8), seizure capability flags (8), installation type definitions (7); all tests pass |
 | GOAL-11-NEXT | `COMPLETE` | FOB construction completion notification is rendered and covered by the Godot presentation harness |
+| VAL-FRAMEWORK | `COMPLETE` | Cross-platform test/validation commands, explicit scenario registry, bounded Godot runner, schema-checked reports, logs, and non-zero failure propagation implemented |
+| VAL-SCENARIOS | `COMPLETE` | Selection/move, strategic zoom, airfield/fighter ferry, and 1,000-unit benchmark scenarios pass; forced-failure registry run returns non-zero and all reports say FAIL |
+| VAL-VISUAL | `COMPLETE` | Inspected 1280x720 strategic checkpoints, 1.000000 repeat score, calibrated 0.995 references, corrupted-reference 0.445200 FAIL, and generated diffs verified |
+| VAL-VIDEO | `COMPLETE` | Airfield/fighter scenario records an automatic fixed-step 1280x720 30 FPS AVI; final proof is 149 frames and metadata/non-empty checks pass |
+| VAL-CONTRACT | `COMPLETE` | AGENTS gameplay completion contract and validation workflow/baseline/catalog/report documentation added |
+| VAL-REVIEW | `COMPLETE` | Independent boundary review found no false-PASS or production-path blocker; final `tools/test` passed and `docs/validation/CODEX_VALIDATION_REVIEW.md` ends ACCEPT |
 
-## Active Goal 11 Acceptance Ledger
+## Historical Candidate Goal 11 Evidence
 
 | ID | State | Current evidence / next proof |
 |---|---|
@@ -50,7 +66,7 @@ Historical Goal 04–07 labels below are retained as prior reports, not fresh si
 | BUILD | `PASS` | Release build completes with no errors: `cmake --build build` succeeds (2026-09-10) |
 | TESTS | `PASS` | CTest 100% success: 3/3 tests pass (137/137 integration tests passing) |
 
-**Goal 11 complete: Domain model and manager interface implemented, fully integrated into Simulation with reset/update lifecycle. Unit capability assignment and deterministic FOB construction are content-authored/wired and tested. The authoritative install command, GDExtension construction telemetry, HUD placement/progress path, and completion notification are implemented. Validation: Release build, CTest 3/3, direct integration runner 150/150, Godot skirmish presentation 39/39 including engineering-unit placement/progress/completion telemetry and notification, editor scan, and extension smoke. No canonical Goal 12 document exists yet.**
+**Historical candidate evidence only:** the following records a domain-model and presentation slice present in the dirty tree. It is not a Goal 11 closure because the canonical Goal 11 specification is absent and earlier sequence gates are open.
 
 ## Active Goal 10 Acceptance Ledger (retained for historical reference)
 

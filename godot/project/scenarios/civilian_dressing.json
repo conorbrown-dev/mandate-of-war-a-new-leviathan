@@ -1,0 +1,13 @@
+{
+  "building_types": [
+    {"id": "house", "size": [70, 32, 56], "color": "#8a7560"},
+    {"id": "warehouse", "size": [150, 42, 92], "color": "#58636a"},
+    {"id": "utility", "size": [52, 38, 46], "color": "#6c7772"}
+  ],
+  "clusters": [
+    {"center": [-14500, -11200], "spread": [1300, 700], "count": 18, "seed": 401},
+    {"center": [-14500, 11200], "spread": [1100, 650], "count": 15, "seed": 402},
+    {"center": [14500, -11200], "spread": [1200, 650], "count": 17, "seed": 403},
+    {"center": [14500, 11200], "spread": [1000, 600], "count": 14, "seed": 404}
+  ]
+}

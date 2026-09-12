@@ -195,6 +195,13 @@ InstallationState TerritorialControlManager::get_installation_at(float x, float 
     return InstallationState{};
 }
 
+bool TerritorialControlManager::has_active_installation(FactionId faction, InstallationType type) const {
+    for (const auto& inst : installations_) {
+        if (inst.faction == faction && inst.type == type && !inst.constructing) return true;
+    }
+    return false;
+}
+
 bool TerritorialControlManager::has_capability(Entity entity, SeizureCapability capability) const {
     auto it = unit_capabilities_.find(entity.id);
     if (it == unit_capabilities_.end()) {

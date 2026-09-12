@@ -1,5 +1,10 @@
 extends Control
 var match_view: Node3D
+const UiTypographyScript = preload("res://ui_typography.gd")
+var ui_font: Font
+
+func _ready() -> void:
+	ui_font = UiTypographyScript.monospace_font()
 
 func _draw() -> void:
 	if match_view == null or not match_view.match_started or match_view.startup_overlay.visible:
@@ -22,4 +27,4 @@ func _draw() -> void:
 		var memory: Dictionary = match_view.last_observed[id]
 		var at := camera.unproject_position(Vector3(memory.x, 1, memory.y))
 		draw_circle(at, 6, Color(0.6, 0.6, 0.6, 0.6), false, 1)
-		draw_string(ThemeDB.fallback_font, at+Vector2(8, 0), "last seen %.0fs" % ((float(match_view.match_state.tick)-float(memory.tick))/20), HORIZONTAL_ALIGNMENT_LEFT, -1, 12, Color.GRAY)
+		draw_string(ui_font if ui_font != null else ThemeDB.fallback_font, at+Vector2(8, 0), "LAST SEEN %.0FS" % ((float(match_view.match_state.tick)-float(memory.tick))/20), HORIZONTAL_ALIGNMENT_LEFT, -1, 13, Color.GRAY)

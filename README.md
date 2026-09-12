@@ -4,9 +4,9 @@ A large-scale near-future RTS prototype with a C++ fixed-tick simulation and God
 
 ## Current Focus
 
-Goal 08 — Playable Skirmish Vertical Slice is active by explicit user direction. The current slice establishes the validated Broken Strait scenario and Godot setup flow; `G08-SCENARIO` is in progress and no Goal 08 acceptance criterion is verified.
+Goal 03 — Economy, Combat, and Faction Vertical Slice is active for recovery. A fresh 2,000-vs-2,000 combat benchmark produces no projectiles or destructions, so later goal claims are gated regardless of the working features present in this checkout.
 
-The repository contains substantial provisional combat, production, logistics, networking, replay, and AI work across post-baseline commits and a dirty working tree. Earlier review findings and required reviews remain prerequisites for Goal 08 verification.
+The repository contains substantial uncommitted combat, production, logistics, terrain, presentation, validation, and territorial-control work. It is intentionally preserved and is not part of `main` until explicitly committed. See [the worktree reconciliation](docs/WORKTREE_RECONCILIATION.md) for the exact boundary, including the preserved stash and unavailable secondary worktree.
 
 ## OpenCode Start Here
 
@@ -19,7 +19,7 @@ OpenCode automatically reads `AGENTS.md`. Its next session should then follow [d
 - the active definition of done;
 - a bounded first-task prompt.
 
-Do not feed every milestone to OpenCode at once. The immediate task is Goal 03 behavior and benchmark validation; do not proceed to Goal 04.
+Do not feed every milestone to OpenCode at once. The immediate task is `G03-COMBAT-BENCH`; do not proceed to Goal 04.
 
 ## Build and Smoke Test
 

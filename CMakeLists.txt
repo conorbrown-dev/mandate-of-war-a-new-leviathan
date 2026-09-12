@@ -19,6 +19,8 @@ set(SIMULATION_SOURCES
     src/simulation/simulation.cpp
     src/simulation/skirmish.cpp
     src/simulation/terrain.cpp
+    src/simulation/road_network.cpp
+    src/simulation/off_road.cpp
     src/simulation/command_manager.cpp
     src/simulation/tick_manager.cpp
     src/logistics/logistics.cpp

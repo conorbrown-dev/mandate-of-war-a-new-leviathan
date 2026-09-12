@@ -78,6 +78,18 @@ struct UnitPrototype {
     std::string visual_id;
     std::string content_id = "";
     std::vector<SeizureCapability> capabilities = {};
+    // Ground-motion tuning is content-owned so factions and chassis can diverge
+    // without simulation type checks. These fields are ignored by air and naval
+    // prototypes.
+    float steering_acceleration = 5.0f;
+    float steering_deceleration = 8.0f;
+    float steering_turn_rate = 1.8f;
+    float steering_turn_rate_at_speed = 1.0f;
+    float steering_minimum_turn_radius = 8.0f;
+    float steering_max_reverse_speed = 0.0f;
+    float steering_reverse_preference_threshold = 2.2f;
+    float steering_response = 1.0f;
+    bool steering_can_pivot_turn = false;
 };
 
 // Unit production data keyed by UnitType

@@ -17,6 +17,8 @@ struct CompletedConstruction {
     UnitType unit_type;
     FactionId faction_id;
     float x, y;
+    bool is_structure = false;
+    uint8_t structure_type = 0;
 };
 
 class ProductionManager {

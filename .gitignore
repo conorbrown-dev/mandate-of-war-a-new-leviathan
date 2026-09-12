@@ -46,3 +46,6 @@ downloaded_assets/*.zip
 
 godot-linux-install
 downloaded_assets/
+
+# Generated gameplay-validation evidence
+validation/artifacts/

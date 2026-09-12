@@ -105,6 +105,7 @@ public:
     void add_installation(float x, float y, InstallationType type, FactionId faction);
     void remove_installation(float x, float y, InstallationType type);
     InstallationState get_installation_at(float x, float y) const;
+    bool has_active_installation(FactionId faction, InstallationType type) const;
     
     // Unit capabilities
     bool has_capability(Entity entity, SeizureCapability capability) const;

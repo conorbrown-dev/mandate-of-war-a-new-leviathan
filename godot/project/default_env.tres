@@ -1,9 +1,28 @@
-[gd_resource type="Environment" format=3 uid="uid://bh6nbbts5cn6j"]
+[gd_resource type="Environment" load_steps=3 format=3 uid="uid://bh6nbbts5cn6j"]
+
+[sub_resource type="ProceduralSkyMaterial" id="ProceduralSkyMaterial_battlefield"]
+sky_top_color = Color(0.075, 0.13, 0.2, 1)
+sky_horizon_color = Color(0.43, 0.5, 0.55, 1)
+ground_bottom_color = Color(0.018, 0.028, 0.024, 1)
+ground_horizon_color = Color(0.24, 0.3, 0.28, 1)
+sun_angle_max = 18.0
+sun_curve = 0.08
+sun_energy_multiplier = 0.75
+
+[sub_resource type="Sky" id="Sky_battlefield"]
+sky_material = SubResource("ProceduralSkyMaterial_battlefield")
 
 [resource]
-background_mode = 1
-background_color = Color(0.025, 0.04, 0.065, 1)
+background_mode = 2
+sky = SubResource("Sky_battlefield")
 ambient_light_source = 3
-ambient_light_color = Color(0.52, 0.62, 0.75, 1)
-ambient_light_energy = 0.65
+ambient_light_color = Color(0.58, 0.66, 0.72, 1)
+ambient_light_energy = 0.72
+reflected_light_source = 2
+fog_enabled = true
+fog_light_color = Color(0.52, 0.58, 0.6, 1)
+fog_light_energy = 0.65
+fog_density = 0.000018
+fog_sky_affect = 0.58
 tonemap_mode = 2
+tonemap_exposure = 1.08

@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <functional>
 #include <limits>
 #include <queue>
 #include <stdexcept>
@@ -46,7 +47,8 @@ Pathfinding::Pathfinding(int grid_width, int grid_height, float cell_size, float
       cell_size_(cell_size),
       origin_x_(origin_x),
       origin_y_(origin_y),
-      walkable_(checked_grid_size(grid_width, grid_height, cell_size, origin_x, origin_y), true) {}
+      walkable_(checked_grid_size(grid_width, grid_height, cell_size, origin_x, origin_y), true),
+      traversal_costs_(walkable_.size(), 1.0f) {}
 
 int Pathfinding::index(int x, int y) const {
     return y * grid_width_ + x;
@@ -80,6 +82,62 @@ void Pathfinding::set_cell(int x, int y, bool walkable) {
     }
 }
 
+void Pathfinding::set_traversal_cost(int x, int y, float cost) {
+    if (x < 0 || x >= grid_width_ || y < 0 || y >= grid_height_ ||
+        !std::isfinite(cost) || cost <= 0.0f) return;
+    const float bounded_cost = std::clamp(cost, 0.25f, 4.0f);
+    const int cell_index = index(x, y);
+    if (traversal_costs_[cell_index] != bounded_cost) {
+        traversal_costs_[cell_index] = bounded_cost;
+        clear_cache();
+    }
+}
+
+void Pathfinding::clear_traversal_costs() {
+    std::fill(traversal_costs_.begin(), traversal_costs_.end(), 1.0f);
+    clear_cache();
+}
+
+float Pathfinding::traversal_cost(int x, int y) const {
+    if (x < 0 || x >= grid_width_ || y < 0 || y >= grid_height_) return 1.0f;
+    return traversal_costs_[index(x, y)];
+}
+
+float Pathfinding::movement_speed_multiplier(float world_x, float world_y) const {
+    const float cost = traversal_cost(to_grid_x(world_x), to_grid_y(world_y));
+    return std::clamp(1.0f / cost, 0.5f, 1.75f);
+}
+
+void Pathfinding::block_world_area(float world_x, float world_y, float radius) {
+    if (!std::isfinite(world_x) || !std::isfinite(world_y) || !std::isfinite(radius) || radius < 0.0f) return;
+    const int center_x = to_grid_x(world_x);
+    const int center_y = to_grid_y(world_y);
+    const int cell_radius = std::max(0, static_cast<int>(std::ceil(radius / cell_size_)));
+    for (int y = center_y - cell_radius; y <= center_y + cell_radius; ++y) {
+        for (int x = center_x - cell_radius; x <= center_x + cell_radius; ++x) {
+            if (x < 0 || x >= grid_width_ || y < 0 || y >= grid_height_) continue;
+            if (std::hypot(static_cast<float>(x - center_x), static_cast<float>(y - center_y)) <= static_cast<float>(cell_radius) + 0.01f) {
+                set_cell(x, y, false);
+            }
+        }
+    }
+}
+
+void Pathfinding::block_world_rectangle(float world_x, float world_y, float half_width, float half_height) {
+    if (!std::isfinite(world_x) || !std::isfinite(world_y) ||
+        !std::isfinite(half_width) || !std::isfinite(half_height) ||
+        half_width < 0.0f || half_height < 0.0f) return;
+    const int min_x = to_grid_x(world_x - half_width - cell_size_ * 0.5f);
+    const int max_x = to_grid_x(world_x + half_width + cell_size_ * 0.5f);
+    const int min_y = to_grid_y(world_y - half_height - cell_size_ * 0.5f);
+    const int max_y = to_grid_y(world_y + half_height + cell_size_ * 0.5f);
+    for (int y = min_y; y <= max_y; ++y) {
+        for (int x = min_x; x <= max_x; ++x) {
+            set_cell(x, y, false);
+        }
+    }
+}
+
 bool Pathfinding::is_walkable(int x, int y) const {
     if (x < 0 || x >= grid_width_ || y < 0 || y >= grid_height_) {
         return false;
@@ -93,7 +151,10 @@ void Pathfinding::clear_blocks() {
 }
 
 float Pathfinding::heuristic(int x, int y, int dx, int dy) const {
-    return std::abs(x - dx) + std::abs(y - dy);
+    // Traversal costs may be lower than one on completed roads. Scale the
+    // Manhattan lower bound by the cheapest possible cell so A* remains
+    // admissible when road routes are cheaper than direct off-road travel.
+    return static_cast<float>(std::abs(x - dx) + std::abs(y - dy)) * 0.25f;
 }
 
 std::vector<std::pair<float, float>> Pathfinding::find_path(float sx, float sy, float dx, float dy) {
@@ -170,7 +231,7 @@ std::vector<std::pair<float, float>> Pathfinding::find_path(float sx, float sy, 
                 continue;
             }
 
-            const float tentative_g = current.g_score + 1.0f;
+            const float tentative_g = current.g_score + traversal_cost(neighbor_x, neighbor_y);
             if (tentative_g < g_scores[neighbor_cell]) {
                 g_scores[neighbor_cell] = tentative_g;
                 came_from[neighbor_cell] = current.cell;
@@ -228,16 +289,17 @@ const Pathfinding::CachedFlowField* Pathfinding::ensure_flow_field(int dx_grid, 
         CachedDirection{0, 0}
     );
     std::vector<int> came_from(grid_width_ * grid_height_, -1);
-    std::vector<bool> visited(grid_width_ * grid_height_, false);
-
-    std::queue<int> queue;
+    std::vector<float> distance(grid_width_ * grid_height_, std::numeric_limits<float>::infinity());
+    using QueueEntry = std::pair<float, int>;
+    std::priority_queue<QueueEntry, std::vector<QueueEntry>, std::greater<QueueEntry>> queue;
     const int destination_cell = index(dx_grid, dy_grid);
-    queue.push(destination_cell);
-    visited[destination_cell] = true;
+    queue.push({0.0f, destination_cell});
+    distance[destination_cell] = 0.0f;
 
     while (!queue.empty()) {
-        const int current_cell = queue.front();
+        const auto [current_distance, current_cell] = queue.top();
         queue.pop();
+        if (current_distance != distance[current_cell]) continue;
 
         const int x = current_cell % grid_width_;
         const int y = current_cell / grid_width_;
@@ -249,10 +311,11 @@ const Pathfinding::CachedFlowField* Pathfinding::ensure_flow_field(int dx_grid, 
             }
 
             const int neighbor_cell = index(neighbor_x, neighbor_y);
-            if (!visited[neighbor_cell]) {
-                visited[neighbor_cell] = true;
+            const float candidate_distance = current_distance + traversal_cost(neighbor_x, neighbor_y);
+            if (candidate_distance < distance[neighbor_cell]) {
+                distance[neighbor_cell] = candidate_distance;
                 came_from[neighbor_cell] = current_cell;
-                queue.push(neighbor_cell);
+                queue.push({candidate_distance, neighbor_cell});
             }
         }
     }
@@ -264,7 +327,7 @@ const Pathfinding::CachedFlowField* Pathfinding::ensure_flow_field(int dx_grid, 
                 continue;
             }
 
-            if (!visited[cell]) {
+            if (!std::isfinite(distance[cell])) {
                 continue;
             }
 
@@ -294,12 +357,33 @@ std::pair<float, float> Pathfinding::flow_direction(float x, float y, float dx, 
     const int y_grid = to_grid_y(y);
     const int dx_grid = to_grid_x(dx);
     const int dy_grid = to_grid_y(dy);
-    if (!is_walkable(x_grid, y_grid) || !is_walkable(dx_grid, dy_grid)) {
+    if (!is_walkable(dx_grid, dy_grid)) {
         return {0.0f, 0.0f};
     }
 
     const CachedFlowField* cached = ensure_flow_field(dx_grid, dy_grid);
     if (!cached) {
+        return {0.0f, 0.0f};
+    }
+
+    // A structure can finish in the same coarse strategic cell as the
+    // engineer that built it. Allow that unit to leave the newly blocked
+    // cell, while keeping the structure cell unavailable to normal routes.
+    if (!is_walkable(x_grid, y_grid)) {
+        for (int direction = 0; direction < 4; ++direction) {
+            const int neighbor_x = x_grid + NEIGHBOR_X[direction];
+            const int neighbor_y = y_grid + NEIGHBOR_Y[direction];
+            if (!is_walkable(neighbor_x, neighbor_y)) {
+                continue;
+            }
+            const CachedDirection neighbor_direction = (*cached)[index(neighbor_x, neighbor_y)];
+            if (neighbor_direction.x != 0 || neighbor_direction.y != 0) {
+                return {
+                    static_cast<float>(NEIGHBOR_X[direction]),
+                    static_cast<float>(NEIGHBOR_Y[direction])
+                };
+            }
+        }
         return {0.0f, 0.0f};
     }
 

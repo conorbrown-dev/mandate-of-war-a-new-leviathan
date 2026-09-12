@@ -1,0 +1,18 @@
+{
+  "schemaVersion": 1,
+  "baselines": [
+    {
+      "scenarioId": "strategic_zoom_transition",
+      "checkpoint": "tactical_model",
+      "file": "strategic_zoom_transition/01_tactical_model.png",
+      "threshold": 0.995
+    },
+    {
+      "scenarioId": "strategic_zoom_transition",
+      "checkpoint": "strategic_icon",
+      "file": "strategic_zoom_transition/02_strategic_icon.png",
+      "threshold": 0.995
+    }
+  ],
+  "status": "active"
+}

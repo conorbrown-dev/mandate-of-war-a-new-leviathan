@@ -10,24 +10,34 @@ const AI_FACTION_COLOR := Color(0.92, 0.20, 0.18, 1.0)
 const HUMAN_PLAYER_ID := 0
 const BUILD_UNIT_SHORTCUTS := ["1", "4", "5", "9", "0", "P"]
 const CAMERA_MIN_DISTANCE := 24.0
-const CAMERA_MAX_DISTANCE := 520.0
+const CAMERA_MAX_DISTANCE := 26000.0
+const CAMERA_MIN_FAR_DISTANCE := 120000.0
+const CAMERA_TERRAIN_CLEARANCE := 6.0
+const UNIT_MODEL_GROUND_CLEARANCE := 1.2
+const FREE_CAMERA_MIN_PITCH := 12.0
+const FREE_CAMERA_MAX_PITCH := 82.0
+const FREE_CAMERA_ROTATION_SPEED := 0.004
+const CAMERA_YAW_SPEED := 1.45
 const SIMULATION_WORLD_CENTER_SPAN := 319.0
 const VisualRegistryScript = preload("res://visual_definition_registry.gd")
 const VisualRootScript = preload("res://unit_visual_root.gd")
 const VisualSpawnBridgeScript = preload("res://visual_spawn_bridge.gd")
 const VisualPresentationPolicyScript = preload("res://visual_presentation_policy.gd")
 const VisualPackCompatibilityScript = preload("res://visual_pack_compatibility.gd")
+const UiTypographyScript = preload("res://ui_typography.gd")
+const StrategicUnitIconScript = preload("res://strategic_unit_icon.gd")
 const MESH_BASE_PATH := "res://scenarios/meshes/"
 const TERRAIN_SAMPLE_WIDTH := 320
 const TERRAIN_SAMPLE_HEIGHT := 320
+const CIVILIAN_DRESSING_PATH := "res://scenarios/civilian_dressing.json"
 const TREE_INSTANCE_TARGET := 520
 const SkirmishConfigLoader := preload("res://skirmish_config.gd")
 const ArmorTexture := preload("res://assets/units/near_future_armor_tile_v1.png")
 const MATERIAL_SITES := [
-	{"id": 900, "name": "RARE METALS", "position": Vector2(-58, -44), "owner": -1, "color": Color("#ffbd52")},
-	{"id": 901, "name": "SILICON", "position": Vector2(-42, 48), "owner": -1, "color": Color("#47d9ff")},
-	{"id": 902, "name": "POLYMER FEEDSTOCK", "position": Vector2(42, -48), "owner": 1, "color": Color("#ce82ff")},
-	{"id": 903, "name": "SYNTHETIC OIL", "position": Vector2(64, 38), "owner": 1, "color": Color("#7ad99b")},
+	{"id": 900, "name": "RARE METALS", "position": Vector2(-15500, -9000), "owner": -1, "color": Color("#ffbd52")},
+	{"id": 901, "name": "SILICON", "position": Vector2(-10500, 11000), "owner": -1, "color": Color("#47d9ff")},
+	{"id": 902, "name": "POLYMER FEEDSTOCK", "position": Vector2(10500, -11000), "owner": 1, "color": Color("#ce82ff")},
+	{"id": 903, "name": "SYNTHETIC OIL", "position": Vector2(15500, 9000), "owner": 1, "color": Color("#7ad99b")},
 ]
 
 @onready var camera: Camera3D = $Camera3D
@@ -37,7 +47,9 @@ const MATERIAL_SITES := [
 @onready var resource_sites: Node3D = $ResourceSites
 @onready var construction_frames: Node3D = $ConstructionFrames
 @onready var terrain_trees: MultiMeshInstance3D = $TerrainTrees
+@onready var strategic_trees: MultiMeshInstance3D = $StrategicTrees
 @onready var forest_landmarks: Node3D = $ForestLandmarks
+@onready var civilian_buildings: Node3D = $CivilianBuildings
 @onready var west_landmass: MeshInstance3D = $WestLandmass
 @onready var east_landmass: MeshInstance3D = $EastLandmass
 @onready var debug_label: Label = $HUD/DebugPanel/DebugLabel
@@ -45,6 +57,7 @@ const MATERIAL_SITES := [
 @onready var debug_panel: ColorRect = $HUD/DebugPanel
 @onready var help_label: Label = $HUD/HelpLabel
 @onready var command_hud: Control = $HUD/CommandHUD
+@onready var strategic_icon_overlay: Control = $HUD/StrategicIconOverlay
 @onready var startup_overlay: ColorRect = $HUD/StartupOverlay
 @onready var scenario_title: Label = $HUD/StartupOverlay/Panel/VBox/ScenarioTitle
 @onready var scenario_description: Label = $HUD/StartupOverlay/Panel/VBox/ScenarioDescription
@@ -52,6 +65,9 @@ const MATERIAL_SITES := [
 @onready var start_button: Button = $HUD/StartupOverlay/Panel/VBox/StartButton
 @onready var territory_debug_label: Label = $HUD/TerritoryDebugLabel
 @onready var territory_material: ShaderMaterial = $Ocean.material_override
+@onready var battlefield_environment: WorldEnvironment = $WorldEnvironment
+@onready var battlefield_light: DirectionalLight3D = $DirectionalLight3D
+@onready var moon_light: DirectionalLight3D = $MoonLight3D
 
 var extension: Object
 var unit_multimesh: MultiMesh
@@ -148,6 +164,7 @@ func _load_mesh_from_json(content_id: String) -> ArrayMesh:
 var entity_ids := PackedInt32Array()
 var entity_to_instance: Dictionary = {}
 var entity_base_colors: Dictionary = {}
+var entity_unit_types: Dictionary = {}
 var selected_ids := PackedInt32Array()
 var player_entity_ids := PackedInt32Array()
 var ai_entity_ids := PackedInt32Array()
@@ -159,6 +176,7 @@ var prototype_visual_limit := 200
 var visual_registry
 var visual_spawn_bridge
 var prototype_visual_views: Dictionary = {}
+var unit_visual_headings: Dictionary = {}
 var commander_ids: Dictionary = {}
 var engineer_ids: Dictionary = {}
 var hidden_base_ids: Dictionary = {}
@@ -168,8 +186,18 @@ var pending_structure_position := Vector2.ZERO
 var completed_structure_views: Array[Node3D] = []
 var build_mode_type := -1
 var build_ghost: Node3D
+var build_ghost_material: StandardMaterial3D
+var road_build_mode := false
+var road_start := Vector2.INF
+var road_preview: MeshInstance3D
+var road_preview_material: StandardMaterial3D
+var road_views: Dictionary = {}
 var blueprint_pointer_down := false
 var pending_completed_structures: Array[Dictionary] = []
+var selected_structure_view: Node3D
+var civilian_building_instance_count := 0
+var civilian_building_positions: Array[Vector2] = []
+var tree_lod_distance := 5000.0
 var pending_build_order: Dictionary = {}
 var material_site_state: Dictionary = {}
 var material_order_mode := 0 # 0 normal, 1 claim/capture, 2 demolish
@@ -177,6 +205,7 @@ var fob_build_mode := false
 var fob_build_target := Vector2.INF
 var fob_was_constructing := false
 var fob_completion_notification := ""
+var hover_context: Dictionary = {}
 
 func _get_visible_unit_count() -> int:
 	var env_count := OS.get_environment("UNIT_COUNT")
@@ -191,6 +220,28 @@ func _get_visible_unit_count() -> int:
 var camera_target := Vector3.ZERO
 var camera_distance := 100.0
 var target_camera_distance := 100.0
+var zoom_focus_world := Vector2.ZERO
+var zoom_focus_screen := Vector2.ZERO
+var zoom_focus_pending := false
+const ZOOM_FOCUS_TOLERANCE := 0.05
+var free_float_camera := false
+var free_camera_yaw := 0.0
+var free_camera_pitch := 38.0
+var tactical_camera_yaw := 0.0
+var environment_debug_brightness := 0.72
+var environment_debug_fog := 0.000018
+var environment_debug_exposure := 1.08
+var environment_debug_sliders: Dictionary = {}
+var environment_debug_value_labels: Dictionary = {}
+var environment_debug_weather := "OVERCAST"
+var environment_debug_time_of_day := "DAYTIME"
+var environment_weather_sun_multiplier := 1.0
+var environment_weather_terrain_multiplier := 1.0
+var environment_weather_terrain_ambient := 0.20
+var environment_debug_weather_option: OptionButton
+var environment_debug_day_button: Button
+var environment_debug_night_button: Button
+var environment_debug_steering_label: Label
 var selecting := false
 var panning := false
 var selection_start := Vector2.ZERO
@@ -235,6 +286,13 @@ func _configure_visual_pack_handshake() -> void:
 
 
 func _ready() -> void:
+	UiTypographyScript.apply_to(self)
+	_setup_environment_debug_panel()
+	strategic_icon_overlay.match_view = self
+	# Territory data is still a development diagnostic; the centered table was
+	# competing with the tactical view. Keep the update path available for a
+	# future operational-theater panel, but never show it over the battlefield.
+	territory_debug_label.visible = false
 	var content_data_root := ProjectSettings.globalize_path("res://../../data").simplify_path()
 	OS.set_environment("RTS_DATA_ROOT", content_data_root)
 
@@ -283,17 +341,215 @@ func _ready() -> void:
 	# presentation setup; using the map result here silently produced zero units.
 	var scenario_result: Dictionary = SkirmishConfigLoader.load_definition(DEFAULT_SKIRMISH_PATH)
 	if not scenario_result.get("ok", false):
-		scenario_status.text = "Scenario unavailable: %s" % scenario_result.get("error", "unknown load error")
+		scenario_status.text = ("Scenario unavailable: %s" % scenario_result.get("error", "unknown load error")).to_upper()
 		start_button.disabled = true
 		return
 
 	scenario_definition = scenario_result.definition
 	_configure_scenario_theater()
-	scenario_title.text = scenario_definition.display_name
-	scenario_description.text = scenario_definition.description
+	scenario_title.text = String(scenario_definition.display_name).to_upper()
+	scenario_description.text = String(scenario_definition.description).to_upper()
 	scenario_status.text = "Elite Precision vs Mass Warfare\n%s" % scenario_definition.victory.description
 	if OS.get_environment("RTS_AUTO_START_SKIRMISH") == "1":
 		_on_start_skirmish_pressed.call_deferred()
+
+
+func _setup_environment_debug_panel() -> void:
+	var environment := battlefield_environment.environment
+	if environment == null:
+		return
+	environment_debug_brightness = environment.ambient_light_energy
+	environment_debug_fog = environment.fog_density
+	environment_debug_exposure = environment.tonemap_exposure
+	debug_panel.offset_right = 380.0
+	debug_panel.offset_bottom = 346.0
+	debug_label.visible = false
+	var title := Label.new()
+	title.text = "ENVIRONMENT DEBUG // F8"
+	title.position = Vector2(12, 10)
+	title.add_theme_color_override("font_color", Color("#47d9ff"))
+	debug_panel.add_child(title)
+	_add_environment_slider("brightness", "MAP BRIGHTNESS", 0.25, 1.8, environment_debug_brightness, 42.0)
+	_add_environment_slider("fog", "FOG DENSITY", 0.0, 0.00006, environment_debug_fog, 82.0)
+	_add_environment_slider("exposure", "EXPOSURE", 0.5, 1.8, environment_debug_exposure, 122.0)
+	var weather_label := Label.new()
+	weather_label.text = "WEATHER"
+	weather_label.position = Vector2(12, 164)
+	weather_label.size = Vector2(132, 24)
+	debug_panel.add_child(weather_label)
+	environment_debug_weather_option = OptionButton.new()
+	environment_debug_weather_option.position = Vector2(138, 162)
+	environment_debug_weather_option.size = Vector2(190, 28)
+	for weather_name in ["CLEAR", "OVERCAST", "STORM"]:
+		environment_debug_weather_option.add_item(weather_name)
+	environment_debug_weather_option.item_selected.connect(func(index: int): _apply_environment_weather(environment_debug_weather_option.get_item_text(index)))
+	debug_panel.add_child(environment_debug_weather_option)
+	environment_debug_weather_option.select(1)
+	var time_label := Label.new()
+	time_label.text = "TIME OF DAY"
+	time_label.position = Vector2(12, 204)
+	time_label.size = Vector2(132, 24)
+	debug_panel.add_child(time_label)
+	environment_debug_day_button = Button.new()
+	environment_debug_day_button.text = "DAYTIME"
+	environment_debug_day_button.position = Vector2(138, 202)
+	environment_debug_day_button.size = Vector2(92, 28)
+	environment_debug_day_button.pressed.connect(func(): _apply_time_of_day("DAYTIME"))
+	debug_panel.add_child(environment_debug_day_button)
+	environment_debug_night_button = Button.new()
+	environment_debug_night_button.text = "NIGHTTIME"
+	environment_debug_night_button.position = Vector2(236, 202)
+	environment_debug_night_button.size = Vector2(92, 28)
+	environment_debug_night_button.pressed.connect(func(): _apply_time_of_day("NIGHTTIME"))
+	debug_panel.add_child(environment_debug_night_button)
+	environment_debug_steering_label = Label.new()
+	environment_debug_steering_label.position = Vector2(12, 244)
+	environment_debug_steering_label.size = Vector2(356, 28)
+	environment_debug_steering_label.autowrap_mode = TextServer.AUTOWRAP_OFF
+	environment_debug_steering_label.add_theme_color_override("font_color", Color("#b6c7cf"))
+	debug_panel.add_child(environment_debug_steering_label)
+	var reset := Button.new()
+	reset.text = "RESET DEFAULTS"
+	reset.position = Vector2(208, 284)
+	reset.size = Vector2(120, 28)
+	reset.pressed.connect(_reset_environment_debug)
+	debug_panel.add_child(reset)
+	_apply_environment_weather(environment_debug_weather)
+	_apply_time_of_day(environment_debug_time_of_day)
+
+
+func _add_environment_slider(key: String, title_text: String, minimum: float, maximum: float, initial: float, y: float) -> void:
+	var label := Label.new()
+	label.text = title_text
+	label.position = Vector2(12, y)
+	label.size = Vector2(132, 24)
+	debug_panel.add_child(label)
+	var value_label := Label.new()
+	value_label.position = Vector2(335, y)
+	value_label.size = Vector2(34, 24)
+	value_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	debug_panel.add_child(value_label)
+	var slider := HSlider.new()
+	slider.position = Vector2(138, y + 2)
+	slider.size = Vector2(190, 22)
+	slider.min_value = minimum
+	slider.max_value = maximum
+	slider.step = 0.000001 if key == "fog" else 0.01
+	slider.value = initial
+	slider.value_changed.connect(func(value: float): _set_environment_debug_value(key, value))
+	debug_panel.add_child(slider)
+	environment_debug_sliders[key] = slider
+	environment_debug_value_labels[key] = value_label
+	_set_environment_debug_value(key, initial)
+
+
+func _set_environment_debug_value(key: String, value: float) -> void:
+	match key:
+		"brightness":
+			environment_debug_brightness = value
+			_apply_time_of_day(environment_debug_time_of_day)
+			territory_material.set_shader_parameter("terrain_brightness", value / 0.72)
+			(environment_debug_value_labels.get(key) as Label).text = "%.2f" % value
+		"fog":
+			environment_debug_fog = value
+			battlefield_environment.environment.fog_density = value
+			(environment_debug_value_labels.get(key) as Label).text = "%.5f" % value
+		"exposure":
+			environment_debug_exposure = value
+			battlefield_environment.environment.tonemap_exposure = value
+			(environment_debug_value_labels.get(key) as Label).text = "%.2f" % value
+
+
+func _apply_environment_weather(weather_name: String) -> void:
+	environment_debug_weather = weather_name.to_upper()
+	var environment := battlefield_environment.environment
+	var sky_material := environment.sky.sky_material as ProceduralSkyMaterial
+	match environment_debug_weather:
+		"CLEAR":
+			environment.fog_density = 0.000008
+			environment.fog_light_color = Color("#9fb7c5")
+			environment.fog_light_energy = 0.82
+			sky_material.sky_top_color = Color("#18385d")
+			sky_material.sky_horizon_color = Color("#91a9b7")
+			battlefield_light.light_color = Color("#fff1cc")
+			environment_weather_sun_multiplier = 1.18
+			environment_weather_terrain_multiplier = 1.22
+			environment_weather_terrain_ambient = 0.28
+		"STORM":
+			environment.fog_density = 0.00004
+			environment.fog_light_color = Color("#3e4b57")
+			environment.fog_light_energy = 0.42
+			sky_material.sky_top_color = Color("#07101d")
+			sky_material.sky_horizon_color = Color("#303a43")
+			battlefield_light.light_color = Color("#aeb9c2")
+			environment_weather_sun_multiplier = 0.58
+			environment_weather_terrain_multiplier = 0.66
+			environment_weather_terrain_ambient = 0.12
+		_:
+			environment.fog_density = 0.000018
+			environment.fog_light_color = Color("#859499")
+			environment.fog_light_energy = 0.65
+			sky_material.sky_top_color = Color("#132133")
+			sky_material.sky_horizon_color = Color("#6e808c")
+			battlefield_light.light_color = Color("#f0e3c7")
+			environment_weather_sun_multiplier = 1.0
+			environment_weather_terrain_multiplier = 1.0
+			environment_weather_terrain_ambient = 0.20
+	environment_debug_fog = environment.fog_density
+	if environment_debug_sliders.has("fog"):
+		(environment_debug_sliders["fog"] as HSlider).set_value_no_signal(environment.fog_density)
+		(environment_debug_value_labels["fog"] as Label).text = "%.5f" % environment.fog_density
+	_apply_time_of_day(environment_debug_time_of_day)
+
+
+func _apply_time_of_day(time_name: String) -> void:
+	environment_debug_time_of_day = time_name.to_upper()
+	var is_night := environment_debug_time_of_day == "NIGHTTIME"
+	battlefield_light.visible = not is_night
+	moon_light.visible = is_night
+	if is_night:
+		battlefield_environment.environment.ambient_light_energy = environment_debug_brightness * 0.30
+		moon_light.light_energy = 0.42 * environment_debug_brightness / 0.72
+	else:
+		battlefield_environment.environment.ambient_light_energy = environment_debug_brightness
+		battlefield_light.light_energy = 1.85 * environment_debug_brightness / 0.72 * environment_weather_sun_multiplier
+	territory_material.set_shader_parameter(
+		"terrain_daylight",
+		environment_weather_terrain_multiplier * (0.28 if is_night else 1.0)
+	)
+	territory_material.set_shader_parameter(
+		"terrain_ambient_fill",
+		environment_weather_terrain_ambient * (0.14 if is_night else 1.0)
+	)
+	if environment_debug_day_button != null:
+		environment_debug_day_button.modulate = Color("#47d9ff") if not is_night else Color("#73808a")
+		environment_debug_night_button.modulate = Color("#c49cff") if is_night else Color("#73808a")
+
+
+func _reset_environment_debug() -> void:
+	for key in ["brightness", "fog", "exposure"]:
+		var slider := environment_debug_sliders.get(key) as HSlider
+		if slider != null:
+			slider.value = 0.72 if key == "brightness" else 0.000018 if key == "fog" else 1.08
+	if environment_debug_weather_option != null:
+		environment_debug_weather_option.select(1)
+	_apply_environment_weather("OVERCAST")
+	_apply_time_of_day("DAYTIME")
+
+
+func _update_steering_debug() -> void:
+	if environment_debug_steering_label == null:
+		return
+	if extension == null or selected_ids.size() != 1:
+		environment_debug_steering_label.text = "STEERING // SELECT ONE GROUND UNIT"
+		return
+	var state: PackedFloat32Array = extension.call("get_unit_steering_state", selected_ids[0])
+	if state.size() != 3:
+		environment_debug_steering_label.text = "STEERING // NOT A GROUND VEHICLE"
+		return
+	var heading_degrees := rad_to_deg(state[0])
+	var desired_degrees := rad_to_deg(state[1])
+	environment_debug_steering_label.text = "STEERING // HDG %03.0f  TARGET %03.0f  SPEED %+.1f" % [heading_degrees, desired_degrees, state[2]]
 
 
 # warning-ignore-all-return-values
@@ -355,6 +611,9 @@ func _configure_scenario_theater() -> void:
 	var terrain: Dictionary = scenario_definition.theater.terrain
 	terrain_world_width = float(scenario_definition.theater.get("width", TERRAIN_SAMPLE_WIDTH))
 	terrain_world_height = float(scenario_definition.theater.get("height", TERRAIN_SAMPLE_HEIGHT))
+	# The far plane must cover the opposite edge of the theater while the
+	# camera is zoomed out and panned toward a map boundary.
+	camera.far = maxf(CAMERA_MIN_FAR_DISTANCE, maxf(terrain_world_width, terrain_world_height) * 3.0)
 
 	for index in range(landmass_nodes.size()):
 		var definition: Dictionary = landmasses[index]
@@ -403,6 +662,14 @@ func _on_start_skirmish_pressed() -> void:
 		return
 
 	extension.call("configure_world_size", terrain_world_width, terrain_world_height)
+	var west_theater_landmass: Dictionary = scenario_definition.theater.landmasses[0]
+	var east_theater_landmass: Dictionary = scenario_definition.theater.landmasses[1]
+	extension.call("configure_theater_landmasses",
+		float(west_theater_landmass.center[0]), float(west_theater_landmass.center[1]), float(west_theater_landmass.size[0]), float(west_theater_landmass.size[1]),
+		float(east_theater_landmass.center[0]), float(east_theater_landmass.center[1]), float(east_theater_landmass.size[0]), float(east_theater_landmass.size[1]))
+	var theater_terrain: Dictionary = scenario_definition.theater.get("terrain", {})
+	if theater_terrain.get("data", "") != "":
+		extension.call("load_terrain_heightmap", theater_terrain.get("data", ""))
 	extension.call("start_simulation")
 	match_started = true
 	_setup_economy_for_player_1()
@@ -411,6 +678,7 @@ func _on_start_skirmish_pressed() -> void:
 	entity_ids.clear()
 	entity_to_instance.clear()
 	entity_base_colors.clear()
+	entity_unit_types.clear()
 	selected_ids.clear()
 	player_entity_ids.clear()
 	ai_entity_ids.clear()
@@ -427,6 +695,7 @@ func _on_start_skirmish_pressed() -> void:
 		match_started = false
 		return
 	_spawn_material_sites()
+	_spawn_civilian_buildings()
 	_set_selected(_player_engineer_id(), true)
 
 	startup_overlay.visible = false
@@ -434,9 +703,13 @@ func _on_start_skirmish_pressed() -> void:
 	help_label.visible = false
 	command_hud.visible = true
 	var player_spawn: Array = scenario_definition.player.get("spawn", [0.0, 0.0])
-	camera_target = Vector3(float(player_spawn[0]) * 0.72, 0.0, float(player_spawn[1]))
-	camera_distance = 165.0
-	target_camera_distance = 165.0
+	var player_x := float(player_spawn[0])
+	var player_z := float(player_spawn[1])
+	camera_target = Vector3(player_x, _terrain_height_at(player_x, player_z), player_z)
+	# The 40 km theater has kilometer-scale relief. Start high enough to clear
+	# the nearby ridges while preserving a useful tactical angle.
+	camera_distance = 1500.0
+	target_camera_distance = 1500.0
 	_update_camera(1.0)
 	_update_hud()
 	print("Started %s with %d player Field Engineer and %d AI Field Engineer" % [
@@ -452,11 +725,22 @@ func _exit_tree() -> void:
 
 
 func _process(delta: float) -> void:
+	# Middle-button release can be missed if focus changes while the pointer is
+	# outside the window. Never leave tactical panning latched in that case.
+	if panning and not Input.is_mouse_button_pressed(MOUSE_BUTTON_MIDDLE):
+		panning = false
+	if road_build_mode:
+		var road_target := _screen_to_world(get_viewport().get_mouse_position())
+		_update_road_preview(road_target)
 	if build_mode_type >= 0:
 		var ghost_target := _screen_to_world(get_viewport().get_mouse_position())
 		if build_ghost == null:
 			build_ghost = _make_build_ghost(build_mode_type)
 			add_child(build_ghost)
+		var ghost_valid := true
+		if build_mode_type >= 100 and extension != null:
+			ghost_valid = bool(extension.call("validate_structure_placement", build_mode_type - 100, ghost_target.x, ghost_target.y))
+		_set_build_ghost_valid(ghost_valid)
 		build_ghost.position = Vector3(ghost_target.x, _terrain_height_at(ghost_target.x, ghost_target.y) + 0.8, ghost_target.y)
 	if extension == null or not match_started:
 		return
@@ -466,10 +750,13 @@ func _process(delta: float) -> void:
 	_process_pending_build_order()
 	var simulation_call_ms := float(Time.get_ticks_usec() - simulation_start_us) / 1000.0
 	_sync_new_entities()
+	_sync_completed_roads()
 	_update_keyboard_pan(delta)
 	_update_camera(delta)
+	_sync_tree_lod()
 	var sync_timings := _sync_unit_transforms()
 	_record_profile_frame(delta, simulation_call_ms, sync_timings.x, sync_timings.y)
+	_update_hover_context()
 
 	hud_elapsed += delta
 	if hud_elapsed >= 0.2:
@@ -533,8 +820,21 @@ func _update_territory() -> void:
 
 
 func _unhandled_input(event: InputEvent) -> void:
+	if event is InputEventKey and event.pressed and event.keycode == KEY_F8:
+		debug_panel.visible = not debug_panel.visible
+		return
 	if event is InputEventKey and event.pressed and event.keycode == KEY_ESCAPE:
+		if build_mode_type >= 0 or fob_build_mode or material_order_mode != 0:
+			_cancel_tactical_modes()
+			return
 		get_tree().quit()
+		return
+	if event is InputEventKey and event.keycode == KEY_SPACE:
+		if not event.echo:
+			free_float_camera = event.pressed
+			if free_float_camera:
+				free_camera_yaw = 0.0
+				free_camera_pitch = 38.0
 		return
 	if event is InputEventKey and event.pressed and event.keycode == KEY_X:
 		_issue_stop_order()
@@ -557,6 +857,12 @@ func _unhandled_input(event: InputEvent) -> void:
 		if event.keycode == KEY_7:
 			_begin_build_placement(101)
 			return
+		if event.keycode == KEY_L:
+			_begin_build_placement(103)
+			return
+		if event.keycode == KEY_R:
+			_begin_road_placement()
+			return
 	if event is InputEventKey and event.pressed and event.keycode == KEY_2:
 		_set_material_order_mode(1)
 		return
@@ -566,14 +872,18 @@ func _unhandled_input(event: InputEvent) -> void:
 
 	if event is InputEventMouseButton:
 		if event.button_index == MOUSE_BUTTON_WHEEL_UP and event.pressed:
-			target_camera_distance = clampf(target_camera_distance * 0.86, CAMERA_MIN_DISTANCE, CAMERA_MAX_DISTANCE)
+			_zoom_toward_cursor(event.position, 0.86)
 		elif event.button_index == MOUSE_BUTTON_WHEEL_DOWN and event.pressed:
-			target_camera_distance = clampf(target_camera_distance * 1.16, CAMERA_MIN_DISTANCE, CAMERA_MAX_DISTANCE)
+			_zoom_toward_cursor(event.position, 1.16)
 		elif event.button_index == MOUSE_BUTTON_MIDDLE:
 			panning = event.pressed
+			if event.pressed:
+				zoom_focus_pending = false
 		elif event.button_index == MOUSE_BUTTON_LEFT:
 			if event.pressed:
 				if fob_build_mode:
+					return
+				if road_build_mode:
 					return
 				var selected_blueprint := _blueprint_at_screen(event.position)
 				if selected_blueprint >= 0:
@@ -590,6 +900,9 @@ func _unhandled_input(event: InputEvent) -> void:
 				if fob_build_mode:
 					_order_fob(event.position)
 					return
+				if road_build_mode:
+					_handle_road_click(_screen_to_world(event.position))
+					return
 				if blueprint_pointer_down:
 					blueprint_pointer_down = false
 					return
@@ -603,6 +916,9 @@ func _unhandled_input(event: InputEvent) -> void:
 				else:
 					_finish_selection(event.position)
 		elif event.button_index == MOUSE_BUTTON_RIGHT and event.pressed:
+			if build_mode_type >= 0 or fob_build_mode:
+				_cancel_tactical_modes()
+				return
 			if material_order_mode != 0:
 				_issue_material_site_order(event.position)
 				return
@@ -619,9 +935,16 @@ func _unhandled_input(event: InputEvent) -> void:
 			selection_end = event.position
 			_update_selection_rect()
 		elif panning:
-			var pan_scale := camera_distance * 0.0025
-			camera_target.x -= event.relative.x * pan_scale
-			camera_target.z -= event.relative.y * pan_scale
+			if free_float_camera:
+				free_camera_yaw -= event.relative.x * FREE_CAMERA_ROTATION_SPEED
+				free_camera_pitch = clampf(
+					free_camera_pitch - event.relative.y * FREE_CAMERA_ROTATION_SPEED * 90.0,
+					FREE_CAMERA_MIN_PITCH,
+					FREE_CAMERA_MAX_PITCH)
+			else:
+				var pan_scale := camera_distance * 0.0025
+				camera_target.x -= event.relative.x * pan_scale
+				camera_target.z -= event.relative.y * pan_scale
 
 
 func _create_unit_multimesh(instance_count: int) -> void:
@@ -636,6 +959,7 @@ func _create_unit_multimesh(instance_count: int) -> void:
 	ai_entity_ids.clear()
 	unit_positions.clear()
 	prototype_visual_views.clear()
+	unit_visual_headings.clear()
 
 	var material := StandardMaterial3D.new()
 	material.vertex_color_use_as_albedo = true
@@ -681,6 +1005,7 @@ func _spawn_units(count: int) -> void:
 		entity_ids.append(entity_id)
 		entity_to_instance[entity_id] = index
 		entity_base_colors[entity_id] = UNIT_BASE_COLOR
+		entity_unit_types[entity_id] = 0
 		player_entity_ids.append(entity_id)
 		unit_positions.append(x)
 		unit_positions.append(z)
@@ -710,12 +1035,32 @@ func _spawn_commander_start() -> bool:
 			return false
 		commander_ids[faction_id] = entity_id
 		hidden_base_ids[entity_id] = true
-		var engineer_id: int = extension.call("create_unit_with_type", float(spawn[0]) + 4.0, float(spawn[1]), 8, faction_id)
+		# The commander's authored spawn can be strategically valid while its
+		# heightfield cell is too steep or cramped for a construction unit. Find
+		# the nearest deterministic build-capable site instead of leaving the
+		# engineer stranded at a location where structures and roads are invalid.
+		var engineer_spawn := _find_engineer_spawn(Vector2(float(spawn[0]), float(spawn[1])))
+		if engineer_spawn == Vector2.INF:
+			return false
+		var engineer_id: int = extension.call("create_unit_with_type", engineer_spawn.x, engineer_spawn.y, 8, faction_id)
 		if engineer_id <= 0:
 			return false
 		engineer_ids[faction_id] = engineer_id
-		_register_presented_unit(engineer_id, 8, faction_id, Vector2(float(spawn[0]) + 4.0, float(spawn[1])))
+		_register_presented_unit(engineer_id, 8, faction_id, engineer_spawn)
 	return true
+
+
+func _find_engineer_spawn(origin: Vector2) -> Vector2:
+	var offsets: Array[Vector2] = [Vector2(4.0, 0.0)]
+	for radius in range(1, 9):
+		var distance := float(radius) * 500.0
+		for direction in [Vector2(-1.0, -1.0), Vector2(-1.0, 0.0), Vector2(-1.0, 1.0), Vector2(0.0, -1.0), Vector2(0.0, 1.0), Vector2(1.0, -1.0), Vector2(1.0, 0.0), Vector2(1.0, 1.0)]:
+			offsets.append(direction * distance)
+	for offset in offsets:
+		var candidate := origin + offset
+		if bool(extension.call("validate_engineer_placement", candidate.x, candidate.y)):
+			return candidate
+	return Vector2.INF
 
 
 func _player_engineer_id() -> int:
@@ -764,6 +1109,103 @@ func _rebuild_material_site_views() -> void:
 		_add_box_model(root, Vector3(0.22, 2.2, 0.22), Vector3(-1.55, 1.25, -0.85), signal_material)
 		_add_box_model(root, Vector3(0.22, 2.2, 0.22), Vector3(1.55, 1.25, -0.85), signal_material)
 		_add_cylinder_model(root, 0.25, 0.16, Vector3(0, 1.72, 0), signal_material)
+
+
+func _spawn_civilian_buildings() -> void:
+	for child in civilian_buildings.get_children():
+		child.queue_free()
+	civilian_building_instance_count = 0
+	civilian_building_positions.clear()
+	var file := FileAccess.open(CIVILIAN_DRESSING_PATH, FileAccess.READ)
+	if file == null:
+		push_warning("Civilian dressing data is unavailable")
+		return
+	var dressing: Variant = JSON.parse_string(file.get_as_text())
+	if not dressing is Dictionary:
+		push_warning("Civilian dressing data is invalid")
+		return
+	var type_definitions: Array = dressing.get("building_types", [])
+	var transforms: Array[Array] = []
+	var colors: Array[Color] = []
+	var sizes: Array[Vector3] = []
+	for definition in type_definitions:
+		var dimensions: Array = definition.get("size", [60, 30, 50])
+		transforms.append([])
+		colors.append(Color(String(definition.get("color", "#68736f"))))
+		sizes.append(Vector3(float(dimensions[0]), float(dimensions[1]), float(dimensions[2])))
+	if transforms.is_empty():
+		return
+	var spawn_origins: Array[Vector2] = []
+	for faction in [scenario_definition.get("player", {}), scenario_definition.get("ai", {})]:
+		var spawn: Array = faction.get("spawn", [0.0, 0.0])
+		spawn_origins.append(Vector2(float(spawn[0]), float(spawn[1])))
+	for site in MATERIAL_SITES:
+		spawn_origins.append(site.position)
+	var clusters: Array = dressing.get("clusters", [])
+	for cluster in clusters:
+		var rng := RandomNumberGenerator.new()
+		rng.seed = int(cluster.get("seed", 1))
+		var center := Vector2(float(cluster.center[0]), float(cluster.center[1]))
+		var spread := Vector2(float(cluster.spread[0]), float(cluster.spread[1]))
+		var attempts := int(cluster.get("count", 0)) * 8
+		var placed := 0
+		for _attempt in range(attempts):
+			if placed >= int(cluster.get("count", 0)):
+				break
+			var candidate := center + Vector2(rng.randf_range(-spread.x, spread.x), rng.randf_range(-spread.y, spread.y))
+			if not bool(extension.call("is_land_position", candidate.x, candidate.y)):
+				continue
+			# Civilian dressing is authored scenery rather than a military build
+			# order. Keep the cluster on land, but allow a broader terrain range
+			# than an outpost so the world does not look unnaturally empty.
+			var local_height := _terrain_height_at(candidate.x, candidate.y)
+			var local_height_min := local_height
+			var local_height_max := local_height
+			for sample_offset in [Vector2(-100.0, 0.0), Vector2(100.0, 0.0), Vector2(0.0, -100.0), Vector2(0.0, 100.0)]:
+				var sample_height := _terrain_height_at(candidate.x + sample_offset.x, candidate.y + sample_offset.y)
+				local_height_min = minf(local_height_min, sample_height)
+				local_height_max = maxf(local_height_max, sample_height)
+			if local_height_max - local_height_min > 180.0:
+				continue
+			var too_close := false
+			for protected in spawn_origins:
+				if candidate.distance_to(protected) < 650.0:
+					too_close = true
+					break
+			if too_close:
+				continue
+			var type_index := (placed + int(cluster.get("seed", 0))) % transforms.size()
+			var building_size: Vector3 = sizes[type_index]
+			var scale := rng.randf_range(0.82, 1.16)
+			var height := _terrain_height_at(candidate.x, candidate.y)
+			var transform := Transform3D(
+				Basis(Vector3.UP, rng.randf_range(0.0, TAU)).scaled(Vector3(scale, scale, scale)),
+				Vector3(candidate.x, height + building_size.y * scale * 0.5, candidate.y))
+			(transforms[type_index] as Array).append(transform)
+			civilian_building_positions.append(candidate)
+			extension.call("block_civilian_area", candidate.x, candidate.y, maxf(building_size.x, building_size.z) * 0.32)
+			placed += 1
+			civilian_building_instance_count += 1
+	for type_index in range(transforms.size()):
+		var instances: Array = transforms[type_index]
+		if instances.is_empty():
+			continue
+		var mesh := BoxMesh.new()
+		mesh.size = sizes[type_index]
+		var material := _demo_material(colors[type_index])
+		material.roughness = 0.88
+		mesh.material = material
+		var multimesh := MultiMesh.new()
+		multimesh.transform_format = MultiMesh.TRANSFORM_3D
+		multimesh.mesh = mesh
+		multimesh.instance_count = instances.size()
+		for instance_index in range(instances.size()):
+			multimesh.set_instance_transform(instance_index, instances[instance_index])
+		var view := MultiMeshInstance3D.new()
+		view.name = "Civilian_%s" % String(type_definitions[type_index].get("id", type_index))
+		view.multimesh = multimesh
+		view.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON
+		civilian_buildings.add_child(view)
 
 
 func _set_material_order_mode(mode: int) -> void:
@@ -823,13 +1265,16 @@ func _register_presented_unit(entity_id: int, unit_type: int, faction_id: int, w
 	entity_ids.append(entity_id)
 	entity_to_instance[entity_id] = instance_index
 	entity_base_colors[entity_id] = color
+	entity_unit_types[entity_id] = unit_type
 	unit_positions.append(world.x)
 	unit_positions.append(world.y)
 	unit_multimesh.instance_count = entity_ids.size()
 	unit_multimesh.visible_instance_count = entity_ids.size()
 	if prototype_visuals_enabled and unit_type != 12:
 		var visual_id := String(extension.call("get_unit_visual_id", unit_type))
-		var wrapper = visual_spawn_bridge.spawn(self, visual_registry, visual_id, Transform3D(Basis.IDENTITY, Vector3(world.x, 0.4, world.y)), color)
+		var wrapper = visual_spawn_bridge.spawn(self, visual_registry, visual_id, Transform3D(Basis.IDENTITY, Vector3(world.x, _terrain_height_at(world.x, world.y) + UNIT_MODEL_GROUND_CLEARANCE, world.y)), color)
+		wrapper.set_strategic_icon(unit_type, color)
+		wrapper.set_range_terrain_height_sampler(func(world_x: float, world_z: float): return _terrain_height_at(world_x, world_z))
 		prototype_visual_views[entity_id] = wrapper
 	else:
 		_create_demo_unit(entity_id, unit_type, color, Vector3(world.x, _terrain_height_at(world.x, world.y), world.y))
@@ -879,6 +1324,7 @@ func _spawn_faction_units(side: Dictionary, color: Color, player_controlled: boo
 			entity_ids.append(entity_id)
 			entity_to_instance[entity_id] = instance_index
 			entity_base_colors[entity_id] = color
+			entity_unit_types[entity_id] = unit_type
 			unit_positions.append(world_x)
 			unit_positions.append(world_y)
 			unit_multimesh.set_instance_transform(instance_index, Transform3D(Basis.IDENTITY, Vector3(world_x, 0.4, world_y)))
@@ -886,6 +1332,8 @@ func _spawn_faction_units(side: Dictionary, color: Color, player_controlled: boo
 			if prototype_visuals_enabled:
 				var visual_id := String(extension.call("get_unit_visual_id", unit_type))
 				var wrapper = visual_spawn_bridge.spawn(self, visual_registry, visual_id, Transform3D(Basis.IDENTITY, Vector3(world_x, 0.4, world_y)), color)
+				wrapper.set_strategic_icon(unit_type, color)
+				wrapper.set_range_terrain_height_sampler(func(world_x: float, world_z: float): return _terrain_height_at(world_x, world_z))
 				prototype_visual_views[entity_id] = wrapper
 			if player_controlled:
 				player_entity_ids.append(entity_id)
@@ -898,21 +1346,36 @@ func _spawn_faction_units(side: Dictionary, color: Color, player_controlled: boo
 func _sync_unit_transforms() -> Vector2:
 	var fetch_start_us := Time.get_ticks_usec()
 	var latest_positions: PackedFloat32Array = extension.call("get_unit_positions", entity_ids)
+	var latest_headings: PackedFloat32Array = extension.call("get_unit_headings", entity_ids)
 	var fetch_ms := float(Time.get_ticks_usec() - fetch_start_us) / 1000.0
 	if latest_positions.size() != entity_ids.size() * 2:
 		push_error("Native position snapshot size did not match entity IDs")
 		return Vector2(fetch_ms, 0.0)
+	var previous_positions := unit_positions
 	unit_positions = latest_positions
 	var upload_start_us := Time.get_ticks_usec()
 	for index in range(entity_ids.size()):
 		var x := unit_positions[index * 2]
 		var z := unit_positions[index * 2 + 1]
+		var heading := latest_headings[index] + PI if index < latest_headings.size() else float(unit_visual_headings.get(entity_ids[index], PI))
+		if previous_positions.size() == unit_positions.size():
+			var delta := Vector2(x - previous_positions[index * 2], z - previous_positions[index * 2 + 1])
+			if delta.length_squared() > 0.000001:
+				# Godot's forward axis is -Z, so add PI to align the visible hull
+				# with the authoritative movement vector in the X/Z battlefield.
+				if index >= latest_headings.size():
+					heading = atan2(delta.x, delta.y) + PI
+		unit_visual_headings[entity_ids[index]] = heading
+		var basis := Basis(Vector3.UP, heading)
 		if prototype_visuals_enabled and prototype_visual_views.has(entity_ids[index]):
 			var wrapper = prototype_visual_views[entity_ids[index]]
-			wrapper.apply_simulation_transform(Transform3D(Basis.IDENTITY, Vector3(x, 0.4, z)))
+			wrapper.apply_simulation_transform(Transform3D(basis, Vector3(x, _terrain_height_at(x, z) + UNIT_MODEL_GROUND_CLEARANCE, z)))
 			wrapper.update_lod(camera_distance)
 		else:
-			unit_multimesh.set_instance_transform(index, Transform3D(Basis.IDENTITY, Vector3(x, 0.4, z)))
+			unit_multimesh.set_instance_transform(index, Transform3D(basis, Vector3(x, 0.4, z)))
+			var demo_root: Node3D = demo_unit_views.get(entity_ids[index], null)
+			if demo_root != null:
+				_set_unit_lod(demo_root)
 	var upload_ms := float(Time.get_ticks_usec() - upload_start_us) / 1000.0
 	return Vector2(fetch_ms, upload_ms)
 
@@ -993,6 +1456,14 @@ func _print_profile_result() -> void:
 
 
 func _update_keyboard_pan(delta: float) -> void:
+	var yaw_direction := 0.0
+	if Input.is_key_pressed(KEY_Q):
+		yaw_direction -= 1.0
+	if Input.is_key_pressed(KEY_E):
+		yaw_direction += 1.0
+	if yaw_direction != 0.0:
+		_rotate_camera_facing(yaw_direction, delta)
+
 	var direction := Vector2.ZERO
 	if Input.is_action_pressed("ui_left") or Input.is_key_pressed(KEY_A):
 		direction.x -= 1.0
@@ -1004,16 +1475,75 @@ func _update_keyboard_pan(delta: float) -> void:
 		direction.y += 1.0
 
 	if direction != Vector2.ZERO:
+		zoom_focus_pending = false
 		direction = direction.normalized()
-		var speed := maxf(18.0, camera_distance * 0.7)
-		camera_target += Vector3(direction.x, 0.0, direction.y) * speed * delta
+		var speed := maxf(18.0, camera_distance * (0.9 if free_float_camera else 0.7))
+		if free_float_camera:
+			var forward := Vector2(sin(free_camera_yaw), cos(free_camera_yaw))
+			var right := Vector2(cos(free_camera_yaw), -sin(free_camera_yaw))
+			var free_direction := right * direction.x + forward * direction.y
+			camera_target += Vector3(free_direction.x, 0.0, free_direction.y) * speed * delta
+		else:
+			var forward := Vector2(sin(tactical_camera_yaw), cos(tactical_camera_yaw))
+			var right := Vector2(cos(tactical_camera_yaw), -sin(tactical_camera_yaw))
+			var yawed_direction := right * direction.x + forward * direction.y
+			camera_target += Vector3(yawed_direction.x, 0.0, yawed_direction.y) * speed * delta
+
+
+func _rotate_camera_facing(direction: float, delta: float) -> void:
+	if free_float_camera:
+		free_camera_yaw += direction * CAMERA_YAW_SPEED * delta
+	else:
+		tactical_camera_yaw += direction * CAMERA_YAW_SPEED * delta
 
 
 func _update_camera(delta: float) -> void:
 	camera_distance = lerpf(camera_distance, target_camera_distance, clampf(delta * 9.0, 0.0, 1.0))
-	var desired_position := camera_target + Vector3(0.0, camera_distance * 0.78, camera_distance)
+	var desired_offset := Vector3(
+		sin(tactical_camera_yaw) * camera_distance,
+		camera_distance * 0.78,
+		cos(tactical_camera_yaw) * camera_distance)
+	if free_float_camera:
+		var pitch := deg_to_rad(free_camera_pitch)
+		desired_offset = Vector3(
+			sin(free_camera_yaw) * cos(pitch),
+			sin(pitch),
+			cos(free_camera_yaw) * cos(pitch)) * camera_distance
+	var desired_position := camera_target + desired_offset
+	desired_position.y = _camera_clearance_height(camera_target, desired_position)
 	camera.global_position = camera.global_position.lerp(desired_position, clampf(delta * 10.0, 0.0, 1.0))
 	camera.look_at(camera_target, Vector3.UP)
+	if zoom_focus_pending:
+		var under_cursor: Vector2 = _screen_to_world(zoom_focus_screen)
+		var correction := zoom_focus_world - under_cursor
+		camera_target.x += correction.x
+		camera_target.z += correction.y
+		camera.global_position += Vector3(correction.x, 0.0, correction.y)
+		camera.look_at(camera_target, Vector3.UP)
+		# Camera distance eases over several frames. Re-anchor through that entire
+		# movement, otherwise the first correction is subsequently pulled back
+		# toward the screen centre by the remaining camera interpolation.
+		if absf(camera_distance - target_camera_distance) <= ZOOM_FOCUS_TOLERANCE and correction.length() <= ZOOM_FOCUS_TOLERANCE:
+			zoom_focus_pending = false
+
+
+func _zoom_toward_cursor(screen_position: Vector2, multiplier: float) -> void:
+	var anchor := _screen_to_world(screen_position)
+	zoom_focus_world = anchor
+	zoom_focus_screen = screen_position
+	zoom_focus_pending = true
+	target_camera_distance = clampf(target_camera_distance * multiplier, CAMERA_MIN_DISTANCE, CAMERA_MAX_DISTANCE)
+
+
+func _camera_clearance_height(target: Vector3, desired: Vector3) -> float:
+	var floor_height := _terrain_height_at(desired.x, desired.z) + CAMERA_TERRAIN_CLEARANCE
+	# Check the whole camera-to-target line so a ridge between the focus point
+	# and camera cannot occlude the near view when zooming into relief.
+	for sample in range(1, 9):
+		var fraction := float(sample) / 8.0
+		var point := target.lerp(desired, fraction)
+		floor_height = maxf(floor_height, _terrain_height_at(point.x, point.z) + CAMERA_TERRAIN_CLEARANCE)
+	return maxf(desired.y, floor_height)
 
 
 func _finish_selection(mouse_position: Vector2) -> void:
@@ -1051,6 +1581,57 @@ func _select_nearest(screen_position: Vector2) -> void:
 
 	if closest_id >= 0:
 		_set_selected(closest_id, true)
+		return
+
+	var closest_structure: Node3D
+	for structure in completed_structure_views:
+		if not is_instance_valid(structure) or camera.is_position_behind(structure.global_position):
+			continue
+		var distance := camera.unproject_position(structure.global_position).distance_to(screen_position)
+		if distance < closest_distance:
+			closest_distance = distance
+			closest_structure = structure
+	if closest_structure != null:
+		_set_selected_structure(closest_structure)
+
+
+func _update_hover_context() -> void:
+	var pointer := get_viewport().get_mouse_position()
+	var nearest_distance := clampf(camera_distance * 0.22, 20.0, 32.0)
+	var next_context: Dictionary = command_hud.get_build_hover_context()
+	if next_context.is_empty():
+		for entity_id in entity_ids:
+			var world_position := _entity_world_position(entity_id)
+			if camera.is_position_behind(world_position):
+				continue
+			var distance := camera.unproject_position(world_position).distance_to(pointer)
+			if distance < nearest_distance:
+				nearest_distance = distance
+				var unit := _selected_unit_snapshot(entity_id)
+				var allegiance := "FRIENDLY" if player_entity_ids.has(entity_id) else "HOSTILE"
+				next_context = {
+					"key": "unit:%d" % entity_id,
+					"title": "%s // %s" % [allegiance, unit.get("name", "COMBAT UNIT")],
+					"detail": "INTEGRITY %.0f / %.0f  //  UNIT %d" % [unit.get("health", 0.0), unit.get("max_health", 0.0), entity_id],
+					"accent": Color("#7ad99b") if allegiance == "FRIENDLY" else Color("#ff6d65"),
+				}
+		for structure in completed_structure_views:
+			if not is_instance_valid(structure) or camera.is_position_behind(structure.global_position):
+				continue
+			var distance := camera.unproject_position(structure.global_position).distance_to(pointer)
+			if distance < nearest_distance:
+				nearest_distance = distance
+				var structure_type := int(structure.get_meta("structure_type", -1))
+				next_context = {
+					"key": "structure:%s" % structure.get_instance_id(),
+					"title": "FRIENDLY // %s" % _structure_display_name(structure_type),
+					"detail": "WRENCH %.0f  //  BOLT %.0f  //  TACTICAL INSTALLATION" % [_structure_material_cost(structure_type), _structure_energy_cost(structure_type)],
+					"accent": Color("#47d9ff"),
+				}
+	if next_context.get("key", "") == hover_context.get("key", ""):
+		return
+	hover_context = next_context
+	_update_hud()
 
 
 func _select_in_rectangle(bounds: Rect2) -> void:
@@ -1064,15 +1645,32 @@ func _clear_selection() -> void:
 	for entity_id in selected_ids:
 		_set_instance_color(entity_id, entity_base_colors.get(entity_id, UNIT_BASE_COLOR))
 	selected_ids.clear()
+	_set_selected_structure(null)
+
+
+func _set_selected_structure(structure: Node3D) -> void:
+	if selected_structure_view != null and is_instance_valid(selected_structure_view):
+		var old_label := selected_structure_view.get_node_or_null("StructureStatus") as Label3D
+		if old_label != null:
+			old_label.visible = false
+	selected_structure_view = structure
+	if selected_structure_view != null and is_instance_valid(selected_structure_view):
+		var label := selected_structure_view.get_node_or_null("StructureStatus") as Label3D
+		if label != null:
+			label.visible = true
 
 
 func _set_selected(entity_id: int, selected: bool) -> void:
 	if selected and not selected_ids.has(entity_id):
 		selected_ids.append(entity_id)
 		_set_instance_color(entity_id, UNIT_SELECTED_COLOR)
+		if prototype_visual_views.has(entity_id):
+			prototype_visual_views[entity_id].set_selected(true)
 	elif not selected and selected_ids.has(entity_id):
 		selected_ids.remove_at(selected_ids.find(entity_id))
 		_set_instance_color(entity_id, entity_base_colors.get(entity_id, UNIT_BASE_COLOR))
+		if prototype_visual_views.has(entity_id):
+			prototype_visual_views[entity_id].set_selected(false)
 
 
 func _set_instance_color(entity_id: int, color: Color) -> void:
@@ -1094,21 +1692,19 @@ func _terrain_height_at(world_x: float, world_z: float) -> float:
 func _rebuild_terrain_trees() -> void:
 	for tree in forest_landmarks.get_children():
 		tree.queue_free()
-	var tree_mesh := CylinderMesh.new()
-	tree_mesh.top_radius = 0.0
-	tree_mesh.bottom_radius = 3.2
-	tree_mesh.height = 12.0
-	tree_mesh.radial_segments = 6
-	var tree_material := StandardMaterial3D.new()
-	tree_material.albedo_color = Color("#0b351b")
-	tree_material.roughness = 0.92
-	tree_material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	tree_mesh.material = tree_material
+	var tree_mesh := _make_low_poly_tree_mesh()
+	var strategic_mesh := CylinderMesh.new()
+	strategic_mesh.top_radius = 0.0
+	strategic_mesh.bottom_radius = 4.6
+	strategic_mesh.height = 9.0
+	strategic_mesh.radial_segments = 5
+	strategic_mesh.material = _tree_material(Color("#244f2d"), 0.0)
 
 	var multimesh := MultiMesh.new()
 	multimesh.transform_format = MultiMesh.TRANSFORM_3D
 	multimesh.mesh = tree_mesh
 	multimesh.instance_count = TREE_INSTANCE_TARGET
+	var tree_transforms: Array[Transform3D] = []
 	var rng := RandomNumberGenerator.new()
 	rng.seed = 640640
 	var placed := 0
@@ -1122,6 +1718,7 @@ func _rebuild_terrain_trees() -> void:
 			continue
 		var scale := rng.randf_range(0.55, 1.25)
 		var transform := Transform3D(Basis(Vector3.UP, rng.randf_range(0.0, TAU)).scaled(Vector3(scale, scale, scale)), Vector3(world_x, _terrain_height_at(world_x, world_z) + 6.0 * scale, world_z))
+		tree_transforms.append(transform)
 		multimesh.set_instance_transform(placed, transform)
 		placed += 1
 
@@ -1129,6 +1726,22 @@ func _rebuild_terrain_trees() -> void:
 	terrain_trees.multimesh = multimesh
 	terrain_trees.custom_aabb = AABB(Vector3(-terrain_world_width * 0.5, -4.0, -terrain_world_height * 0.5), Vector3(terrain_world_width, 36.0, terrain_world_height))
 	terrain_trees.visible = placed == TREE_INSTANCE_TARGET
+	var strategic_multimesh := MultiMesh.new()
+	strategic_multimesh.transform_format = MultiMesh.TRANSFORM_3D
+	strategic_multimesh.mesh = strategic_mesh
+	var strategic_transforms: Array[Transform3D] = []
+	for index in range(0, tree_transforms.size(), 2):
+		var source_transform := tree_transforms[index]
+		var strategic_position := source_transform.origin
+		strategic_transforms.append(Transform3D(
+			Basis(Vector3.UP, source_transform.basis.get_euler().y).scaled(Vector3(0.72, 0.72, 0.72)),
+			Vector3(strategic_position.x, strategic_position.y - 2.0, strategic_position.z)))
+	strategic_multimesh.instance_count = strategic_transforms.size()
+	for index in range(strategic_transforms.size()):
+		strategic_multimesh.set_instance_transform(index, strategic_transforms[index])
+	strategic_trees.multimesh = strategic_multimesh
+	strategic_trees.custom_aabb = terrain_trees.custom_aabb
+	strategic_trees.visible = false
 
 	# Keep a sparse, close-range silhouette layer as well: it makes the forest
 	# legible from the opening camera while the MultiMesh supplies map-wide cover.
@@ -1144,6 +1757,58 @@ func _rebuild_terrain_trees() -> void:
 				)
 				landmark.scale = Vector3(1.1, 1.1, 1.1)
 				forest_landmarks.add_child(landmark)
+	_sync_tree_lod()
+
+
+func _tree_material(color: Color, emission_strength: float) -> StandardMaterial3D:
+	var material := StandardMaterial3D.new()
+	material.albedo_color = color
+	material.roughness = 0.88
+	material.shading_mode = BaseMaterial3D.SHADING_MODE_PER_PIXEL
+	material.cull_mode = BaseMaterial3D.CULL_DISABLED
+	if emission_strength > 0.0:
+		material.emission_enabled = true
+		material.emission = color
+		material.emission_energy_multiplier = emission_strength
+	return material
+
+
+func _append_tree_surface(target: ArrayMesh, source: Mesh, material: Material, transform: Transform3D) -> void:
+	var surface := SurfaceTool.new()
+	surface.begin(Mesh.PRIMITIVE_TRIANGLES)
+	surface.append_from(source, 0, transform)
+	surface.set_material(material)
+	surface.commit(target)
+
+
+func _make_low_poly_tree_mesh() -> ArrayMesh:
+	var tree_mesh := ArrayMesh.new()
+	var trunk := CylinderMesh.new()
+	trunk.top_radius = 1.5
+	trunk.bottom_radius = 2.2
+	trunk.height = 13.0
+	trunk.radial_segments = 6
+	_append_tree_surface(tree_mesh, trunk, _tree_material(Color("#3d3021"), 0.0), Transform3D(Basis.IDENTITY, Vector3(0.0, 6.5, 0.0)))
+	for foliage in [
+		{"radius": 7.0, "height": 10.0, "y": 10.0},
+		{"radius": 5.8, "height": 9.0, "y": 16.0},
+		{"radius": 4.3, "height": 8.0, "y": 21.5},
+	]:
+		var canopy := CylinderMesh.new()
+		canopy.top_radius = 0.15
+		canopy.bottom_radius = float(foliage.radius)
+		canopy.height = float(foliage.height)
+		canopy.radial_segments = 7
+		_append_tree_surface(tree_mesh, canopy, _tree_material(Color("#1f5b32"), 0.0), Transform3D(Basis.IDENTITY, Vector3(0.0, float(foliage.y), 0.0)))
+	return tree_mesh
+
+
+func _sync_tree_lod() -> void:
+	if terrain_trees.multimesh == null or strategic_trees.multimesh == null:
+		return
+	var strategic := camera_distance > tree_lod_distance
+	terrain_trees.visible = not strategic
+	strategic_trees.visible = strategic
 
 
 func _clear_demo_units() -> void:
@@ -1259,30 +1924,27 @@ func _create_demo_unit(entity_id: int, unit_type: int, faction_color: Color, wor
 	# A small emissive command beacon gives every unit a readable faction signal
 	# from the strategy camera without relying on missing texture assets.
 	_add_cylinder_model(root, 0.20, 0.08, Vector3(0, 1.0, 0.35), accent)
-	var selection_marker := MeshInstance3D.new()
-	selection_marker.name = "SelectionMarker"
-	var marker_mesh := TorusMesh.new()
-	marker_mesh.inner_radius = 1.85
-	marker_mesh.outer_radius = 2.12
-	selection_marker.mesh = marker_mesh
-	var marker_material := _demo_material(UNIT_SELECTED_COLOR, 1.4)
-	marker_material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	selection_marker.material_override = marker_material
-	selection_marker.position = Vector3(0, 0.10, 0)
-	selection_marker.visible = false
-	root.add_child(selection_marker)
 	var strategic_marker := MeshInstance3D.new()
 	strategic_marker.name = "StrategicLod"
-	var strategic_mesh := CylinderMesh.new()
-	strategic_mesh.top_radius = 0.95
-	strategic_mesh.bottom_radius = 0.95
-	strategic_mesh.height = 0.16
-	strategic_mesh.radial_segments = 6
-	strategic_marker.mesh = strategic_mesh
-	strategic_marker.position = Vector3(0, 0.18, 0)
-	strategic_marker.material_override = _demo_material(faction_color, 0.9)
+	strategic_marker.mesh = StrategicUnitIconScript.mesh_for(unit_type)
+	strategic_marker.scale = StrategicUnitIconScript.shape_scale_for(unit_type)
+	strategic_marker.rotation.y = StrategicUnitIconScript.rotation_for(unit_type)
+	strategic_marker.position = Vector3(0, 5.0, 0)
+	strategic_marker.material_override = StrategicUnitIconScript.material_for(faction_color)
 	strategic_marker.visible = false
 	root.add_child(strategic_marker)
+	var strategic_stem := MeshInstance3D.new()
+	strategic_stem.name = "StrategicMarkerStem"
+	var strategic_stem_mesh := CylinderMesh.new()
+	strategic_stem_mesh.top_radius = 0.10
+	strategic_stem_mesh.bottom_radius = 0.10
+	strategic_stem_mesh.height = 5.0
+	strategic_stem_mesh.radial_segments = 6
+	strategic_stem.mesh = strategic_stem_mesh
+	strategic_stem.position = Vector3(0, 2.5, 0)
+	strategic_stem.material_override = StrategicUnitIconScript.material_for(faction_color)
+	strategic_stem.visible = false
+	root.add_child(strategic_stem)
 	# SupCom-style strategic range overlays, intentionally faceted into six
 	# straight segments so intelligence and weapon envelopes read as hexes.
 	_add_hex_range_ring(root, "VisibilityHex", 15.0, 0.13, Color("#123a72"))
@@ -1290,38 +1952,39 @@ func _create_demo_unit(entity_id: int, unit_type: int, faction_color: Color, wor
 	_add_hex_range_ring(root, "AttackHex", 10.0, 0.23, Color("#d83b3b"))
 
 func _add_hex_range_ring(root: Node3D, ring_name: String, world_radius: float, height: float, color: Color) -> void:
-	var ring := Node3D.new()
+	var ring := MeshInstance3D.new()
 	ring.name = ring_name
-	# The unit model root is scaled for presentation; compensate so these stay
-	# meaningful world-space ranges instead of scaling with hull size.
-	var radius := world_radius / root.scale.x
+	ring.top_level = true
 	var material := _demo_material(color, 2.2)
 	material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	var lines := ImmediateMesh.new()
+	lines.surface_begin(Mesh.PRIMITIVE_LINES)
 	for side in range(6):
 		var a := TAU * float(side) / 6.0 + PI / 6.0
 		var b := TAU * float(side + 1) / 6.0 + PI / 6.0
-		var start := Vector3(cos(a) * radius, height, sin(a) * radius)
-		var finish := Vector3(cos(b) * radius, height, sin(b) * radius)
-		var strip := MeshInstance3D.new()
-		var strip_mesh := BoxMesh.new()
-		strip_mesh.size = Vector3(start.distance_to(finish), 0.055, 0.18)
-		strip.mesh = strip_mesh
-		strip.material_override = material
-		strip.position = (start + finish) * 0.5
-		strip.rotation.y = -atan2(finish.z - start.z, finish.x - start.x)
-		ring.add_child(strip)
-	ring.visible = false
+		var start := Vector3(root.global_position.x + cos(a) * world_radius, _terrain_height_at(root.global_position.x + cos(a) * world_radius, root.global_position.z + sin(a) * world_radius) + height, root.global_position.z + sin(a) * world_radius)
+		var finish := Vector3(root.global_position.x + cos(b) * world_radius, _terrain_height_at(root.global_position.x + cos(b) * world_radius, root.global_position.z + sin(b) * world_radius) + height, root.global_position.z + sin(b) * world_radius)
+		lines.surface_add_vertex(start)
+		lines.surface_add_vertex(finish)
+	lines.surface_end()
+	lines.surface_set_material(0, material)
+	ring.mesh = lines
+	ring.material_override = material
+	ring.visible = true
 	root.add_child(ring)
 
 func _set_unit_lod(root: Node3D) -> void:
-	var strategic := camera_distance > 190.0
+	var strategic := camera_distance > 500.0
 	for child in root.get_children():
-		if child.name in ["SelectionMarker", "VisibilityHex", "RadarHex", "AttackHex", "StrategicLod"]:
+		if child.name in ["SelectionMarker", "VisibilityHex", "RadarHex", "AttackHex", "StrategicLod", "StrategicMarkerStem"]:
 			continue
 		child.visible = not strategic
 	var marker := root.get_node_or_null("StrategicLod") as MeshInstance3D
+	var stem := root.get_node_or_null("StrategicMarkerStem") as MeshInstance3D
 	if marker != null:
-		marker.visible = strategic
+		marker.visible = false
+	if stem != null:
+		stem.visible = false
 
 
 func _set_demo_unit_color(entity_id: int, color: Color) -> void:
@@ -1335,7 +1998,7 @@ func _set_demo_unit_color(entity_id: int, color: Color) -> void:
 	for ring_name in ["VisibilityHex", "RadarHex", "AttackHex"]:
 		var ring := root.get_node_or_null(ring_name) as Node3D
 		if ring != null:
-			ring.visible = selected
+			ring.visible = true
 
 
 func _issue_move_order(screen_position: Vector2) -> void:
@@ -1347,23 +2010,17 @@ func _issue_move_order(screen_position: Vector2) -> void:
 	if selected_ids.is_empty():
 		return
 
-	var ray_origin := camera.project_ray_origin(screen_position)
-	var ray_direction := camera.project_ray_normal(screen_position)
-	var intersection = Plane(Vector3.UP, 0.0).intersects_ray(ray_origin, ray_direction)
-	if intersection == null:
-		return
-
-	var target: Vector3 = intersection
+	var target := _screen_to_world(screen_position)
 	var accepted_count: int = extension.call(
 		"issue_move_commands",
 		selected_ids,
 		HUMAN_PLAYER_ID,
 		target.x,
-		target.z,
+		target.y,
 		UNIT_SPACING
 	)
 	if accepted_count != selected_ids.size():
-		push_warning("Move order rejected: accepted=%d/%d entity=%d target=(%.6f,%.6f)" % [accepted_count, selected_ids.size(), selected_ids[0], target.x, target.z])
+		push_warning("Move order rejected: accepted=%d/%d entity=%d target=(%.6f,%.6f)" % [accepted_count, selected_ids.size(), selected_ids[0], target.x, target.y])
 
 
 func _issue_stop_order() -> void:
@@ -1446,10 +2103,34 @@ func _process_pending_build_order() -> void:
 func _screen_to_world(screen_position: Vector2) -> Vector2:
 	var ray_origin := camera.project_ray_origin(screen_position)
 	var ray_direction := camera.project_ray_normal(screen_position)
+	# A flat y=0 raycast lands kilometers beyond the visible cursor on our
+	# mountain-scale heightfield. March to the actual terrain surface, then
+	# refine the crossing so both the ghost and final build site share it.
+	if ray_direction.y < -0.00001:
+		var prior_t := 0.0
+		var prior_point := ray_origin
+		var prior_above := prior_point.y - _terrain_height_at(prior_point.x, prior_point.z)
+		for step in range(1, 241):
+			var t := float(step) * 500.0
+			var point := ray_origin + ray_direction * t
+			var above := point.y - _terrain_height_at(point.x, point.z)
+			if prior_above >= 0.0 and above <= 0.0:
+				var low := prior_t
+				var high := t
+				for _refinement in range(12):
+					var middle := (low + high) * 0.5
+					var middle_point := ray_origin + ray_direction * middle
+					if middle_point.y >= _terrain_height_at(middle_point.x, middle_point.z):
+						low = middle
+					else:
+						high = middle
+				var terrain_point := ray_origin + ray_direction * ((low + high) * 0.5)
+				return Vector2(terrain_point.x, terrain_point.z)
+			prior_t = t
+			prior_point = point
+			prior_above = above
 	var intersection = Plane(Vector3.UP, 0.0).intersects_ray(ray_origin, ray_direction)
-	if intersection == null:
-		return Vector2.ZERO
-	return Vector2(intersection.x, intersection.z)
+	return Vector2(intersection.x, intersection.z) if intersection != null else Vector2.ZERO
 
 func _begin_build_placement(build_type: int) -> void:
 	var commander_id := _player_engineer_id()
@@ -1460,21 +2141,38 @@ func _begin_build_placement(build_type: int) -> void:
 	selecting = false
 	selection_rect.visible = false
 
+
+func _cancel_tactical_modes() -> void:
+	build_mode_type = -1
+	blueprint_pointer_down = false
+	road_build_mode = false
+	road_start = Vector2.INF
+	fob_build_mode = false
+	material_order_mode = 0
+	if build_ghost != null:
+		build_ghost.queue_free()
+		build_ghost = null
+	build_ghost_material = null
+	if road_preview != null:
+		road_preview.queue_free()
+		road_preview = null
+	road_preview_material = null
+	selecting = false
+	selection_rect.visible = false
+
 func _blueprint_at_screen(pos: Vector2) -> int:
 	var size := get_viewport().get_visible_rect().size
 	var ui_scale := clampf(minf(size.x / 1920.0, size.y / 1080.0), 0.62, 1.0)
 	var logical := pos / ui_scale
 	var logical_size := size / ui_scale
 	var origin := Vector2((logical_size.x - 540.0) * 0.5, 12.0)
-	if logical.x < origin.x or logical.x > origin.x + 540.0 or logical.y < origin.y + 30.0 or logical.y > origin.y + 196.0: return -1
-	var col := int(clampf((logical.x - origin.x - 8.0) / 176.0, 0.0, 2.0))
-	if logical.y < origin.y + 66.0:
+	if logical.x < origin.x or logical.x > origin.x + 540.0 or logical.y < origin.y + 30.0 or logical.y > origin.y + 156.0: return -1
+	var col := int(clampf((logical.x - origin.x - 8.0) / 132.0, 0.0, 3.0))
+	if logical.y < origin.y + 70.0:
 		return _build_unit_type_at_index(col)
 	if logical.y < origin.y + 108.0:
-		return _build_unit_type_at_index(col + 3)
-	if logical.y < origin.y + 150.0:
-		return _build_unit_type_at_index(col + 6)
-	if logical.y >= origin.y + 160.0 and col < 2:
+		return _build_unit_type_at_index(col + 4)
+	if logical.y >= origin.y + 124.0:
 		return 100 + col
 	return -1
 
@@ -1506,10 +2204,98 @@ func _build_unit_type_at_index(index: int) -> int:
 func _make_build_ghost(build_type: int) -> Node3D:
 	var root := Node3D.new()
 	var mesh := MeshInstance3D.new()
-	var box := BoxMesh.new(); box.size = Vector3(5, 2, 5); mesh.mesh = box
-	var mat := _demo_material(Color("#47d9ff"), 0.45); mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA; mat.albedo_color.a = 0.35
-	mesh.material_override = mat; root.add_child(mesh)
+	var box := BoxMesh.new()
+	box.size = Vector3(5, 0.5, 12) if build_type >= 100 and build_type - 100 == 2 else Vector3(5, 2, 5)
+	mesh.mesh = box
+	build_ghost_material = _demo_material(Color("#47d9ff"), 0.45)
+	build_ghost_material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	build_ghost_material.albedo_color.a = 0.35
+	mesh.material_override = build_ghost_material
+	root.add_child(mesh)
 	return root
+
+func _begin_road_placement() -> void:
+	if _player_engineer_id() < 0 or not selected_ids.has(_player_engineer_id()):
+		push_warning("Select the Field Engineer before building a road")
+		return
+	_cancel_tactical_modes()
+	road_build_mode = true
+	road_start = Vector2.INF
+	_update_hud()
+
+func _handle_road_click(target: Vector2) -> void:
+	if road_start == Vector2.INF:
+		road_start = target
+		_update_road_preview(target)
+		return
+	if not bool(extension.call("validate_road_placement", road_start.x, road_start.y, target.x, target.y)):
+		push_warning("Road placement rejected: road must remain on traversable land with manageable slope")
+		return
+	var engineer_id := _player_engineer_id()
+	var queued := bool(extension.call("queue_road", engineer_id, HUMAN_PLAYER_ID, road_start.x, road_start.y, target.x, target.y))
+	if not queued:
+		push_warning("Road construction rejected: insufficient resources or unavailable engineer")
+	_cancel_tactical_modes()
+
+func _update_road_preview(target: Vector2) -> void:
+	if road_preview == null:
+		road_preview = MeshInstance3D.new()
+		road_preview_material = _demo_material(Color("#47d9ff"), 0.55)
+		road_preview_material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+		road_preview_material.albedo_color.a = 0.55
+		road_preview.material_override = road_preview_material
+		add_child(road_preview)
+	if road_start == Vector2.INF:
+		road_preview.visible = false
+		return
+	road_preview.visible = true
+	road_preview.mesh = _make_road_mesh(road_start, target, 18.0)
+	var valid := bool(extension.call("validate_road_placement", road_start.x, road_start.y, target.x, target.y)) if extension != null else false
+	road_preview_material.albedo_color = Color("#47d9ff") if valid else Color("#ff334d")
+	road_preview_material.albedo_color.a = 0.55
+
+func _make_road_mesh(start: Vector2, finish: Vector2, width: float) -> ArrayMesh:
+	var direction := finish - start
+	if direction.length_squared() < 0.001:
+		direction = Vector2.RIGHT
+	var side := direction.normalized().orthogonal() * width * 0.5
+	var vertices := PackedVector3Array([
+		Vector3(start.x + side.x, _terrain_height_at(start.x, start.y) + 0.04, start.y + side.y),
+		Vector3(start.x - side.x, _terrain_height_at(start.x, start.y) + 0.04, start.y - side.y),
+		Vector3(finish.x + side.x, _terrain_height_at(finish.x, finish.y) + 0.04, finish.y + side.y),
+		Vector3(finish.x - side.x, _terrain_height_at(finish.x, finish.y) + 0.04, finish.y - side.y),
+	])
+	var arrays := []
+	arrays.resize(Mesh.ARRAY_MAX)
+	arrays[Mesh.ARRAY_VERTEX] = vertices
+	arrays[Mesh.ARRAY_INDEX] = PackedInt32Array([0, 1, 2, 2, 1, 3])
+	arrays[Mesh.ARRAY_NORMAL] = PackedVector3Array([Vector3.UP, Vector3.UP, Vector3.UP, Vector3.UP])
+	var mesh := ArrayMesh.new()
+	mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
+	return mesh
+
+func _sync_completed_roads() -> void:
+	if extension == null:
+		return
+	var segments: PackedFloat32Array = extension.call("get_road_segments")
+	for offset in range(0, segments.size(), 6):
+		if offset + 5 >= segments.size():
+			break
+		var road_id := int(segments[offset])
+		if road_views.has(road_id):
+			continue
+		var road := MeshInstance3D.new()
+		road.name = "Road_%d" % road_id
+		road.mesh = _make_road_mesh(Vector2(segments[offset + 1], segments[offset + 2]), Vector2(segments[offset + 3], segments[offset + 4]), segments[offset + 5])
+		road.material_override = _demo_material(Color("#343c42"), 0.0)
+		add_child(road)
+		road_views[road_id] = road
+
+func _set_build_ghost_valid(valid: bool) -> void:
+	if build_ghost_material == null:
+		return
+	build_ghost_material.albedo_color = Color("#47d9ff") if valid else Color("#ff334d")
+	build_ghost_material.albedo_color.a = 0.35
 
 func _queue_commander_structure(structure_type: int, target: Vector2) -> bool:
 	if not selected_ids.has(_player_engineer_id()):
@@ -1525,22 +2311,90 @@ func _queue_commander_structure(structure_type: int, target: Vector2) -> bool:
 
 func _spawn_completed_structure_view(structure_type: int, target: Vector2) -> void:
 	var root := Node3D.new()
-	root.name = "Built_%s" % ("Outpost" if structure_type == 0 else "RadarMast")
+	root.name = "Built_%s" % ("Outpost" if structure_type == 0 else "RadarMast" if structure_type == 1 else "Airfield" if structure_type == 2 else "Floodlight")
+	root.set_meta("structure_type", structure_type)
 	root.position = Vector3(target.x, _terrain_height_at(target.x, target.y) + 0.8, target.y)
 	var mesh := MeshInstance3D.new()
 	var box := BoxMesh.new()
-	box.size = Vector3(5.0, 1.6 if structure_type == 0 else 7.0, 5.0)
+	box.size = Vector3(5.0, 1.6 if structure_type == 0 else 7.0 if structure_type == 1 else 0.5 if structure_type == 2 else 2.0, 5.0 if structure_type < 2 else 12.0 if structure_type == 2 else 5.0)
 	mesh.mesh = box
 	mesh.material_override = _demo_material(Color("#d09a45") if structure_type == 0 else Color("#55b9c9"), 0.0)
 	root.add_child(mesh)
+	if structure_type == 2:
+		var runway := MeshInstance3D.new()
+		var runway_mesh := BoxMesh.new()
+		runway_mesh.size = Vector3(4.0, 0.08, 18.0)
+		runway.mesh = runway_mesh
+		runway.position.y = 0.35
+		runway.material_override = _demo_material(Color("#8aa0a8"), 0.0)
+		root.add_child(runway)
 	if structure_type == 1:
 		var mast := MeshInstance3D.new()
 		var pole := CylinderMesh.new()
 		pole.top_radius = 0.22; pole.bottom_radius = 0.35; pole.height = 10.0
 		mast.mesh = pole; mast.position.y = 5.0; mast.material_override = _demo_material(Color("#b7d6dc"), 0.0)
 		root.add_child(mast)
+	if structure_type == 3:
+		var mast := MeshInstance3D.new()
+		var pole := CylinderMesh.new()
+		pole.top_radius = 0.16; pole.bottom_radius = 0.30; pole.height = 15.0
+		mast.mesh = pole; mast.position.y = 7.5; mast.material_override = _demo_material(Color("#314955"), 0.0)
+		root.add_child(mast)
+		var beacon_glow := OmniLight3D.new()
+		beacon_glow.name = "Floodlight"
+		beacon_glow.position.y = 14.0
+		beacon_glow.light_color = Color("#d9efff")
+		beacon_glow.light_energy = 6.0
+		beacon_glow.omni_range = 360.0
+		beacon_glow.omni_attenuation = 1.25
+		beacon_glow.shadow_enabled = true
+		root.add_child(beacon_glow)
+		var lamp := MeshInstance3D.new()
+		var lamp_mesh := SphereMesh.new()
+		lamp_mesh.radius = 0.72; lamp_mesh.height = 1.44
+		lamp.mesh = lamp_mesh; lamp.position.y = 14.0; lamp.material_override = _demo_material(Color("#bdefff"), 3.5)
+		root.add_child(lamp)
+	var status := Label3D.new()
+	status.name = "StructureStatus"
+	status.text = "%s\nWRENCH %.0f  //  BOLT %.0f" % [_structure_display_name(structure_type), _structure_material_cost(structure_type), _structure_energy_cost(structure_type)]
+	status.position.y = 18.0 if structure_type == 3 else 11.0 if structure_type == 1 else 5.0
+	status.font_size = 42
+	status.outline_size = 8
+	status.pixel_size = 0.12
+	status.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+	status.modulate = Color("#c9e9f8")
+	status.outline_modulate = Color("#061018")
+	status.visible = false
+	root.add_child(status)
 	add_child(root)
 	completed_structure_views.append(root)
+	_update_terrain_beacon_lighting()
+
+
+func _update_terrain_beacon_lighting() -> void:
+	var lights := PackedVector4Array()
+	for structure in completed_structure_views:
+		if not is_instance_valid(structure) or structure.get_node_or_null("Floodlight") == null:
+			continue
+		if lights.size() >= 8:
+			break
+		var beacon_position := structure.global_position
+		lights.append(Vector4(beacon_position.x, beacon_position.z, 360.0, 1.25))
+	while lights.size() < 8:
+		lights.append(Vector4.ZERO)
+	territory_material.set_shader_parameter("fog_beacon_lights", lights)
+
+
+func _structure_display_name(structure_type: int) -> String:
+	return "FORWARD OUTPOST" if structure_type == 0 else "RADAR MAST" if structure_type == 1 else "AIRFIELD" if structure_type == 2 else "FLOODLIGHT"
+
+
+func _structure_material_cost(structure_type: int) -> float:
+	return 300.0 if structure_type == 0 else 450.0 if structure_type == 1 else 600.0 if structure_type == 2 else 380.0
+
+
+func _structure_energy_cost(structure_type: int) -> float:
+	return 150.0 if structure_type == 0 else 250.0 if structure_type == 1 else 400.0 if structure_type == 2 else 620.0
 
 
 func _sync_construction_frames(queue: Array) -> void:
@@ -1614,7 +2468,7 @@ func _entity_world_position(entity_id: int) -> Vector3:
 		return Vector3.ZERO
 	var x := unit_positions[instance_index * 2]
 	var z := unit_positions[instance_index * 2 + 1]
-	return Vector3(x, 0.4, z)
+	return Vector3(x, _terrain_height_at(x, z), z)
 
 
 func _update_selection_rect() -> void:
@@ -1633,15 +2487,16 @@ func _selection_bounds() -> Rect2:
 
 
 func _update_hud() -> void:
+	_update_steering_debug()
 	var scenario_name: String = scenario_definition.get("display_name", "Scale profile")
-	debug_label.text = "%s\nPlayer: %d  Enemy: %d  Selected: %d\nFPS: %d  Sim: %.2f ms" % [
+	debug_label.text = ("%s\nPlayer: %d  Enemy: %d  Selected: %d\nFPS: %d  Sim: %.2f ms" % [
 		scenario_name,
 		player_entity_ids.size(),
 		ai_entity_ids.size(),
 		selected_ids.size(),
 		Engine.get_frames_per_second(),
 		extension.call("get_simulation_tick_ms"),
-	]
+	]).to_upper()
 	var commander_id := int(commander_ids.get(HUMAN_PLAYER_ID, -1))
 	var storage: Array = extension.call("economy_get_storage_info", commander_id)
 	var selection_detail := "Drag-select a force to inspect it."
@@ -1652,9 +2507,20 @@ func _update_hud() -> void:
 	elif fob_build_mode:
 		selection_detail = "FOB PLACEMENT  •  LEFT-CLICK TERRAIN"
 	var selected_unit: Dictionary = {}
+	var selected_off_road: PackedFloat32Array = PackedFloat32Array()
 	if selected_ids.size() == 1:
 		selected_unit = _selected_unit_snapshot(selected_ids[0])
-		selection_detail = "%s  •  AWAITING ORDERS" % selected_unit.get("name", "UNIT")
+		selected_off_road = extension.call("get_unit_off_road_state", selected_ids[0])
+		if selected_off_road.size() >= 3:
+			var travel_surface := "ROAD" if selected_off_road[2] > 0.98 else "OFF-ROAD"
+			selection_detail = "%s  •  %s  •  WEAR %.1f  •  %.0f%% SPEED" % [
+				selected_unit.get("name", "UNIT"),
+				travel_surface,
+				selected_off_road[0],
+				selected_off_road[2] * 100.0,
+			]
+		else:
+			selection_detail = "%s  •  AWAITING ORDERS" % selected_unit.get("name", "UNIT")
 	elif selected_ids.size() > 1:
 		selection_detail = "FORMATION READY  •  RIGHT-CLICK TO MOVE"
 	var production_queue: Array = extension.call("get_production_queue", commander_id) if commander_id > 0 else []
@@ -1681,7 +2547,13 @@ func _update_hud() -> void:
 		"unit_id": selected_unit.get("id", ""),
 		"unit_health": selected_unit.get("health", -1.0),
 		"unit_max_health": selected_unit.get("max_health", -1.0),
+		"off_road_wear": float(selected_off_road[0]) if selected_off_road.size() >= 3 else -1.0,
+		"off_road_distance": float(selected_off_road[1]) if selected_off_road.size() >= 3 else -1.0,
+		"off_road_speed_multiplier": float(selected_off_road[2]) if selected_off_road.size() >= 3 else -1.0,
 		"force_status": "READY" if selected_ids.is_empty() else "COMMAND LINKED",
+		"hover_title": hover_context.get("title", "TACTICAL INSPECT"),
+		"hover_detail": hover_context.get("detail", "HOVER A UNIT OR STRUCTURE TO INSPECT"),
+		"hover_accent": hover_context.get("accent", Color("#7f9ba8")),
 		"can_build": selected_ids.size() == 1 and selected_ids[0] == _player_engineer_id(),
 		"queue": production_queue,
 		"fob_installation": fob_installation,

@@ -121,6 +121,7 @@ bool Skirmish::load(const std::string& path) {
             simulation_.pathfinding().set_cell(gx,gy,ground);
             simulation_.naval_pathfinding().set_cell(gx,gy,!ground);
         }
+        simulation_.enable_theater_water_rules();
         for (int f=0;f<2;++f) {
             bases_[f]=simulation_.create_faction_base(static_cast<FactionId>(f),x[f],y[f]);
             for(size_t i=0;i<roster[f].size();++i) {

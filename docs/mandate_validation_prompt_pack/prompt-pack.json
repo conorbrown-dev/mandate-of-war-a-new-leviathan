@@ -1,0 +1,22 @@
+{
+  "name": "Mandate of War Automated Gameplay Validation Prompt Pack",
+  "version": 1,
+  "recommended_order": [
+    "01_REPOSITORY_AUDIT_AND_BASELINE.md",
+    "02_TEST_FOUNDATION.md",
+    "03_VALIDATION_SCENARIO_FRAMEWORK.md",
+    "04_SCREENSHOT_EVIDENCE.md",
+    "05_DETERMINISTIC_INPUT_AND_STATE.md",
+    "06_VISUAL_REGRESSION.md",
+    "07_VIDEO_CAPTURE.md",
+    "08_PERFORMANCE_VALIDATION.md",
+    "09_FIRST_MANDATE_SCENARIOS.md",
+    "10_AGENT_COMPLETION_CONTRACT.md",
+    "11_CODEX_INDEPENDENT_REVIEW_GATE.md"
+  ],
+  "reusable": [
+    "12_REUSABLE_FEATURE_VALIDATION_PROMPT.md",
+    "13_MIRIAM_TOKEN_EFFICIENCY_RULES.md",
+    "14_VALIDATION_ARCHITECTURE_REFERENCE.md"
+  ]
+}

@@ -1,8 +1,10 @@
 #include "test_framework.hpp"
 #include "simulation/simulation.hpp"
 #include "simulation/economy_api.h"
+#include <cmath>
 #include <limits>
 #include "ecs/components/faction.hpp"
+#include "ecs/components/aircraft.hpp"
 #include "ecs/components/harvester.hpp"
 #include "ecs/components/resources.hpp"
 
@@ -91,6 +93,202 @@ TEST(commands_typed_units_remain_idle_until_ordered) {
     check(s.get_unit_x(id) > 17,
           "typed unit moves after a valid order");
 }
+
+TEST(commands_typed_ground_units_steer_on_flow_field_detours) {
+    Simulation s; s.start();
+    const int id = s.create_unit_with_type(0, 0, UnitType::ELITE_MAIN_BATTLE_TANK,
+                                           FactionId::ELITE_PRECISION);
+    s.pathfinding().set_cell(s.pathfinding().to_grid_x(5), s.pathfinding().to_grid_y(0), false);
+    check(s.issue_move_commands({static_cast<EntityId>(id)}, FactionId::ELITE_PRECISION, 10, 0, 3) == 1,
+          "typed ground unit accepts a detour order");
+    s.update(50);
+    const auto* steering = s.component_manager().get_component<GroundSteering>(static_cast<EntityId>(id));
+    check(steering && steering->current_speed >= 0.0f && steering->current_speed < 3.5f &&
+              std::abs(steering->heading) > 0.001f,
+          "flow-field detours turn through bounded ground steering rather than instant strafing");
+}
+
+TEST(commands_wheeled_units_reverse_before_center_axis_spinning) {
+    Simulation s; s.start();
+    const int id = s.create_unit_with_type(0, 0, UnitType::INDUSTRIAL_ENGINEERING,
+                                           FactionId::INDUSTRIAL_EXPERIMENTAL);
+    check(s.issue_move_commands({static_cast<EntityId>(id)}, FactionId::INDUSTRIAL_EXPERIMENTAL, 0, -20, 3) == 1,
+          "wheeled engineering unit accepts a destination directly behind its initial heading");
+    s.update(250);
+    const auto* steering = s.component_manager().get_component<GroundSteering>(static_cast<EntityId>(id));
+    check(steering && steering->current_speed < 0.0f && std::abs(steering->heading) < 0.01f,
+          "wheeled unit chooses reverse travel instead of spinning in place toward a rear destination");
+    check(s.get_unit_y(id) < 0.0f,
+          "wheeled unit begins a reverse maneuver toward its rear destination");
+}
+
+TEST(commands_ground_vehicle_profiles_are_authored_per_prototype) {
+    const auto& prototypes = get_unit_prototypes();
+    const auto mbt = prototypes.find(UnitType::ELITE_MAIN_BATTLE_TANK);
+    const auto engineer = prototypes.find(UnitType::INDUSTRIAL_ENGINEERING);
+    check(mbt != prototypes.end() && engineer != prototypes.end() &&
+              mbt->second.steering_can_pivot_turn && !engineer->second.steering_can_pivot_turn &&
+              mbt->second.steering_minimum_turn_radius < engineer->second.steering_minimum_turn_radius,
+          "ground chassis steering profiles are authored per prototype rather than inferred from unit type");
+}
+
+TEST(theater_spawn_rules_keep_ground_units_out_of_water) {
+    Simulation s;
+    s.configure_world_size(40000.0f, 40000.0f);
+    s.configure_theater_landmasses(-12500.0f, 0.0f, 14000.0f, 38000.0f,
+                                   12500.0f, 0.0f, 14000.0f, 38000.0f);
+    s.start();
+    check(s.create_unit_with_type(0.0f, 0.0f, UnitType::ELITE_MAIN_BATTLE_TANK,
+                                  FactionId::ELITE_PRECISION) < 0,
+          "ground unit cannot spawn in the theater water channel");
+    check(s.create_unit_with_type(0.0f, 0.0f, UnitType::ELITE_PATROL_BOAT,
+                                  FactionId::ELITE_PRECISION) >= 0,
+          "patrol boat can spawn in the theater water channel");
+    check(s.create_unit_with_type(-12500.0f, 0.0f, UnitType::ELITE_MAIN_BATTLE_TANK,
+                                  FactionId::ELITE_PRECISION) >= 0,
+          "ground unit can spawn on a configured landmass");
+}
+
+TEST(structure_placement_validates_land_footprint_and_boundaries) {
+    Simulation s;
+    s.terrain().load_from_binary("godot/project/scenarios/terrain.bin");
+    s.configure_world_size(40000.0f, 40000.0f);
+    s.configure_theater_landmasses(-12500.0f, 0.0f, 14000.0f, 38000.0f,
+                                   12500.0f, 0.0f, 14000.0f, 38000.0f);
+    s.start();
+    check(s.validate_structure_placement(0, -16500.0f, -1500.0f),
+          "forward outpost accepts a clear land footprint");
+    check(!s.validate_structure_placement(0, 0.0f, 0.0f),
+          "structure footprint rejects the theater water channel");
+    check(!s.validate_structure_placement(0, -19950.0f, 0.0f),
+          "structure footprint rejects a map-edge placement");
+    check(!s.validate_structure_placement(0, -12500.0f, 0.0f),
+          "structure footprint rejects excessive slope and height variation");
+    s.pathfinding().block_world_area(-16500.0f, -1500.0f, 0.0f);
+    check(!s.validate_structure_placement(0, -16500.0f, -1500.0f),
+          "structure footprint rejects an occupied strategic cell");
+}
+
+TEST(engineers_spawn_only_on_ground_suitable_for_construction) {
+    Simulation s;
+    s.terrain().load_from_binary("godot/project/scenarios/terrain.bin");
+    s.configure_world_size(40000.0f, 40000.0f);
+    s.configure_theater_landmasses(-12500.0f, 0.0f, 14000.0f, 38000.0f,
+                                   12500.0f, 0.0f, 14000.0f, 38000.0f);
+    s.start();
+    check(s.validate_engineer_placement(-16500.0f, -1500.0f),
+          "engineer accepts a clear, level construction site");
+    check(s.create_unit_with_type(-16500.0f, -1500.0f,
+                                  UnitType::INDUSTRIAL_ENGINEERING,
+                                  FactionId::INDUSTRIAL_EXPERIMENTAL) >= 0,
+          "engineer spawns on a valid construction site");
+    check(!s.validate_engineer_placement(0.0f, 0.0f) &&
+          s.create_unit_with_type(0.0f, 0.0f, UnitType::INDUSTRIAL_ENGINEERING,
+                                  FactionId::INDUSTRIAL_EXPERIMENTAL) < 0,
+          "engineer rejects a water spawn unsuitable for construction");
+    check(!s.validate_engineer_placement(-19950.0f, 0.0f) &&
+          s.create_unit_with_type(-19950.0f, 0.0f, UnitType::INDUSTRIAL_ENGINEERING,
+                                  FactionId::INDUSTRIAL_EXPERIMENTAL) < 0,
+          "engineer rejects a map-edge spawn without construction footprint");
+    check(!s.validate_engineer_placement(-12500.0f, 0.0f) &&
+          s.create_unit_with_type(-12500.0f, 0.0f, UnitType::INDUSTRIAL_ENGINEERING,
+                                  FactionId::INDUSTRIAL_EXPERIMENTAL) < 0,
+          "engineer rejects an excessively sloped spawn");
+    s.pathfinding().block_world_area(-16500.0f, -1500.0f, 0.0f);
+    check(!s.validate_engineer_placement(-16500.0f, -1500.0f) &&
+          s.create_unit_with_type(-16500.0f, -1500.0f, UnitType::INDUSTRIAL_ENGINEERING,
+                                  FactionId::INDUSTRIAL_EXPERIMENTAL) < 0,
+          "engineer rejects an occupied construction site");
+}
+
+TEST(roads_validate_construct_and_apply_traversal_benefit) {
+    Simulation s;
+    s.configure_world_size(40000.0f, 40000.0f);
+    s.configure_theater_landmasses(-12500.0f, 0.0f, 14000.0f, 38000.0f,
+                                   12500.0f, 0.0f, 14000.0f, 38000.0f);
+    s.start();
+    const auto base = s.create_faction_base(FactionId::INDUSTRIAL_EXPERIMENTAL, -17500.0f, -1500.0f);
+    const auto engineer = static_cast<EntityId>(s.create_unit_with_type(
+        -17500.0f, -1500.0f, UnitType::INDUSTRIAL_ENGINEERING,
+        FactionId::INDUSTRIAL_EXPERIMENTAL));
+    check(base != INVALID_ENTITY && engineer != INVALID_ENTITY, "road test creates a faction base and engineer");
+    check(s.validate_road_placement(-17500.0f, -1500.0f, -15000.0f, -1500.0f),
+          "road accepts a clear land route");
+    check(!s.validate_road_placement(-500.0f, 0.0f, 500.0f, 0.0f),
+          "road rejects a route through the theater water channel");
+    check(s.queue_road(engineer, FactionId::INDUSTRIAL_EXPERIMENTAL,
+                       -17500.0f, -1500.0f, -15000.0f, -1500.0f),
+          "engineer queues a paid road construction");
+    check(s.queue_road(engineer, FactionId::INDUSTRIAL_EXPERIMENTAL,
+                       -15000.0f, -1500.0f, -12500.0f, -1500.0f),
+          "engineer queues a connected road segment");
+
+    for (int tick = 0; tick < 700; ++tick) s.update(50.0f);
+    check(s.road_network().segments().size() == 2 &&
+          s.road_network().segments()[0].completed && s.road_network().segments()[1].completed,
+          "road construction completes and persists in the network");
+    check(s.road_network().segments()[0].connected_segments.size() == 1 &&
+          s.road_network().segments()[0].connected_segments.front() == s.road_network().segments()[1].id,
+          "road segments record shared-endpoint connectivity");
+    check(get_road_settings().material_cost == 180.0f &&
+          get_road_settings().energy_cost == 120.0f &&
+          get_road_settings().traversal_cost < 1.0f,
+          "road construction balance is loaded from content data");
+    const int road_cell_x = s.pathfinding().to_grid_x(-16000.0f);
+    const int road_cell_y = s.pathfinding().to_grid_y(-1500.0f);
+    check(s.pathfinding().traversal_cost(road_cell_x, road_cell_y) < 1.0f,
+          "completed road lowers traversal cost on covered navigation cells");
+    check(s.pathfinding().movement_speed_multiplier(-16000.0f, -1500.0f) > 1.0f,
+          "completed road provides a measurable ground movement benefit");
+}
+TEST(off_road_travel_accumulates_wear_and_roads_reduce_it) {
+    Simulation s;
+    s.start();
+    const auto road_tank = static_cast<EntityId>(s.create_unit_with_type(
+        0.0f, 0.0f, UnitType::ELITE_MAIN_BATTLE_TANK, FactionId::ELITE_PRECISION));
+    const auto off_road_tank = static_cast<EntityId>(s.create_unit_with_type(
+        0.0f, 10.0f, UnitType::ELITE_MAIN_BATTLE_TANK, FactionId::ELITE_PRECISION));
+    check(road_tank != INVALID_ENTITY && off_road_tank != INVALID_ENTITY,
+          "wear test creates comparable ground vehicles");
+    for (int x = 0; x <= 100; ++x) {
+        s.pathfinding().set_traversal_cost(s.pathfinding().to_grid_x(static_cast<float>(x)),
+                                           s.pathfinding().to_grid_y(0.0f),
+                                           get_road_settings().traversal_cost);
+    }
+    check(s.issue_move_commands({road_tank}, FactionId::ELITE_PRECISION, 100.0f, 0.0f, 3) == 1 &&
+          s.issue_move_commands({off_road_tank}, FactionId::ELITE_PRECISION, 100.0f, 10.0f, 3) == 1,
+          "comparable vehicles accept road and off-road orders");
+    for (int tick = 0; tick < 250; ++tick) s.update(50.0f);
+    float road_wear = 0.0f;
+    float road_distance = 0.0f;
+    float road_speed = 0.0f;
+    float off_wear = 0.0f;
+    float off_distance = 0.0f;
+    float off_speed = 0.0f;
+    check(s.get_unit_off_road_state(road_tank, road_wear, road_distance, road_speed) &&
+          s.get_unit_off_road_state(off_road_tank, off_wear, off_distance, off_speed),
+          "ground vehicles expose operational wear telemetry");
+    check(off_distance > 10.0f && off_wear > road_wear * 2.0f && off_speed < road_speed,
+          "long off-road movement accumulates more wear and a larger speed penalty than road travel");
+    const auto* road_energy = s.component_manager().get_component<Energy>(road_tank);
+    const auto* off_energy = s.component_manager().get_component<Energy>(off_road_tank);
+    check(road_energy && off_energy && off_energy->current < road_energy->current,
+          "off-road movement consumes more operational energy than road movement");
+    check(off_road_unit_factor(UnitType::INDUSTRIAL_ENGINEERING) >
+          off_road_unit_factor(UnitType::ELITE_MAIN_BATTLE_TANK),
+          "unit-specific off-road resilience is content-authored");
+}
+TEST(civilian_area_blocks_ground_navigation) {
+    Simulation s;
+    s.configure_world_size(40000.0f, 40000.0f);
+    s.configure_theater_landmasses(-12500.0f, 0.0f, 14000.0f, 38000.0f,
+                                   12500.0f, 0.0f, 14000.0f, 38000.0f);
+    check(s.is_land_position(-12500.0f, 6000.0f), "civilian fixture begins on land");
+    s.block_civilian_area(-12500.0f, 6000.0f, 180.0f);
+    check(!s.is_land_position(-12500.0f, 6000.0f), "civilian structures block their navigation footprint");
+    check(s.is_land_position(-12500.0f, 9000.0f), "civilian blocking remains localized");
+}
+
 TEST(commands_hidden_attack_and_visibility_loss) {
     Simulation s; s.start();
     auto own = s.create_unit(0, 0).id, enemy = s.create_unit(30, 0).id;
@@ -165,6 +363,35 @@ TEST(commands_owned_factory_build_research_and_destruction) {
     const auto balance = p.storages().at(base).metal_storage;
     s.update(50);
     check(p.storages().at(base).metal_storage == balance, "destroyed economy stops gathering");
+}
+TEST(commands_runway_aircraft_ferries_in_airborne_from_outside_theater) {
+    Simulation s;
+    s.configure_world_size(40000.0f, 40000.0f);
+    s.configure_theater_landmasses(-12500.0f, 0.0f, 14000.0f, 38000.0f,
+                                  12500.0f, 0.0f, 14000.0f, 38000.0f);
+    s.start();
+    const auto base = s.create_faction_base(FactionId::ELITE_PRECISION, -15500.0f, 1000.0f);
+    check(base != INVALID_ENTITY, "fighter ferry test creates its production line");
+    check(s.issue_build_commands({base}, FactionId::ELITE_PRECISION, 0.0f, 0.0f,
+                                 static_cast<uint8_t>(UnitType::ELITE_T1_FIGHTER)) == 0,
+          "runway fighter remains unavailable before an airfield is active");
+    s.territorial_control_manager().add_installation(
+        -15500.0f, 1000.0f, InstallationType::AIRFIELD, FactionId::ELITE_PRECISION);
+    check(s.issue_build_commands({base}, FactionId::ELITE_PRECISION, 0.0f, 0.0f,
+                                 static_cast<uint8_t>(UnitType::ELITE_T1_FIGHTER)) == 1,
+          "active airfield accepts the paid fighter ferry request");
+    for (int tick = 0; tick < 405; ++tick) s.update(50.0f);
+    const auto aircraft = s.component_manager().entities_with<Aircraft>(s.get_entity_list());
+    check(aircraft.size() == 1, "completed fighter creates one real aircraft entity");
+    const auto fighter = aircraft.front();
+    const auto* state = s.component_manager().get_component<Aircraft>(fighter);
+    check(state && state->status == Aircraft::Status::AIRBORNE,
+          "off-map fighter begins tactical ingress airborne");
+    const float entry_x = s.get_unit_x(fighter);
+    check(entry_x < -20000.0f, "fighter is initially observed beyond the west map edge");
+    for (int tick = 0; tick < 20; ++tick) s.update(50.0f);
+    check(s.get_unit_x(fighter) >= -20000.0f && s.get_unit_x(fighter) > entry_x,
+          "airborne fighter crosses the theater boundary under simulation movement");
 }
 TEST(combat_projectile_pool_recycles_and_hits_between_ticks) {
     SpatialGrid grid(10); ComponentManager components;

@@ -12,6 +12,7 @@
       "build_time_seconds": 15.0,
       "hp": 500.0,
       "speed": 3.5,
+      "steering": {"acceleration": 5.5, "deceleration": 9.0, "turn_rate": 2.4, "turn_rate_at_speed": 1.65, "minimum_turn_radius": 4.0, "max_reverse_speed": 1.8, "reverse_preference_threshold": 2.25, "steering_response": 1.0, "can_pivot_turn": true},
       "range": 120.0,
       "view_range": 6.0,
       "capabilities": ["SEIZURE", "SECURE", "DEFEND"]
@@ -28,6 +29,7 @@
       "build_time_seconds": 20.0,
       "hp": 300.0,
       "speed": 2.0,
+      "steering": {"acceleration": 3.0, "deceleration": 5.5, "turn_rate": 1.4, "turn_rate_at_speed": 0.75, "minimum_turn_radius": 8.0, "max_reverse_speed": 0.9, "reverse_preference_threshold": 2.2, "steering_response": 0.82, "can_pivot_turn": false},
       "range": 300.0,
       "view_range": 8.0,
       "capabilities": ["SEIZURE", "SECURE", "DEFEND"]
@@ -43,6 +45,7 @@
       "build_time_seconds": 12.0,
       "hp": 250.0,
       "speed": 4.0,
+      "steering": {"acceleration": 5.5, "deceleration": 8.0, "turn_rate": 1.9, "turn_rate_at_speed": 1.2, "minimum_turn_radius": 7.5, "max_reverse_speed": 1.7, "reverse_preference_threshold": 2.15, "steering_response": 1.05, "can_pivot_turn": false},
       "range": 100.0,
       "view_range": 7.0,
       "capabilities": ["SEIZURE", "SECURE", "DEFEND"]
@@ -58,6 +61,7 @@
       "build_time_seconds": 5.0,
       "hp": 100.0,
       "speed": 5.0,
+      "steering": {"acceleration": 7.0, "deceleration": 10.0, "turn_rate": 2.8, "turn_rate_at_speed": 1.8, "minimum_turn_radius": 3.5, "max_reverse_speed": 2.5, "reverse_preference_threshold": 2.35, "steering_response": 1.2, "can_pivot_turn": true},
       "range": 60.0,
       "view_range": 4.0,
       "capabilities": ["SEIZURE", "SECURE", "DEFEND"]
@@ -73,6 +77,7 @@
       "build_time_seconds": 7.5,
       "hp": 180.0,
       "speed": 4.5,
+      "steering": {"acceleration": 6.0, "deceleration": 9.0, "turn_rate": 2.4, "turn_rate_at_speed": 1.55, "minimum_turn_radius": 4.5, "max_reverse_speed": 2.0, "reverse_preference_threshold": 2.25, "steering_response": 1.1, "can_pivot_turn": true},
       "range": 80.0,
       "view_range": 5.0,
       "capabilities": ["SEIZURE", "SECURE", "DEFEND"]
@@ -88,6 +93,7 @@
       "build_time_seconds": 6.0,
       "hp": 150.0,
       "speed": 5.5,
+      "steering": {"acceleration": 6.5, "deceleration": 8.0, "turn_rate": 1.8, "turn_rate_at_speed": 1.05, "minimum_turn_radius": 8.5, "max_reverse_speed": 2.4, "reverse_preference_threshold": 2.1, "steering_response": 1.1, "can_pivot_turn": false},
       "range": 80.0,
       "view_range": 5.0,
       "capabilities": ["SEIZURE", "SECURE", "DEFEND"]
@@ -103,6 +109,7 @@
       "build_time_seconds": 10.0,
       "hp": 350.0,
       "speed": 3.0,
+      "steering": {"acceleration": 5.0, "deceleration": 8.5, "turn_rate": 2.2, "turn_rate_at_speed": 1.45, "minimum_turn_radius": 4.5, "max_reverse_speed": 1.5, "reverse_preference_threshold": 2.25, "steering_response": 0.95, "can_pivot_turn": true},
       "range": 90.0,
       "view_range": 5.0,
       "capabilities": ["SEIZURE", "SECURE", "DEFEND"]
@@ -118,6 +125,7 @@
       "build_time_seconds": 15.0,
       "hp": 250.0,
       "speed": 2.5,
+      "steering": {"acceleration": 3.5, "deceleration": 6.0, "turn_rate": 1.35, "turn_rate_at_speed": 0.7, "minimum_turn_radius": 10.0, "max_reverse_speed": 1.0, "reverse_preference_threshold": 2.1, "steering_response": 0.78, "can_pivot_turn": false},
       "range": 200.0,
       "view_range": 6.0,
       "capabilities": ["SEIZURE", "SECURE", "DEFEND"]
@@ -133,6 +141,7 @@
       "build_time_seconds": 12.0,
       "hp": 200.0,
       "speed": 2.0,
+      "steering": {"acceleration": 4.0, "deceleration": 7.0, "turn_rate": 1.25, "turn_rate_at_speed": 0.65, "minimum_turn_radius": 9.0, "max_reverse_speed": 1.1, "reverse_preference_threshold": 2.05, "steering_response": 0.85, "can_pivot_turn": false},
       "range": 50.0,
       "view_range": 5.0,
       "capabilities": ["RECON", "SEIZURE", "SECURE", "CONSTRUCT_FOB", "CONSTRUCT_LOGISTICS", "ESTABLISH_BASE", "DEFEND", "HARVEST_SECURED"]

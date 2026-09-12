@@ -8,15 +8,15 @@ You are an implementation agent for a large-scale near-future RTS inspired by Su
 
 ## Authoritative Current Status
 
-**Active work package:** Goal 04 logistics/air/naval/intelligence validation, with Goals 02 and 03 preserved
+**Active work package:** `DOC-RECONCILE` followed by `G03-COMBAT-BENCH` recovery. Goal 04 and every later numbered goal are gated.
 
-**Canonical committed baseline:** requested checkpoint `9c295bf` on detached HEAD
+**Canonical committed baseline:** `main` at `184613211256f16d4e24a1635d79f77cd4e8f36b`. The previously cited `9c295bf` object is absent from this repository and must not be used as evidence.
 
-**Actual checkout:** detached HEAD with the verified G04-CARRIER follow-up layered on `9c295bf`; later systems remain provisional unless current evidence says otherwise
+**Actual checkout:** `main` at `1846132` with a substantial uncommitted implementation and validation package. It builds and passes the current local regression suite, but uncommitted work is not part of `main` and must be reported separately. See `docs/WORKTREE_RECONCILIATION.md`.
 
 **Start here:** `docs/OPENCODE_HANDOFF.md`
 
-Do not trust older claims that Goals 04–06 or milestones 05–12 are complete. The canonical sequence is the numbered goal files at repository root. Goals 02 and 03 are verified in requested checkpoint `9c295bf`. Do not begin Goal 05 until `04_LOGISTICS_AIR_NAVAL_INTEL.md` satisfies its definition of done.
+Do not trust older claims that Goals 03–11 are complete. The canonical sequence is the numbered goal files at repository root. A fresh 2,000-vs-2,000 combat benchmark fails with no combat activity, so Goal 03 is active again. Do not begin Goal 04 until Goal 03's definition of done is re-established; do not begin Goal 05 until `04_LOGISTICS_AIR_NAVAL_INTEL.md` satisfies its definition of done.
 
 ## Working Directory
 
@@ -65,6 +65,29 @@ Before making changes, read:
 7. Continuous sequence mode is enabled in the execution ledger. When every criterion for the active goal is verified, update the state/docs once and advance exactly once to the next numbered goal. Never skip a gate or return to an earlier goal without new invalidating evidence.
 
 The repository-local OpenCode continuation hook enforces a maximum of two automatic resumes for an unchanged open-todo signature. Legitimate progress must change the todo ledger; a third identical idle state will not be resumed automatically.
+
+## Required Gameplay Validation Contract
+
+A gameplay feature is not complete merely because the project builds, the editor opens, static analysis passes, unrelated tests pass, or the code looks correct. When a relevant scenario exists, run it before claiming completion. Material gameplay changes should add or update a scenario unless existing coverage already proves the behavior.
+
+Prefer evidence in this order: deterministic state assertions, reproducible scenario execution, screenshots for visual checkpoints, video for useful motion/sequence evidence, and honest performance metrics for scale-sensitive systems. Screenshots and videos do not replace state assertions.
+
+Never make failed validation pass by removing/skipping assertions, unjustifiably widening tolerances, silently changing expected output, regenerating visual baselines, or adding test-only gameplay behavior. If acceptance criteria conflict with production intent, report the conflict and proposed correction.
+
+For gameplay work, the final response must include:
+
+```text
+Implementation:
+Validation scenarios run:
+PASS/FAIL:
+State assertions:
+Visual artifacts:
+Performance evidence:
+Known limitations:
+Files changed:
+```
+
+If a required scenario fails, report FAIL even when the build succeeds. On failure, inspect `report.json`, form one hypothesis, make one narrow change, and rerun `tools/validate <one-scenario>` before broadening. Do not regenerate videos or run scale benchmarks on every small iteration. See `docs/validation/AGENT_WORKFLOW.md`.
 
 ## Technology Stack
 
@@ -124,4 +147,4 @@ cmake --build build
 ctest --test-dir build --output-on-failure
 ```
 
-CTest currently discovers one aggregate behavior-test executable. Report both the CTest discovery result and the custom runner's assertion count; do not treat console checkmarks from `rts_benchmark` as tests.
+CTest currently discovers three executables: `rts_tests`, `test_portable_snapshot`, and `rts_integration_tests`. Report both the CTest discovery result and the direct runner assertion counts; do not treat console checkmarks from `rts_benchmark` as tests.

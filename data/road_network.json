@@ -1,0 +1,8 @@
+{
+  "width": 18.0,
+  "material_cost": 180.0,
+  "energy_cost": 120.0,
+  "construction_time_base_seconds": 8.0,
+  "construction_time_per_meter": 0.0033333333,
+  "traversal_cost": 0.68
+}

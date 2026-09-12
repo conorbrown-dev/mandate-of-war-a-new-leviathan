@@ -172,6 +172,33 @@ static UnitPrototype parse_unit_prototype(const rts::data::JsonValue& obj) {
             !std::isfinite(prototype.energy_consumption_rate) || prototype.energy_consumption_rate<=0)
             throw std::runtime_error("Invalid naval endurance data");
     }
+    if (!prototype.is_aircraft && !prototype.is_naval) {
+        auto steering = obj.get("steering");
+        if (!steering || steering->type() != rts::data::JsonValue::Type::Object) {
+            throw std::runtime_error("Missing steering object in ground unit prototype");
+        }
+        const auto required_number = [&](const char* key) {
+            auto value = steering->get(key);
+            if (!value || value->type() != rts::data::JsonValue::Type::Number ||
+                !std::isfinite(value->as_number()) || value->as_number() <= 0.0) {
+                throw std::runtime_error(std::string("Invalid ground steering field: ") + key);
+            }
+            return static_cast<float>(value->as_number());
+        };
+        prototype.steering_acceleration = required_number("acceleration");
+        prototype.steering_deceleration = required_number("deceleration");
+        prototype.steering_turn_rate = required_number("turn_rate");
+        prototype.steering_turn_rate_at_speed = required_number("turn_rate_at_speed");
+        prototype.steering_minimum_turn_radius = required_number("minimum_turn_radius");
+        prototype.steering_max_reverse_speed = required_number("max_reverse_speed");
+        prototype.steering_reverse_preference_threshold = required_number("reverse_preference_threshold");
+        prototype.steering_response = required_number("steering_response");
+        auto pivot = steering->get("can_pivot_turn");
+        if (!pivot || pivot->type() != rts::data::JsonValue::Type::Bool) {
+            throw std::runtime_error("Invalid ground steering field: can_pivot_turn");
+        }
+        prototype.steering_can_pivot_turn = pivot->as_bool();
+    }
     return prototype;
 }
 

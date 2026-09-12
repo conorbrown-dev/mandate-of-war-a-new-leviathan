@@ -1,5 +1,7 @@
 extends Node3D
 
+const UiTypographyScript = preload("res://ui_typography.gd")
+
 const RegistryScript = preload("res://visual_definition_registry.gd")
 const ValidatorScript = preload("res://visual_asset_validator.gd")
 const SpawnBridgeScript = preload("res://visual_spawn_bridge.gd")
@@ -17,6 +19,7 @@ var orbit_pitch := -0.35
 var orbit_distance := 13.0
 
 func _ready() -> void:
+	UiTypographyScript.apply_to(self)
 	registry = RegistryScript.new()
 	registry.load_definitions()
 	definitions = registry._definitions.values()

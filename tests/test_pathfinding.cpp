@@ -70,6 +70,62 @@ TEST(pathfinding_astar_routes_around_obstacles) {
     require_valid_cardinal_path(pathfinding, path, 13);
 }
 
+TEST(pathfinding_prefers_a_low_cost_road_route) {
+    rts::Pathfinding pathfinding(7, 3, 1.0f, 0.0f, 0.0f);
+    for (int x = 0; x < 7; ++x) {
+        pathfinding.set_traversal_cost(x, 0, 0.25f);
+    }
+
+    const auto path = pathfinding.find_path(0.5f, 1.5f, 6.5f, 1.5f);
+    require_valid_cardinal_path(pathfinding, path, 9);
+    bool used_road = false;
+    for (const auto& point : path) {
+        if (pathfinding.to_grid_y(point.second) == 0) {
+            used_road = true;
+            break;
+        }
+    }
+    if (!used_road) {
+        throw std::runtime_error("Weighted pathfinding must prefer a sufficiently cheap road detour");
+    }
+    if (pathfinding.movement_speed_multiplier(2.5f, 0.5f) <= 1.0f) {
+        throw std::runtime_error("Road cells must provide a measurable movement benefit");
+    }
+}
+
+TEST(pathfinding_world_structure_block_updates_routes) {
+    rts::Pathfinding pathfinding(7, 3, 1.0f, 0.0f, 0.0f);
+    pathfinding.block_world_area(3.5f, 1.5f, 0.0f);
+    if (pathfinding.is_walkable(3, 1)) {
+        throw std::runtime_error("World structure blocker must close its navigation cell");
+    }
+    const auto path = pathfinding.find_path(0.5f, 1.5f, 6.5f, 1.5f);
+    require_valid_cardinal_path(pathfinding, path, 9);
+}
+
+TEST(pathfinding_world_structure_block_covers_footprint) {
+    rts::Pathfinding pathfinding(9, 9, 1.0f, 0.0f, 0.0f);
+    pathfinding.block_world_rectangle(4.5f, 4.5f, 1.2f, 2.2f);
+    if (pathfinding.is_walkable(4, 3) || pathfinding.is_walkable(4, 4) || pathfinding.is_walkable(5, 5)) {
+        throw std::runtime_error("Structure footprint must block every overlapping navigation cell");
+    }
+    if (!pathfinding.is_walkable(1, 4) || !pathfinding.is_walkable(7, 4)) {
+        throw std::runtime_error("Structure footprint blocker must remain localized");
+    }
+    const auto path = pathfinding.find_path(0.5f, 4.5f, 8.5f, 4.5f);
+    require_valid_cardinal_path(pathfinding, path, 17);
+}
+
+TEST(pathfinding_flow_direction_escapes_newly_blocked_occupied_cell) {
+    rts::Pathfinding pathfinding(7, 3, 1.0f, 0.0f, 0.0f);
+    pathfinding.block_world_area(2.5f, 1.5f, 0.0f);
+
+    const auto direction = pathfinding.flow_direction(2.5f, 1.5f, 6.5f, 1.5f);
+    if (std::fabs(direction.first) + std::fabs(direction.second) < 0.5f) {
+        throw std::runtime_error("Units inside a newly blocked structure cell must be able to exit it");
+    }
+}
+
 TEST(pathfinding_astar_rejects_unreachable_and_out_of_bounds_requests) {
     rts::Pathfinding pathfinding(5, 5);
     for (int y = 0; y < 5; ++y) {

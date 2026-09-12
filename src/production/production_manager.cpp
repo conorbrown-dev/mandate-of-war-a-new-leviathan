@@ -6,6 +6,58 @@
 
 namespace rts {
 
+namespace {
+constexpr float structure_metal_cost(uint8_t structure_type) {
+    switch (structure_type) {
+        case 0: return 300.0f;
+        case 1: return 450.0f;
+        case 2: return 600.0f;
+        case 3: return 380.0f;
+        default: return 0.0f;
+    }
+}
+
+constexpr float structure_energy_cost(uint8_t structure_type) {
+    switch (structure_type) {
+        case 0: return 150.0f;
+        case 1: return 250.0f;
+        case 2: return 400.0f;
+        case 3: return 620.0f;
+        default: return 0.0f;
+    }
+}
+
+constexpr float structure_research_cost(uint8_t structure_type) {
+    switch (structure_type) {
+        case 0: return 0.0f;
+        case 1: return 100.0f;
+        case 2: return 150.0f;
+        case 3: return 80.0f;
+        default: return 0.0f;
+    }
+}
+
+constexpr float structure_build_seconds(uint8_t structure_type) {
+    switch (structure_type) {
+        case 0: return 20.0f;
+        case 1: return 28.0f;
+        case 2: return 36.0f;
+        case 3: return 24.0f;
+        default: return 0.0f;
+    }
+}
+
+const char* structure_display_name(uint8_t structure_type) {
+    switch (structure_type) {
+        case 0: return "FORWARD OUTPOST";
+        case 1: return "RADAR MAST";
+        case 2: return "AIRFIELD";
+        case 3: return "FLOODLIGHT";
+        default: return "UNKNOWN STRUCTURE";
+    }
+}
+} // namespace
+
 void ProductionManager::add_unit_to_queue(EntityId production_line_id, FactionId faction_id, UnitType unit_type) {
     const auto& prototypes = get_unit_prototypes();
     auto it = prototypes.find(unit_type);
@@ -147,8 +199,8 @@ void ProductionManager::update_construction_queues(float delta_ms) {
         entry.build_progress += fraction;
         line.active_jobs = 1;
         if (entry.build_progress >= 1.0f - 0.0001f) {
-            if (entry.type == ConstructionQueueEntry::Type::UNIT)
-                completed_constructions_.push_back({entry.entity_id, entry.unit_type, entry.faction_id, entry.target_x, entry.target_y});
+            completed_constructions_.push_back({entry.entity_id, entry.unit_type, entry.faction_id, entry.target_x, entry.target_y,
+                entry.type == ConstructionQueueEntry::Type::BUILDING, entry.structure_type});
             line.queue.pop(); // no reference to the popped entry may survive
             ++construction_count_;
         }
@@ -403,7 +455,9 @@ bool ProductionManager::can_queue_unit(EntityId line_id, FactionId faction, Unit
     if (storage == storages_.end()) return false;
     const auto& funds = storage->second;
     const auto& p = proto->second;
-    return funds.metal_storage >= p.material_cost && funds.energy_storage >= p.energy_cost;
+    const float ferry_material = p.is_aircraft && p.requires_runway ? p.operational_material : 0.0f;
+    const float ferry_energy = p.is_aircraft && p.requires_runway ? p.operational_energy : 0.0f;
+    return funds.metal_storage >= p.material_cost + ferry_material && funds.energy_storage >= p.energy_cost + ferry_energy;
 }
 bool ProductionManager::queue_unit(EntityId line_id, FactionId faction, UnitType type, float x, float y) {
     if (!can_queue_unit(line_id, faction, type)) return false;
@@ -411,42 +465,47 @@ bool ProductionManager::queue_unit(EntityId line_id, FactionId faction, UnitType
     auto& line = production_lines_.at(line_id);
     auto& funds = storages_.at(line.storage_id);
     // Reserve full build costs once. Research is spent on projects, not units.
-    funds.metal_storage -= p.material_cost;
-    funds.energy_storage -= p.energy_cost;
+    const float ferry_material = p.is_aircraft && p.requires_runway ? p.operational_material : 0.0f;
+    const float ferry_energy = p.is_aircraft && p.requires_runway ? p.operational_energy : 0.0f;
+    funds.metal_storage -= p.material_cost + ferry_material;
+    funds.energy_storage -= p.energy_cost + ferry_energy;
     ConstructionQueueEntry entry{};
     entry.type = ConstructionQueueEntry::Type::UNIT;
     entry.unit_type = type; entry.faction_id = faction;
-    entry.total_cost_metal = p.material_cost; entry.total_cost_energy = p.energy_cost;
+    entry.total_cost_metal = p.material_cost + ferry_material; entry.total_cost_energy = p.energy_cost + ferry_energy;
     entry.build_time_seconds = p.build_time_seconds;
     entry.target_x = x; entry.target_y = y;
     line.queue.push(entry);
     return true;
 }
 bool ProductionManager::can_queue_structure(EntityId line_id, FactionId faction, uint8_t structure_type) const {
-    if (structure_type > 1 || faction_line(faction) != line_id) return false;
+    if (structure_type > 3 || faction_line(faction) != line_id) return false;
     auto line = production_lines_.find(line_id);
     if (line == production_lines_.end() || line->second.queue.size() >= static_cast<size_t>(line->second.max_jobs)) return false;
     auto storage = storages_.find(line->second.storage_id);
     if (storage == storages_.end()) return false;
-    const float metal = structure_type == 0 ? 300.0f : 450.0f;
-    const float energy = structure_type == 0 ? 150.0f : 250.0f;
-    const float research = structure_type == 0 ? 0.0f : 100.0f;
+    const float metal = structure_metal_cost(structure_type);
+    const float energy = structure_energy_cost(structure_type);
+    const float research = structure_research_cost(structure_type);
     const auto& funds = storage->second;
     return funds.metal_storage >= metal && funds.energy_storage >= energy && funds.research_storage >= research;
 }
 bool ProductionManager::queue_structure(EntityId line_id, FactionId faction, uint8_t structure_type, float x, float y) {
     if (!can_queue_structure(line_id, faction, structure_type)) return false;
     auto& line = production_lines_.at(line_id);
+    const float metal = structure_metal_cost(structure_type);
+    const float energy = structure_energy_cost(structure_type);
+    const float research_cost = structure_research_cost(structure_type);
     ConstructionQueueEntry entry{};
     entry.type = ConstructionQueueEntry::Type::BUILDING;
     entry.unit_type = static_cast<UnitType>(0);
     entry.faction_id = faction;
     entry.structure_type = structure_type;
-    entry.display_name = structure_type == 0 ? "FORWARD OUTPOST" : "RADAR MAST";
-    entry.total_cost_metal = structure_type == 0 ? 300.0f : 450.0f;
-    entry.total_cost_energy = structure_type == 0 ? 150.0f : 250.0f;
-    entry.total_cost_research = structure_type == 0 ? 0.0f : 100.0f;
-    entry.build_time_seconds = structure_type == 0 ? 20.0f : 28.0f;
+    entry.display_name = structure_display_name(structure_type);
+    entry.total_cost_metal = metal;
+    entry.total_cost_energy = energy;
+    entry.total_cost_research = research_cost;
+    entry.build_time_seconds = structure_build_seconds(structure_type);
     entry.metal_per_tick = entry.total_cost_metal / (entry.build_time_seconds * 20.0f);
     entry.energy_per_tick = entry.total_cost_energy / (entry.build_time_seconds * 20.0f);
     entry.research_per_tick = entry.total_cost_research / (entry.build_time_seconds * 20.0f);

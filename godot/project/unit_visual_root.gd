@@ -1,6 +1,8 @@
 class_name UnitVisualRoot
 extends Node3D
 
+const StrategicUnitIconScript = preload("res://strategic_unit_icon.gd")
+
 ## Generic presentation wrapper for imported donor GLBs. This node has no
 ## gameplay processing, physics, or timers; simulation code drives it through
 ## apply_simulation_transform().
@@ -10,12 +12,15 @@ var _definition: Dictionary = {}
 var _model_root: Node3D
 var _turret_root: Node3D
 var _hardpoint_markers: Node3D
-var _selection_visual: MeshInstance3D
 var _debug_visuals: Node3D
 var _strategic_visual: MeshInstance3D
+var _strategic_stem: MeshInstance3D
+var _strategic_icon_scale := Vector3.ONE
 var _gun_root: Node3D
 var _hardpoints: Dictionary = {}
 var _lod_tier := 0
+var _terrain_height_sampler: Callable
+var _range_overlays: Array[Dictionary] = []
 static var _fallback_materials: Dictionary = {}
 
 
@@ -36,31 +41,56 @@ func configure(registry, visual_id: String, faction_color := Color.WHITE) -> boo
 		_add_fallback_mesh(faction_color)
 	_apply_definition_transform()
 	_configure_hardpoints()
-	_selection_visual.visible = false
 	return not bool(_definition.get("fallback", false)) and model != null
 
 
 func apply_simulation_transform(world_transform: Transform3D) -> void:
 	global_transform = world_transform
+	_update_range_overlays(world_transform.origin)
 
 
 func set_selected(selected: bool) -> void:
-	_ensure_nodes()
-	_selection_visual.visible = selected
+	# Selection is already communicated by the persistent range envelopes.
+	# Do not add a redundant yellow ring beneath the unit.
+	pass
+
+
+func set_range_terrain_height_sampler(sampler: Callable) -> void:
+	_terrain_height_sampler = sampler
+	_update_range_overlays(global_position)
 
 
 func update_lod(camera_distance: float) -> void:
 	# Called by the central presentation synchronizer, never from _process().
 	var lod: Dictionary = _definition.get("lod", {})
-	var far_distance := float(lod.get("strategic_distance", 190.0))
+	# Keep detailed models readable through the first zoom-out band. The
+	# strategic marker is reserved for map-scale navigation, where it acts as a
+	# location beacon rather than a replacement vehicle mesh.
+	# Keep the 3D model visible until the screen-space strategic overlay turns
+	# off at 600 m. The old 500 m floor created a 500-600 m gap where the
+	# strategic marker was still visible but the unit mesh was already hidden.
+	var far_distance := maxf(float(lod.get("strategic_distance", 190.0)), 600.0)
 	var mid_distance := float(lod.get("reduced_distance", 95.0))
 	var tier := 2 if camera_distance >= far_distance else (1 if camera_distance >= mid_distance else 0)
 	if tier == _lod_tier:
 		return
 	_lod_tier = tier
 	_model_root.visible = tier < 2
-	_strategic_visual.visible = tier == 2
+	# Map-scale symbols are now rendered by StrategicIconOverlay as fixed-pixel
+	# screen-space markers, like Forged Alliance's strategic view. Do not leave
+	# a scaled 3D glyph on the hull plane where it reads as a gray dot.
+	_strategic_visual.visible = false
+	_strategic_stem.visible = false
 	_set_imported_lod_visibility(_model_root, tier)
+
+
+func set_strategic_icon(unit_type: int, faction_color: Color) -> void:
+	_ensure_nodes()
+	_strategic_visual.mesh = StrategicUnitIconScript.mesh_for(unit_type)
+	_strategic_icon_scale = StrategicUnitIconScript.shape_scale_for(unit_type)
+	_strategic_visual.scale = _strategic_icon_scale
+	_strategic_visual.rotation.y = StrategicUnitIconScript.rotation_for(unit_type)
+	_strategic_visual.material_override = StrategicUnitIconScript.material_for(faction_color)
 
 
 func presentation_footprint() -> Dictionary:
@@ -103,38 +133,75 @@ func _ensure_nodes() -> void:
 	_hardpoint_markers = Node3D.new()
 	_hardpoint_markers.name = "OptionalHardpointMarkers"
 	add_child(_hardpoint_markers)
-	_selection_visual = MeshInstance3D.new()
-	_selection_visual.name = "SelectionVisual"
-	var ring := CylinderMesh.new()
-	ring.top_radius = 1.0
-	ring.bottom_radius = 1.0
-	ring.height = 0.04
-	ring.radial_segments = 12
-	_selection_visual.mesh = ring
-	var material := StandardMaterial3D.new()
-	material.albedo_color = Color(0.25, 0.85, 1.0, 0.55)
-	material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-	material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	_selection_visual.material_override = material
-	_selection_visual.position.y = 0.03
-	_selection_visual.visible = false
-	add_child(_selection_visual)
+	_add_hex_range_overlay("VisibilityHex", 15.0, Color("#2d8cff"))
+	_add_hex_range_overlay("RadarHex", 22.0, Color("#a04dff"))
+	_add_hex_range_overlay("AttackHex", 10.0, Color("#e33b3b"))
 	_strategic_visual = MeshInstance3D.new()
 	_strategic_visual.name = "StrategicZoomVisual"
-	var strategic_mesh := CylinderMesh.new()
-	strategic_mesh.top_radius = 0.85
-	strategic_mesh.bottom_radius = 0.85
-	strategic_mesh.height = 0.12
-	strategic_mesh.radial_segments = 6
-	_strategic_visual.mesh = strategic_mesh
-	_strategic_visual.position.y = 0.12
-	_strategic_visual.material_override = _shared_fallback_material(Color("#72c9e8"))
+	_strategic_visual.mesh = StrategicUnitIconScript.mesh_for(-1)
+	_strategic_visual.position.y = 5.0
+	_strategic_visual.material_override = StrategicUnitIconScript.material_for(Color("#72c9e8"))
 	_strategic_visual.visible = false
 	add_child(_strategic_visual)
+	_strategic_stem = MeshInstance3D.new()
+	_strategic_stem.name = "StrategicMarkerStem"
+	var stem_mesh := CylinderMesh.new()
+	stem_mesh.top_radius = 0.10
+	stem_mesh.bottom_radius = 0.10
+	stem_mesh.height = 5.0
+	stem_mesh.radial_segments = 6
+	_strategic_stem.mesh = stem_mesh
+	_strategic_stem.position.y = 2.5
+	var stem_material := StrategicUnitIconScript.material_for(Color("#72c9e8"))
+	stem_material.albedo_color = stem_material.albedo_color.darkened(0.35)
+	_strategic_stem.material_override = stem_material
+	_strategic_stem.visible = false
+	add_child(_strategic_stem)
 	_debug_visuals = Node3D.new()
 	_debug_visuals.name = "DebugVisuals"
 	_debug_visuals.visible = false
 	add_child(_debug_visuals)
+
+
+func _add_hex_range_overlay(ring_name: String, radius: float, color: Color) -> void:
+	var overlay := MeshInstance3D.new()
+	overlay.name = ring_name
+	# Top-level world geometry avoids inheriting vehicle rotation or model lift.
+	overlay.top_level = true
+	var material := _shared_fallback_material(color)
+	material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	material.albedo_color.a = 0.88
+	overlay.material_override = material
+	overlay.visible = true
+	add_child(overlay)
+	_range_overlays.append({"node": overlay, "radius": radius, "material": material})
+
+
+func _update_range_overlays(center: Vector3) -> void:
+	for spec in _range_overlays:
+		var overlay := spec.node as MeshInstance3D
+		if overlay == null:
+			continue
+		var radius := float(spec.radius)
+		var lines := ImmediateMesh.new()
+		lines.surface_begin(Mesh.PRIMITIVE_LINES)
+		for side in range(6):
+			var a := TAU * float(side) / 6.0 + PI / 6.0
+			var b := TAU * float(side + 1) / 6.0 + PI / 6.0
+			var start := Vector3(center.x + cos(a) * radius, center.y, center.z + sin(a) * radius)
+			var finish := Vector3(center.x + cos(b) * radius, center.y, center.z + sin(b) * radius)
+			if _terrain_height_sampler.is_valid():
+				start.y = float(_terrain_height_sampler.call(start.x, start.z)) + 0.12
+				finish.y = float(_terrain_height_sampler.call(finish.x, finish.z)) + 0.12
+			else:
+				start.y += 0.12
+				finish.y += 0.12
+			lines.surface_add_vertex(start)
+			lines.surface_add_vertex(finish)
+		lines.surface_end()
+		lines.surface_set_material(0, spec.material)
+		overlay.mesh = lines
 
 
 func _clear_model() -> void:
@@ -184,8 +251,6 @@ func _apply_definition_transform() -> void:
 	if rotation_values.size() == 3:
 		_model_root.rotation_degrees = Vector3(float(rotation_values[0]), float(rotation_values[1]), float(rotation_values[2]))
 	_model_root.position.y = float(_definition.get("ground_offset", 0.0))
-	var radius := float(_definition.get("selection_radius", 2.0))
-	_selection_visual.scale = Vector3(radius, 1.0, radius)
 	_lod_tier = -1
 	update_lod(0.0)
 

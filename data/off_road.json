@@ -1,0 +1,19 @@
+{
+  "wear_per_meter": 0.02,
+  "road_wear_multiplier": 0.08,
+  "energy_per_meter": 0.015,
+  "material_per_meter": 0.004,
+  "speed_penalty_per_wear": 0.006,
+  "maximum_speed_penalty": 0.45,
+  "unit_factors": {
+    "ELITE_MAIN_BATTLE_TANK": 0.80,
+    "ELITE_LONG_RANGE_ARTILLERY": 1.10,
+    "ELITE_ANTI_AIR": 1.00,
+    "MASS_SWARM_TANK": 0.90,
+    "MASS_ASSAULT_VEHICLE": 1.20,
+    "MASS_ANTI_AIR": 1.10,
+    "INDUSTRIAL_MBT": 0.85,
+    "INDUSTRIAL_MISSILE_PLATFORM": 1.25,
+    "INDUSTRIAL_ENGINEERING": 1.35
+  }
+}

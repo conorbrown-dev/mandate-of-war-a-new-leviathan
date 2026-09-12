@@ -35,6 +35,22 @@ struct UnitData {
     float view_range;
 };
 
+// Lightweight deterministic ground-motion state; no rigid bodies required.
+struct GroundSteering {
+    float heading = 0.0f;
+    float desired_heading = 0.0f;
+    float current_speed = 0.0f;
+    float acceleration = 5.0f;
+    float deceleration = 8.0f;
+    float turn_rate = 1.8f;
+    float turn_rate_at_speed = 1.0f;
+    float minimum_turn_radius = 8.0f;
+    float max_reverse_speed = 0.0f;
+    float reverse_preference_threshold = 2.2f;
+    float steering_response = 1.0f;
+    bool can_pivot_turn = false;
+};
+
 class SpatialGrid {
 public:
     SpatialGrid(float cell_size = 100.0f)

@@ -15,6 +15,9 @@
 #include "replay/replay_writer.hpp"
 #include "render/renderer.hpp"
 #include "terrain.hpp"
+#include "road_network.hpp"
+#include "off_road.hpp"
+#include "../ecs/components/off_road.hpp"
 #include "../ecs/components/factions.hpp"
 #include "../ecs/components/harvester.hpp"
 #include "../ecs/components/territorial_control.hpp"
@@ -138,6 +141,9 @@ public:
     bool get_unit_position(EntityId entity, float& x, float& y);
     float get_unit_x(EntityId entity) const;
     float get_unit_y(EntityId entity) const;
+    float get_unit_heading(EntityId entity) const;
+    bool get_unit_off_road_state(EntityId entity, float& wear, float& distance, float& speed_multiplier) const;
+    bool get_unit_steering_state(EntityId entity, float& heading, float& desired_heading, float& speed) const;
     
     bool get_unit_health(EntityId entity, float& current, float& max);
     bool get_unit_is_dead(EntityId entity);
@@ -192,6 +198,17 @@ public:
     // Scenario setup may select a larger theater before a match starts. Keep
     // the default 320x320 world for existing simulations and tests.
     void configure_world_size(float width, float height);
+    void configure_theater_landmasses(
+        float first_center_x, float first_center_y, float first_width, float first_height,
+        float second_center_x, float second_center_y, float second_width, float second_height);
+    bool is_land_position(float x, float y) const;
+    void block_civilian_area(float x, float y, float radius);
+    bool validate_structure_placement(uint8_t structure_type, float x, float y) const;
+    bool validate_engineer_placement(float x, float y) const;
+    bool validate_road_placement(float start_x, float start_y, float end_x, float end_y) const;
+    bool queue_road(EntityId engineer, FactionId owner, float start_x, float start_y, float end_x, float end_y);
+    const RoadNetwork& road_network() const { return road_network_; }
+    void enable_theater_water_rules(bool enabled = true) { theater_water_rules_enabled_ = enabled; }
 
     // Faction initialization
     EntityId create_faction_base(FactionId faction, float x, float y);
@@ -214,6 +231,8 @@ private:
     uint32_t tick_{0};
     float elapsed_ms_{0.0f};
     float last_tick_ms_{0.0f};
+    float command_position_scale_{INPUT_COMMAND_POSITION_SCALE};
+    bool theater_water_rules_enabled_{false};
 
     EntityManager entity_manager_{false}; // Match references never alias a later spawn.
     ComponentManager component_manager_;
@@ -234,6 +253,7 @@ private:
     std::unordered_map<EntityId, PatrolOrder> patrol_orders_;
     std::unordered_map<FactionId, FactionResearch> faction_research_;
     Terrain terrain_;
+    RoadNetwork road_network_;
     TerritorialControlManager territorial_control_;
     
     std::unique_ptr<AIManager> ai_manager_;
@@ -244,6 +264,7 @@ private:
     void logistics_phase(float delta_ms);
     void economy_phase(float delta_ms);
     void update_harvesters(float delta_ms);
+    void apply_completed_road(const RoadSegment& segment);
 };
 
 Simulation* runtime_simulation();
