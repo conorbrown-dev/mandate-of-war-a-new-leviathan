@@ -173,21 +173,41 @@ TEST(mod_manifest_dependency_resolution) {
 TEST(mod_manifest_load_mod) {
     fs::path test_dir = fs::current_path() / "test_mods" / "test_mod_1";
     rts::ModManager manager;
-    
+
+    if (manager.load_mod(test_dir)) {
+        throw std::runtime_error("Mod with an unloaded dependency must be rejected");
+    }
+    if (manager.get_load_errors().empty()) {
+        throw std::runtime_error("Missing dependency must produce a load error");
+    }
+    if (!manager.load_base_content(fs::current_path() / "test_mods" / "base_content")) {
+        throw std::runtime_error("Failed to load base content");
+    }
     if (!manager.load_mod(test_dir)) {
         throw std::runtime_error("Failed to load mod");
     }
+
+    const fs::path incompatible_dir = fs::temp_directory_path() / "rts-incompatible-mod-manifest";
+    fs::remove_all(incompatible_dir);
+    fs::create_directories(incompatible_dir);
+    {
+        std::ofstream manifest(incompatible_dir / "manifest.yaml");
+        manifest << "manifest_version: \"1.0\"\n";
+        manifest << "id: \"requires_new_base\"\nversion: \"1.0.0\"\n";
+        manifest << "dependencies:\n  - id: \"base_content\"\n    version: \">=2.0.0\"\n";
+    }
+    if (manager.load_mod(incompatible_dir)) {
+        throw std::runtime_error("Mod with an incompatible dependency version must be rejected");
+    }
     
     const auto& manifests = manager.get_loaded_manifests();
-    if (manifests.size() != 1) {
-        throw std::runtime_error("Expected 1 loaded manifest");
+    if (manifests.size() != 2) {
+        throw std::runtime_error("Expected base content plus one loaded mod");
     }
-    
-    if (manifests[0].id != "test_mod_1") {
+    if (manifests[1].id != "test_mod_1") {
         throw std::runtime_error("Wrong mod ID in loaded manifests");
     }
-    
-    if (manifests[0].units.size() != 1) {
+    if (manifests[1].units.size() != 1) {
         throw std::runtime_error("Wrong unit count in manifest");
     }
     

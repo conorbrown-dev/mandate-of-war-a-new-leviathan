@@ -7,8 +7,9 @@
 1. Read `05_MODDING_ASSET_PIPELINE_MAP_EDITOR.md` and reconcile its acceptance criteria with current code.
 2. Verified slice: load a test mod, validate its generated unit and placeholder mesh, and spawn it through the development simulation bridge.
 3. Verified slice: native map save/load round-trips terrain, resources, spawn points, and initial entities.
-4. Next: make manifest dependency resolution/version constraints transactional and deterministic; then add the minimal interactive map-editor surface or clearly bound the editor foundation.
-5. Add behavior assertions and perform the required modding/asset/map review before advancing.
+4. Verified slice: manifest loading enforces already-loaded dependency presence and compatible `>=` versions.
+5. Next: implement deterministic, transactional batch dependency ordering; then add the minimal interactive map-editor surface or clearly bound the editor foundation.
+6. Add behavior assertions and perform the required modding/asset/map review before advancing.
 
 ## Gated work
 

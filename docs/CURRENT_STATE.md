@@ -31,6 +31,11 @@ round-trips a YAML header and terrain/resource/spawn/entity sidecars with
 assertions over editable data. An interactive editor UI and remaining map
 validation rules are still open Goal 05 work.
 
+Manifest loading now rejects missing or incompatible `>=` dependencies before
+unit content is registered; the integration suite proves reject-before-base,
+accept-after-compatible-base, and incompatible-version rejection. Batch
+dependency ordering and transactional multi-mod loading remain open.
+
 ## Gameplay Validation Package — 2026-09-12
 
 `tools/validate` now runs four registered, deterministic validations: real-input Field Engineer selection/movement, cursor-anchored strategic zoom, airfield-gated fighter ferry ingress, and a three-run 1,000-unit native benchmark. Every run writes a schema-checked report and logs beneath the gitignored `validation/artifacts/` tree. Godot script errors, missing reports, failed assertions, malformed schemas, missing requested captures, and visual mismatches propagate non-zero status.

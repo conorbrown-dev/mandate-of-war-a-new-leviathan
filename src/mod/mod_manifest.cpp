@@ -288,6 +288,20 @@ bool ModManager::load_mod(const fs::path& mod_dir) {
         load_errors_.push_back("Duplicate mod ID: " + manifest.id);
         return false;
     }
+
+    for (const auto& dependency : manifest.dependencies) {
+        const auto loaded = std::find_if(loaded_manifests_.begin(), loaded_manifests_.end(), [&](const auto& candidate) {
+            return candidate.id == dependency.id;
+        });
+        if (loaded == loaded_manifests_.end()) {
+            load_errors_.push_back("Missing dependency " + dependency.id + " required by " + manifest.id);
+            return false;
+        }
+        if (!loader.check_version_constraint(loaded->version, dependency.version_constraint)) {
+            load_errors_.push_back("Dependency version mismatch for " + dependency.id + " required by " + manifest.id);
+            return false;
+        }
+    }
     
     std::vector<GeneratedUnitDefinition> loaded_units;
     for (const auto& entry : manifest.units) {

@@ -1,0 +1,6 @@
+manifest_version: "1.0"
+id: "base_content"
+name: "Base Content"
+version: "1.0.0"
+description: "Minimal base content dependency fixture"
+author: "Tests"
