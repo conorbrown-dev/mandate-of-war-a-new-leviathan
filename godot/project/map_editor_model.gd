@@ -79,6 +79,43 @@ func validate() -> PackedStringArray:
 		if not bounds.has_point(resource.position): errors.append("Resource outside playable bounds: %s" % resource.id)
 	return errors
 
+func save_to_file(path: String) -> bool:
+	if not validate().is_empty(): return false
+	var file := FileAccess.open(path, FileAccess.WRITE)
+	if file == null: return false
+	file.store_string(JSON.stringify(to_dictionary()))
+	return file.get_error() == OK
+
+func load_from_file(path: String) -> bool:
+	var file := FileAccess.open(path, FileAccess.READ)
+	if file == null: return false
+	var parsed = JSON.parse_string(file.get_as_text())
+	if not parsed is Dictionary: return false
+	var data: Dictionary = parsed
+	if not create_map(String(data.get("id", "")), int(data.get("width", 0)), int(data.get("height", 0)), float(data.get("tile_size", 0.0))): return false
+	var heights: Array = data.get("terrain", [])
+	if heights.size() != terrain.size(): return false
+	for index in heights.size(): terrain[index] = float(heights[index])
+	for entry in data.get("spawns", []):
+		if not add_spawn(String(entry.id), String(entry.faction), Vector2(entry.position[0], entry.position[1]), float(entry.get("heading", 0.0)), String(entry.get("type", "land"))): return false
+	for entry in data.get("resources", []):
+		if not add_resource(String(entry.id), String(entry.type), Vector2(entry.position[0], entry.position[1]), float(entry.amount), float(entry.radius)): return false
+	for entry in data.get("entities", []):
+		if not add_entity(String(entry.id), String(entry.content_id), Vector2(entry.position[0], entry.position[1])): return false
+	return validate().is_empty()
+
+func to_dictionary() -> Dictionary:
+	var serialize := func(items: Array[Dictionary]) -> Array:
+		var output: Array = []
+		for item in items:
+			var copy: Dictionary = item.duplicate(true)
+			if copy.has("position"):
+				var position: Vector2 = copy.position
+				copy.position = [position.x, position.y]
+			output.append(copy)
+		return output
+	return {"id": map_id, "width": width, "height": height, "tile_size": tile_size, "terrain": Array(terrain), "spawns": serialize.call(spawn_points), "resources": serialize.call(resources), "entities": serialize.call(entities)}
+
 func _cell_index(cell_x: int, cell_y: int) -> int:
 	var columns := width / int(tile_size)
 	var rows := height / int(tile_size)
