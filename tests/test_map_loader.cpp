@@ -115,6 +115,41 @@ TEST(map_loader_compute_hash) {
     }
 }
 
+TEST(map_loader_save_load_round_trip) {
+    const fs::path test_dir = test_root / "round_trip";
+    fs::remove_all(test_dir);
+    rts::MapData source{};
+    source.map_version = "1.0";
+    source.id = "round_trip";
+    source.name = "Round Trip";
+    source.description = "serializer coverage";
+    source.author = "test";
+    source.width = 32;
+    source.height = 32;
+    source.tile_size = 16.0f;
+    source.max_elevation = 100.0f;
+    source.tiles_x = 2;
+    source.tiles_y = 2;
+    source.terrain_heights = {1.25f, 2.5f, 3.75f, 5.0f};
+    source.resource_depots.push_back({"metal_1", "material", 4.0f, 5.0f, 100.0f, 3.0f, 0.8f});
+    source.spawn_points.push_back({"spawn_1", "faction_a", 6.0f, 7.0f, 1.5f, "land"});
+    source.initial_entities.push_back({"unit_1", "unit", "unit|test_mod|heavy", 8.0f, 9.0f, 0.25f, 1.0f, -1.0f, 0.75f, 0});
+
+    rts::MapLoader writer;
+    const fs::path map_path = test_dir / "round_trip.map";
+    if (!writer.save_map(map_path, source)) {
+        throw std::runtime_error("Map save failed");
+    }
+    rts::MapLoader reader;
+    const auto loaded = reader.load_map(map_path);
+    if (!loaded || loaded->terrain_heights != source.terrain_heights || loaded->resource_depots.size() != 1 ||
+        loaded->spawn_points.size() != 1 || loaded->initial_entities.size() != 1 ||
+        loaded->resource_depots[0].id != "metal_1" || loaded->spawn_points[0].heading != 1.5f ||
+        loaded->initial_entities[0].content_id != "unit|test_mod|heavy" || loaded->initial_entities[0].velocity_y != -1.0f) {
+        throw std::runtime_error("Map save/load did not preserve editable map data");
+    }
+}
+
 TEST(map_loader_load_spawnpoints) {
     fs::path test_dir = test_root / "spawn_test";
     fs::remove_all(test_dir);

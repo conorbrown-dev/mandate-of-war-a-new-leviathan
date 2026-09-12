@@ -23,6 +23,11 @@
 
 **Goal 05 progress:** The generated-unit development path is now proven: `generate.py` emits linked unit/mesh metadata without nulling defaults; `ModManager` validates a manifest-declared generated unit; and the integration suite spawns it with authored data. Dependency ordering/version constraints and map save/load are the next unverified acceptance slices.
 
+**Goal 05 map progress:** `MapLoader::save_map()` now round-trips map terrain,
+resources, spawn points, and initial entities through the YAML/binary map
+format. The direct integration suite has 168 passing assertions. Dependency
+ordering/version constraints and the editor surface remain open.
+
 **Last verified:** 2026-09-12
 
 **Validation handoff:** Start with `docs/validation/VALIDATION_BASELINE.md`, `RUNNING_TESTS.md`, and `SCENARIO_CATALOG.md`. `tools/validate all` runs the four registered scenarios; `tools/test` runs the broader build/native/Godot/validation sweep. Generated evidence is under gitignored `validation/artifacts/`. Strategic-zoom baselines are committed under `validation/baselines/` at an empirically established 0.995 threshold. Do not update them implicitly.

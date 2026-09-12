@@ -93,6 +93,7 @@ public:
     ~MapLoader();
     
     std::optional<MapData> load_map(const fs::path& map_path);
+    bool save_map(const fs::path& map_path, const MapData& map);
     bool validate_map(const MapData& map);
     std::string compute_hash(const MapData& map);
     

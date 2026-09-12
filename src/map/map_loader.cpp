@@ -6,6 +6,8 @@
 #include <openssl/sha.h>
 #include <regex>
 #include <unordered_map>
+#include <iomanip>
+#include <limits>
 
 namespace rts {
 
@@ -85,6 +87,87 @@ std::optional<MapData> MapLoader::load_map(const fs::path& map_path) {
     }
     
     return map_data;
+}
+
+bool MapLoader::save_map(const fs::path& map_path, const MapData& map) {
+    errors_.clear();
+    if (map_path.empty() || map_path.extension() == ".json") {
+        add_error("Map save requires a YAML map path");
+        return false;
+    }
+    if (!validate_map(map)) return false;
+    std::error_code directory_error;
+    fs::create_directories(map_path.parent_path(), directory_error);
+    if (directory_error) {
+        add_error("Failed to create map directory: " + directory_error.message());
+        return false;
+    }
+
+    std::ofstream header(map_path, std::ios::trunc);
+    if (!header) {
+        add_error("Failed to write map header: " + map_path.string());
+        return false;
+    }
+    header << std::setprecision(std::numeric_limits<float>::max_digits10);
+    header << "map_version: \"" << (map.map_version.empty() ? "1.0" : map.map_version) << "\"\n";
+    header << "id: \"" << map.id << "\"\nname: \"" << map.name << "\"\n";
+    header << "description: \"" << map.description << "\"\nauthor: \"" << map.author << "\"\n";
+    header << "dimensions:\n  width: " << map.width << "\n  height: " << map.height << "\n";
+    header << "  tile_size: " << map.tile_size << "\n  max_elevation: " << map.max_elevation << "\n";
+    header.close();
+    if (!header) {
+        add_error("Failed to finish map header: " + map_path.string());
+        return false;
+    }
+
+    std::ofstream terrain(map_path.parent_path() / "terrain.bin", std::ios::binary | std::ios::trunc);
+    if (!terrain) {
+        add_error("Failed to write terrain data");
+        return false;
+    }
+    terrain.write(reinterpret_cast<const char*>(map.terrain_heights.data()),
+                  static_cast<std::streamsize>(map.terrain_heights.size() * sizeof(float)));
+    terrain.close();
+    if (!terrain) {
+        add_error("Failed to finish terrain data");
+        return false;
+    }
+
+    const auto write_text = [&](const fs::path& path, const auto& writer) {
+        std::ofstream file(path, std::ios::trunc);
+        if (!file) return false;
+        file << std::setprecision(std::numeric_limits<float>::max_digits10);
+        writer(file);
+        return static_cast<bool>(file);
+    };
+    if (!write_text(map_path.parent_path() / "resources.yaml", [&](std::ostream& file) {
+            file << "resources:\n";
+            for (const auto& resource : map.resource_depots) {
+                file << "  - id: \"" << resource.id << "\"\n    type: \"" << resource.type << "\"\n";
+                file << "    position: [" << resource.x << ", " << resource.y << "]\n";
+                file << "    amount: " << resource.amount << "\n    radius: " << resource.radius << "\n    quality: " << resource.quality << "\n";
+            }
+        }) || !write_text(map_path.parent_path() / "spawnpoints.yaml", [&](std::ostream& file) {
+            file << "spawnpoints:\n";
+            for (const auto& spawn : map.spawn_points) {
+                file << "  - id: \"" << spawn.id << "\"\n    faction: \"" << spawn.faction << "\"\n";
+                file << "    position: [" << spawn.x << ", " << spawn.y << "]\n";
+                file << "    heading: " << spawn.heading << "\n    type: \"" << spawn.type << "\"\n";
+            }
+        }) || !write_text(map_path.parent_path() / "entities.yaml", [&](std::ostream& file) {
+            file << "entities:\n";
+            for (const auto& entity : map.initial_entities) {
+                file << "  - id: \"" << entity.id << "\"\n    type: \"" << entity.type << "\"\n";
+                file << "    content_id: \"" << entity.content_id << "\"\n";
+                file << "    position: [" << entity.x << ", " << entity.y << "]\n";
+                file << "    heading: " << entity.heading << "\n";
+                file << "    velocity: [" << entity.velocity_x << ", " << entity.velocity_y << "]\n    hp: " << entity.hp << "\n";
+            }
+        })) {
+        add_error("Failed to write map sidecar data");
+        return false;
+    }
+    return true;
 }
 
 bool MapLoader::validate_map(const MapData& map) {

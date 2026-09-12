@@ -26,6 +26,11 @@ integration suite proves the path. This is development spawning only;
 dependency resolution/version enforcement, content replacement, and map
 save/load remain open before Goal 05 can close.
 
+The map-editor foundation now has a deterministic native save/load path. It
+round-trips a YAML header and terrain/resource/spawn/entity sidecars with
+assertions over editable data. An interactive editor UI and remaining map
+validation rules are still open Goal 05 work.
+
 ## Gameplay Validation Package — 2026-09-12
 
 `tools/validate` now runs four registered, deterministic validations: real-input Field Engineer selection/movement, cursor-anchored strategic zoom, airfield-gated fighter ferry ingress, and a three-run 1,000-unit native benchmark. Every run writes a schema-checked report and logs beneath the gitignored `validation/artifacts/` tree. Godot script errors, missing reports, failed assertions, malformed schemas, missing requested captures, and visual mismatches propagate non-zero status.

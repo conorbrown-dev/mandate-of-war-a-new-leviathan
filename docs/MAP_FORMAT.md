@@ -1,5 +1,12 @@
 # Map Format
 
+> **Goal 05 status (2026-09-12):** `MapLoader::save_map()` and `load_map()`
+> round-trip an editable YAML map header plus `terrain.bin`, `resources.yaml`,
+> `spawnpoints.yaml`, and `entities.yaml`. The native assertion preserves
+> terrain samples, resource data, spawn heading, and entity content/velocity.
+> This is the serialization foundation; an interactive Godot map-editor UI is
+> still future work.
+
 ## Objective
 
 Define a data-driven map format supporting terrain, entities, resource deposits, spawns, and objectives. Maps must be deterministic for simulation reproducibility and scalable to large areas.
@@ -182,6 +189,15 @@ Map hash = SHA-256(
 ```
 
 ## Map Loading
+
+### Save/load contract
+
+`save_map(path, map)` accepts a non-JSON map path only after `validate_map()`
+passes. It writes the header at `path` and the four named sidecars beside it.
+Floats use `max_digits10` precision and terrain uses native little-endian
+float32 samples. Failed validation or any failed write returns `false` and
+records a `MapLoadError`; callers must not treat a partial write as a saved
+map.
 
 ### C++ Interface
 
