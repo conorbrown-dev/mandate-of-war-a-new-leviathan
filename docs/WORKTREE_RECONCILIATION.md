@@ -3,17 +3,19 @@
 **Date:** 2026-09-12
 **Authority:** This record reconciles the local Git object graph, working trees, stash, and fresh validation. It supersedes unsupported completion claims in historical status documents.
 
-## Repository boundaries
+## Repository boundaries and integration result
 
-- Current `main`: `184613211256f16d4e24a1635d79f77cd4e8f36b` (`Start the playable scenario with field engineers`).
+- Current `main`: merge commit `7332fc5` (`Merge recovered pre-model-integration work`).
+- The current dirty-tree implementation was committed as `a14cc79` (`Integrate current RTS implementation and validation work`).
+- The recovered pre-model-integration tracked/source/content slice was committed as `abf5684` and merged into `main` by `7332fc5`.
 - The historically cited checkpoint `9c295bf` is not an object in this repository. Do not cite it as a baseline or source of verified behavior.
-- The registered `feature/model-integration-pack` branch points to `d41b6a7`, an ancestor of `main`; it has no unique commits to merge.
+- The registered `feature/model-integration-pack` branch points to `d41b6a7`, now an ancestor of `main`; it had no unique commits to merge.
 - Its registered external worktree at `/home/conor/repos/near-future-rts-game-model-integration-pack` is unavailable because its `.git` file points at a missing Git directory. Do not prune, repair, remove, or recreate it without explicit authorization.
-- `stash@{0}` (`pre-model-integration-merge-preserve`) contains a broad 51-file pre-model-integration change set. It is preserved user work, not part of `main`, and was not applied during reconciliation.
+- `stash@{0}` (`pre-model-integration-merge-preserve`) is retained as a recovery record. Its repository-owned tracked/source/content changes are in `abf5684` and therefore `main`. Its only excluded payload is the ignored external dependency cache: the 140 MB Godot binaries and 1.4 GB `downloaded_assets/` directory remain on disk but are not version-controlled.
 
 ## Current dirty-tree implementation
 
-The checkout contains substantial tracked modifications and untracked files beyond `main`, including terrain/road/off-road systems, territorial control, production and command changes, Godot presentation/UI work, validation tooling, scenarios, and documentation. These changes are retained in place. Their existence must be reported separately from committed `main`; they must not be discarded, reset, or silently folded into a historical milestone claim.
+The checkout's terrain/road/off-road systems, territorial control, production and command changes, Godot presentation/UI work, validation tooling, scenarios, generated repository assets, and documentation are committed to `main`. They remain candidate functionality rather than accepted milestone proof; merging work does not change the sequential acceptance gates.
 
 ## Fresh evidence
 
