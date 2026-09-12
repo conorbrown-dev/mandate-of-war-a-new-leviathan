@@ -15,6 +15,17 @@ The logistics benchmark previously measured 10,000 tanks and zero logistics oper
 
 The previously cited `9c295bf` baseline is absent. Existing text below records implementation history and candidate functionality; it must not be read as current sequential-goal sign-off.
 
+## Goal 05 progress — generated unit vertical slice
+
+`generate.py` no longer writes `null` over default fields when optional CLI
+arguments are omitted. A manifest-declared generated unit and its procedural
+placeholder mesh are schema-validated by `ModManager`, receive a stable
+content handle, and can be spawned into `Simulation` with authored health,
+weapon values, movement speed, view range, and requested faction. The direct
+integration suite proves the path. This is development spawning only;
+dependency resolution/version enforcement, content replacement, and map
+save/load remain open before Goal 05 can close.
+
 ## Gameplay Validation Package — 2026-09-12
 
 `tools/validate` now runs four registered, deterministic validations: real-input Field Engineer selection/movement, cursor-anchored strategic zoom, airfield-gated fighter ferry ingress, and a three-run 1,000-unit native benchmark. Every run writes a schema-checked report and logs beneath the gitignored `validation/artifacts/` tree. Godot script errors, missing reports, failed assertions, malformed schemas, missing requested captures, and visual mismatches propagate non-zero status.

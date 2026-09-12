@@ -6,10 +6,17 @@
 #include <unordered_set>
 #include <optional>
 #include <filesystem>
+#include <string_view>
+
+#include "content_id/content_id.hpp"
+#include "ecs/entity.hpp"
+#include "ecs/components/factions.hpp"
 
 namespace fs = std::filesystem;
 
 namespace rts {
+
+class Simulation;
 
 struct Dependency {
     std::string id;
@@ -37,6 +44,23 @@ struct ModManifest {
     std::unordered_map<std::string, std::unordered_map<std::string, std::string>> balance_overrides;
 };
 
+// A deliberately small development-time bridge from a generated unit file to
+// the simulation. It keeps authored gameplay values data-driven without
+// widening the fixed production UnitType enum before the mod schema is mature.
+struct GeneratedUnitDefinition {
+    ContentHandle content;
+    std::string name;
+    std::filesystem::path source_path;
+    std::filesystem::path placeholder_mesh_path;
+    float health = 0.0f;
+    float speed = 0.0f;
+    float view_range = 0.0f;
+    float attack_range = 0.0f;
+    float attack_damage = 0.0f;
+    float attack_cooldown = 0.0f;
+    std::string movement_type;
+};
+
 class ModManifestLoader {
 public:
     ModManifestLoader() = default;
@@ -59,14 +83,21 @@ public:
     bool load_base_content(const fs::path& base_dir);
     std::vector<std::string> get_load_errors() const;
     const std::vector<ModManifest>& get_loaded_manifests() const { return loaded_manifests_; }
+    const std::vector<GeneratedUnitDefinition>& generated_units() const { return generated_units_; }
+    Entity spawn_generated_unit(Simulation& simulation, std::string_view content_id,
+                                float x, float y, FactionId faction_id) const;
     
 private:
     std::vector<ModManifest> loaded_manifests_;
     std::vector<std::string> load_errors_;
     std::unordered_set<std::string> loaded_mod_ids_;
+    ContentRegistry content_registry_;
+    std::vector<GeneratedUnitDefinition> generated_units_;
     
     bool resolve_dependencies();
     bool topological_sort();
+    std::optional<GeneratedUnitDefinition> load_generated_unit(
+        const ModManifest& manifest, const fs::path& mod_dir, const ContentEntry& entry);
 };
 
 } // namespace rts

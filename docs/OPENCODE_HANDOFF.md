@@ -21,6 +21,8 @@
 
 **Current boundary:** Goal 04 is verified: the full behavior suite, focused review, Release build, CTest 3/3, direct integration 167/167, and logistics benchmark all passed. Goal 05 is active; begin with `05_MODDING_ASSET_PIPELINE_MAP_EDITOR.md` and do not advance until its end-to-end mod/map acceptance proof and review are complete.
 
+**Goal 05 progress:** The generated-unit development path is now proven: `generate.py` emits linked unit/mesh metadata without nulling defaults; `ModManager` validates a manifest-declared generated unit; and the integration suite spawns it with authored data. Dependency ordering/version constraints and map save/load are the next unverified acceptance slices.
+
 **Last verified:** 2026-09-12
 
 **Validation handoff:** Start with `docs/validation/VALIDATION_BASELINE.md`, `RUNNING_TESTS.md`, and `SCENARIO_CATALOG.md`. `tools/validate all` runs the four registered scenarios; `tools/test` runs the broader build/native/Godot/validation sweep. Generated evidence is under gitignored `validation/artifacts/`. Strategic-zoom baselines are committed under `validation/baselines/` at an empirically established 0.995 threshold. Do not update them implicitly.

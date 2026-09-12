@@ -29,7 +29,14 @@ ContentHandle ContentRegistry::register_content(const std::string& type, const s
     
     auto it = registry_.find(id);
     if (it != registry_.end()) {
-        collision_ids_.insert(id);
+        // Re-registering the same canonical content is normal during reloads.
+        // A collision exists only if the SHA-256 digest maps a different
+        // canonical identity, in which case never overwrite the original.
+        if (it->second.content_type != type || it->second.namespace_id != namespace_id ||
+            it->second.identifier != identifier) {
+            collision_ids_.insert(id);
+        }
+        return it->second;
     }
     
     ContentHandle handle;
@@ -38,7 +45,7 @@ ContentHandle ContentRegistry::register_content(const std::string& type, const s
     handle.namespace_id = namespace_id;
     handle.identifier = identifier;
     
-    registry_[id] = handle;
+    registry_.emplace(id, handle);
     return handle;
 }
 

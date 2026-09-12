@@ -1,0 +1,15 @@
+{
+  "id": "test_mod_1_t1_heavy",
+  "name": "Test Mod Heavy",
+  "faction": "test_mod_1",
+  "tier": 1,
+  "role": "heavy",
+  "health": 150,
+  "speed": 1.4,
+  "view_range": 30,
+  "attack_range": 24,
+  "attack_damage": 10,
+  "attack_cooldown": 3.0,
+  "movement_type": "ground",
+  "placeholder_mesh": "meshes/test_mod_1_t1_heavy.mesh.json"
+}

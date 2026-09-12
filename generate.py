@@ -82,9 +82,9 @@ def generate_unit(faction: str, tier: int, role: str, **kwargs) -> dict:
         unit["attack_range"] = int(unit["attack_range"] * 1.5)
         unit["role"] = "support"
     
-    # Additional kwargs override
+    # Do not let omitted optional CLI arguments turn valid defaults into JSON null.
     for key, value in kwargs.items():
-        if key in unit:
+        if key in unit and value is not None:
             unit[key] = value
     
     return unit
@@ -146,10 +146,10 @@ def main():
         cost=args.cost
     )
     
+    mesh_path = generate_mesh(unit, args.output)
+    unit["placeholder_mesh"] = str(mesh_path.relative_to(args.output))
     unit_path = save_unit(unit, args.output)
     print(f"Generated unit: {unit_path}")
-    
-    mesh_path = generate_mesh(unit, args.output)
     print(f"Generated mesh: {mesh_path}")
     
     return 0

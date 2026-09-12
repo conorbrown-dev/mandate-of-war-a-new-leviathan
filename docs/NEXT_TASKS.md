@@ -5,8 +5,9 @@
 ## Active: Goal 05 — modding, asset pipeline, map editor
 
 1. Read `05_MODDING_ASSET_PIPELINE_MAP_EDITOR.md` and reconcile its acceptance criteria with current code.
-2. Select one narrow, end-to-end Goal 05 proof path: load a test mod, spawn its generated unit, and save/load a map.
-3. Add behavior assertions and perform the required modding/asset/map review before advancing.
+2. Verified slice: load a test mod, validate its generated unit and placeholder mesh, and spawn it through the development simulation bridge.
+3. Next: make manifest dependency resolution/version constraints transactional and deterministic; then implement and assert a map save/load round-trip.
+4. Add behavior assertions and perform the required modding/asset/map review before advancing.
 
 ## Gated work
 

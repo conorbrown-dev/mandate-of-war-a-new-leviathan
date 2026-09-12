@@ -1,6 +1,7 @@
 #include "test_framework.hpp"
 #include "mod/mod_manifest.hpp"
 #include "content_id/content_id.hpp"
+#include "simulation/simulation.hpp"
 
 #include <filesystem>
 #include <fstream>
@@ -46,7 +47,7 @@ TEST(mod_manifest_load_valid) {
         throw std::runtime_error("Wrong dependency version constraint");
     }
     
-    if (manifest.units.size() != 2) {
+    if (manifest.units.size() != 1) {
         throw std::runtime_error("Wrong unit count");
     }
 }
@@ -186,11 +187,29 @@ TEST(mod_manifest_load_mod) {
         throw std::runtime_error("Wrong mod ID in loaded manifests");
     }
     
-    if (manifests[0].units.size() != 2) {
+    if (manifests[0].units.size() != 1) {
         throw std::runtime_error("Wrong unit count in manifest");
     }
     
-    if (manifests[0].factions.size() != 1) {
-        throw std::runtime_error("Wrong faction count in manifest");
+    if (manager.generated_units().size() != 1) {
+        throw std::runtime_error("Expected one validated generated unit");
+    }
+    const auto& generated = manager.generated_units().front();
+    if (generated.name != "test_mod_1_t1_heavy" || !fs::is_regular_file(generated.placeholder_mesh_path)) {
+        throw std::runtime_error("Generated unit metadata was not loaded");
+    }
+
+    rts::Simulation simulation;
+    const auto spawned = manager.spawn_generated_unit(simulation, generated.content.id, 0.0f, 0.0f,
+                                                      rts::FactionId::MASS_WARFARE);
+    if (!spawned.valid()) {
+        throw std::runtime_error("Validated generated unit must be spawnable");
+    }
+    float health = 0.0f;
+    float max_health = 0.0f;
+    rts::FactionId faction = rts::FactionId::ELITE_PRECISION;
+    if (!simulation.get_unit_health(spawned.id, health, max_health) || health != 150.0f || max_health != 150.0f ||
+        !simulation.get_unit_faction_id(spawned.id, faction) || faction != rts::FactionId::MASS_WARFARE) {
+        throw std::runtime_error("Spawned generated unit did not receive authored runtime data");
     }
 }

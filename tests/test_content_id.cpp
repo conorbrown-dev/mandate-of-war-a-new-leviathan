@@ -10,6 +10,9 @@ TEST(content_id_deterministic_generation) {
     if (h1.id != h2.id) {
         throw std::runtime_error("Same content must produce same ID");
     }
+    if (registry.has_collision(h1.id) || registry.registry_size() != 1) {
+        throw std::runtime_error("Idempotent registration must not create a collision or duplicate entry");
+    }
 }
 
 TEST(content_id_unique_for_different_content) {

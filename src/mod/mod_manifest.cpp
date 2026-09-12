@@ -1,8 +1,12 @@
 #include "mod_manifest.hpp"
+#include "data/json_parser.hpp"
+#include "simulation/simulation.hpp"
+#include "ecs/components/faction.hpp"
 #include <fstream>
 #include <sstream>
 #include <regex>
 #include <algorithm>
+#include <cmath>
 
 namespace rts {
 
@@ -285,13 +289,137 @@ bool ModManager::load_mod(const fs::path& mod_dir) {
         return false;
     }
     
+    std::vector<GeneratedUnitDefinition> loaded_units;
+    for (const auto& entry : manifest.units) {
+        auto generated_unit = load_generated_unit(manifest, mod_dir, entry);
+        if (!generated_unit) {
+            return false;
+        }
+        if (std::any_of(loaded_units.begin(), loaded_units.end(), [&](const auto& existing) {
+                return existing.content.id == generated_unit->content.id;
+            })) {
+            load_errors_.push_back("Duplicate generated unit content ID: " + generated_unit->name);
+            return false;
+        }
+        loaded_units.push_back(std::move(*generated_unit));
+    }
+
     ModManifest full_manifest = manifest;
-    full_manifest.id = manifest.id;
     
     loaded_manifests_.push_back(full_manifest);
     loaded_mod_ids_.insert(manifest.id);
+    generated_units_.insert(generated_units_.end(), loaded_units.begin(), loaded_units.end());
     
     return true;
+}
+
+std::optional<GeneratedUnitDefinition> ModManager::load_generated_unit(
+    const ModManifest& manifest, const fs::path& mod_dir, const ContentEntry& entry) {
+    if (entry.path.empty() || entry.path.is_absolute() || entry.path.lexically_normal().string().starts_with("..")) {
+        load_errors_.push_back("Invalid mod unit path: " + entry.path.string());
+        return std::nullopt;
+    }
+
+    const fs::path source_path = mod_dir / entry.path;
+    const auto raw = ModManifestLoader{}.read_file(source_path);
+    if (!raw) {
+        load_errors_.push_back("Missing mod unit definition: " + source_path.string());
+        return std::nullopt;
+    }
+    const auto parsed = data::JsonParser::parse(*raw);
+    if (!parsed || parsed->type() != data::JsonValue::Type::Object) {
+        load_errors_.push_back("Invalid JSON mod unit definition: " + source_path.string());
+        return std::nullopt;
+    }
+
+    const auto id = parsed->get("id");
+    const auto health = parsed->get("health");
+    const auto speed = parsed->get("speed");
+    const auto view_range = parsed->get("view_range");
+    const auto attack_range = parsed->get("attack_range");
+    const auto attack_damage = parsed->get("attack_damage");
+    const auto attack_cooldown = parsed->get("attack_cooldown");
+    const auto movement_type = parsed->get("movement_type");
+    const auto mesh = parsed->get("placeholder_mesh");
+    if (!id || !health || !speed || !view_range || !attack_range || !attack_damage || !attack_cooldown || !movement_type || !mesh ||
+        id->type() != data::JsonValue::Type::String || health->type() != data::JsonValue::Type::Number ||
+        speed->type() != data::JsonValue::Type::Number || view_range->type() != data::JsonValue::Type::Number ||
+        attack_range->type() != data::JsonValue::Type::Number || attack_damage->type() != data::JsonValue::Type::Number ||
+        attack_cooldown->type() != data::JsonValue::Type::Number || movement_type->type() != data::JsonValue::Type::String ||
+        mesh->type() != data::JsonValue::Type::String) {
+        load_errors_.push_back("Generated unit schema is incomplete: " + source_path.string());
+        return std::nullopt;
+    }
+
+    const fs::path mesh_relative = fs::path(mesh->as_string()).lexically_normal();
+    if (mesh_relative.empty() || mesh_relative.is_absolute() || mesh_relative.string().starts_with("..")) {
+        load_errors_.push_back("Invalid generated unit placeholder mesh path: " + mesh->as_string());
+        return std::nullopt;
+    }
+    const fs::path mesh_path = source_path.parent_path() / mesh_relative;
+    if (!fs::is_regular_file(mesh_path)) {
+        load_errors_.push_back("Generated unit placeholder mesh is missing: " + mesh_path.string());
+        return std::nullopt;
+    }
+    const auto mesh_raw = ModManifestLoader{}.read_file(mesh_path);
+    const auto mesh_json = mesh_raw ? data::JsonParser::parse(*mesh_raw) : std::nullopt;
+    const auto mesh_unit_id = mesh_json ? mesh_json->get("unit_id") : std::nullopt;
+    if (!mesh_unit_id || mesh_unit_id->type() != data::JsonValue::Type::String || mesh_unit_id->as_string() != id->as_string()) {
+        load_errors_.push_back("Generated unit placeholder mesh does not match definition: " + mesh_path.string());
+        return std::nullopt;
+    }
+
+    const auto finite_positive = [](double value) { return std::isfinite(value) && value > 0.0; };
+    if (!finite_positive(health->as_number()) || !finite_positive(speed->as_number()) || !finite_positive(view_range->as_number()) ||
+        !finite_positive(attack_range->as_number()) || !finite_positive(attack_damage->as_number()) || !finite_positive(attack_cooldown->as_number())) {
+        load_errors_.push_back("Generated unit numeric values must be finite and positive: " + source_path.string());
+        return std::nullopt;
+    }
+    if (movement_type->as_string() != "ground" && movement_type->as_string() != "air" &&
+        movement_type->as_string() != "naval") {
+        load_errors_.push_back("Generated unit movement_type is unsupported: " + movement_type->as_string());
+        return std::nullopt;
+    }
+
+    GeneratedUnitDefinition definition;
+    definition.content = content_registry_.register_content("unit", manifest.id, id->as_string());
+    if (content_registry_.has_collision(definition.content.id)) {
+        load_errors_.push_back("Generated unit content ID collision: " + id->as_string());
+        return std::nullopt;
+    }
+    definition.name = id->as_string();
+    definition.source_path = source_path;
+    definition.placeholder_mesh_path = mesh_path;
+    definition.health = static_cast<float>(health->as_number());
+    definition.speed = static_cast<float>(speed->as_number());
+    definition.view_range = static_cast<float>(view_range->as_number());
+    definition.attack_range = static_cast<float>(attack_range->as_number());
+    definition.attack_damage = static_cast<float>(attack_damage->as_number());
+    definition.attack_cooldown = static_cast<float>(attack_cooldown->as_number());
+    definition.movement_type = movement_type->as_string();
+    return definition;
+}
+
+Entity ModManager::spawn_generated_unit(Simulation& simulation, std::string_view content_id,
+                                        float x, float y, FactionId faction_id) const {
+    const auto found = std::find_if(generated_units_.begin(), generated_units_.end(), [&](const auto& unit) {
+        return unit.content.id == content_id;
+    });
+    if (found == generated_units_.end()) return {};
+
+    Entity entity = simulation.create_unit(x, y);
+    if (entity.id == INVALID_ENTITY) return {};
+    auto& components = simulation.component_manager();
+    auto* health = components.get_component<Health>(entity.id);
+    auto* weapon = components.get_component<Weapon>(entity.id);
+    auto* faction = components.get_component<Faction>(entity.id);
+    if (!health || !weapon || !faction) return {};
+    *health = {found->health, found->health};
+    *weapon = {found->attack_range, found->attack_damage, found->attack_cooldown, 0.0f,
+               found->attack_range, 0.5f, 0.0f, 0.0f};
+    *faction = {faction_id};
+    components.add_component(entity.id, UnitData{found->speed, found->view_range});
+    return entity;
 }
 
 bool ModManager::load_base_content(const fs::path& base_dir) {

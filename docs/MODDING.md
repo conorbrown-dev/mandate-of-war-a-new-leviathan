@@ -1,5 +1,12 @@
 # Modding
 
+> **Goal 05 status (2026-09-12):** A manifest-declared generated unit is now
+> schema-validated with its placeholder mesh, assigned a stable SHA-256 content
+> handle, and spawnable through the development simulation bridge. Dependency
+> ordering/version enforcement, replacement semantics, and scripts remain
+> unimplemented acceptance work; the Lua sections below are design direction,
+> not a shipped runtime.
+
 ## Objective
 
 Treat modding as a first-class requirement. Design mods to add:
@@ -27,7 +34,9 @@ Stable content IDs are the foundation of the modding system. They must be:
 - reproducible: same input always yields same output
 - portable: consistent across platforms
 
-**Format:** `SHA-256(content_type|namespace|identifier)[:8]`
+**Format:** full `SHA-256(content_type|namespace|identifier)` hex digest. The
+full digest avoids a truncation collision boundary; re-registering the same
+canonical identity is idempotent rather than a collision.
 
 **Example:** `unit|faction_a|t1_interceptor` → `b7a38f2e`
 

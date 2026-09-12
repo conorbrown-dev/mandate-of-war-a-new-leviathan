@@ -1,5 +1,11 @@
 # Asset Pipeline
 
+> **Goal 05 status (2026-09-12):** `generate.py` produces a unit JSON file and
+> procedural placeholder mesh metadata as a linked pair. The generated file is
+> valid only when optional CLI values preserve defaults and its
+> `placeholder_mesh` resolves to a matching mesh `unit_id`; this contract is
+> exercised by the load-and-spawn integration test.
+
 ## Objective
 
 Build an automated asset pipeline centered on Blender, enabling content expansion without hand-authoring every asset. The pipeline must not require proprietary cloud services.
