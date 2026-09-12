@@ -578,7 +578,7 @@ TEST(scenario_complete_logistics_test_map) {
     simulation.logistics_manager().update_intelligence(recon.id, 1500.0f, land_y, 2000);
 
      simulation.destroy_unit(recon.id);
-     auto* intel = simulation.component_manager().get_component<Intelligence>(recon.id);
+     auto* intel = simulation.logistics_manager().get_intelligence(recon.id);
      if (!intel || std::abs(intel->last_x - 1500.0f) > 0.001f ||
          std::abs(intel->last_y - land_y) > 0.001f || intel->last_seen_tick != 2000)
          throw std::runtime_error("scenario_complete_logistics_test_map_intel_not_preserved");

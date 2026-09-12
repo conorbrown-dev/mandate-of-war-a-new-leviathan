@@ -368,7 +368,7 @@ void LogisticsManager::update_intelligence(EntityId entity_id, float x, float y,
     intel.last_seen_tick = tick;
     intel.freshness = 1.0f;
     intel.currently_observed = true;
-    
+    intelligence_memory_.erase(entity_id);
     component_manager_->add_component<Intelligence>(entity_id, intel);
 }
 
@@ -377,7 +377,26 @@ Intelligence* LogisticsManager::get_intelligence(EntityId entity_id) {
         return nullptr;
     }
     
-    return component_manager_->get_component<Intelligence>(entity_id);
+    if (auto* live = component_manager_->get_component<Intelligence>(entity_id)) {
+        return live;
+    }
+    auto remembered = intelligence_memory_.find(entity_id);
+    return remembered == intelligence_memory_.end() ? nullptr : &remembered->second;
+}
+
+void LogisticsManager::archive_intelligence(EntityId entity_id) {
+    if (!component_manager_) {
+        return;
+    }
+    if (const auto* intel = component_manager_->get_component<Intelligence>(entity_id)) {
+        Intelligence remembered = *intel;
+        remembered.currently_observed = false;
+        intelligence_memory_[entity_id] = remembered;
+    }
+}
+
+void LogisticsManager::clear_intelligence_memory(EntityId entity_id) {
+    intelligence_memory_.erase(entity_id);
 }
 
 std::vector<EntityId> LogisticsManager::get_stale_intelligence(uint32_t current_tick, uint32_t stale_threshold) {
@@ -399,6 +418,13 @@ std::vector<EntityId> LogisticsManager::get_stale_intelligence(uint32_t current_
             stale.push_back(entity_id);
         }
     }
+    for (const auto& [entity_id, intel] : intelligence_memory_) {
+        if (!intel.currently_observed && (current_tick - intel.last_seen_tick) > stale_threshold) {
+            stale.push_back(entity_id);
+        }
+    }
+    std::sort(stale.begin(), stale.end());
+    stale.erase(std::unique(stale.begin(), stale.end()), stale.end());
     
     return stale;
 }
@@ -1076,6 +1102,12 @@ void LogisticsManager::update_all(float delta_ms) {
             intel->freshness = std::max(0.0f, intel->freshness - staleness_rate);
         }
     }
+    for (auto& [entity_id, intel] : intelligence_memory_) {
+        (void)entity_id;
+        if (!intel.currently_observed && intel.freshness > 0.0f) {
+            intel.freshness = std::max(0.0f, intel.freshness - staleness_rate);
+        }
+    }
 }
 
 // Verification methods for testing
@@ -1144,6 +1176,10 @@ bool LogisticsManager::verify_intelligence_staleness(EntityId intel_id, uint32_t
 
     auto* intel = component_manager_->get_component<Intelligence>(intel_id);
     if (!intel) {
+        auto remembered = intelligence_memory_.find(intel_id);
+        intel = remembered == intelligence_memory_.end() ? nullptr : &remembered->second;
+    }
+    if (!intel) {
         return false;
     }
 
@@ -1211,6 +1247,7 @@ void LogisticsManager::reset() {
     for (auto entity_id : intel_entities) {
         component_manager_->remove_component<Intelligence>(entity_id);
     }
+    intelligence_memory_.clear();
 
     auto airbase_entities = component_manager_->entities_with<Airbase>();
     for (auto entity_id : airbase_entities) {

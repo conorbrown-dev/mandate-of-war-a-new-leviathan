@@ -48,6 +48,8 @@ public:
     void update_intelligence(EntityId entity_id, float x, float y, uint32_t tick);
     Intelligence* get_intelligence(EntityId entity_id);
     std::vector<EntityId> get_stale_intelligence(uint32_t current_tick, uint32_t stale_threshold);
+    void archive_intelligence(EntityId entity_id);
+    void clear_intelligence_memory(EntityId entity_id);
 
     // Endurance updates
     void update_aircraft_endurance(EntityId aircraft_id, float delta_ms);
@@ -158,6 +160,7 @@ private:
     std::map<RecoveryFacility::Type, std::vector<EntityId>> recovery_facilities_by_type_;
     std::map<FacilityLookupKey, FacilityLookupCacheEntry> facility_lookup_cache_;
     std::map<EntityId, SafeReturnCacheEntry> safe_return_cache_;
+    std::map<EntityId, Intelligence> intelligence_memory_;
     uint64_t facility_revision_ = 0;
     size_t safe_return_cache_hits_ = 0;
     size_t safe_return_cache_misses_ = 0;

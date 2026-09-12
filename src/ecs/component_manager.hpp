@@ -70,11 +70,7 @@ public:
     }
 
     void remove_entity(EntityId entity) {
-        auto intel_type = component_type<Intelligence>();
         for (auto& [type, storage] : storages_) {
-            if (type == intel_type) {
-                continue;
-            }
             storage->erase(entity);
         }
         masks_.erase(entity);

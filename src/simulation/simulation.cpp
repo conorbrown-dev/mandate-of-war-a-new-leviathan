@@ -242,6 +242,7 @@ Entity Simulation::create_unit(float x, float y) {
     if (theater_water_rules_enabled_ && !is_land_position(x, y)) return Entity{};
 
     Entity entity = entity_manager_.create_entity();
+    logistics_manager_.clear_intelligence_memory(entity.id);
     
     Position pos = {x, y, 0.0f};
     Velocity vel = {0.0f, 0.0f, 0.0f};
@@ -1120,6 +1121,7 @@ void Simulation::destroy_unit(EntityId entity) {
     combat_manager_.unregister_entity(entity);
     move_targets_.erase(entity);
     patrol_orders_.erase(entity);
+    logistics_manager_.archive_intelligence(entity);
     logistics_manager_.remove_aircraft(entity);
     component_manager_.remove_entity(entity);
     spatial_grid_.remove(entity);

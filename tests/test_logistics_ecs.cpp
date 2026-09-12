@@ -599,6 +599,26 @@ TEST(simulation_movement_keeps_carrier_recovery_position_in_sync) {
     }
 }
 
+TEST(intelligence_memory_does_not_leak_across_entity_id_reuse) {
+    ComponentManager component_manager;
+    LogisticsManager manager;
+    manager.set_component_manager(&component_manager);
+    constexpr EntityId reused_id = 7;
+    manager.update_intelligence(reused_id, 10.0f, 20.0f, 7);
+    manager.archive_intelligence(reused_id);
+    component_manager.remove_component<Intelligence>(reused_id);
+
+    const Intelligence* remembered = manager.get_intelligence(reused_id);
+    if (!remembered || remembered->currently_observed || remembered->last_seen_tick != 7) {
+        throw std::runtime_error("destroyed_entity_intelligence_not_archived");
+    }
+
+    manager.clear_intelligence_memory(reused_id);
+    if (manager.get_intelligence(reused_id) != nullptr) {
+        throw std::runtime_error("intelligence_leaked_across_entity_id_reuse");
+    }
+}
+
 TEST(unusable_runway_exhaustion_removes_aircraft_and_cleans_queue) {
     Simulation simulation;
     simulation.start();
