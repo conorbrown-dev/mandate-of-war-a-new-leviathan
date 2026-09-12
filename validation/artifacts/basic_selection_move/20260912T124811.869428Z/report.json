@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 1,
+  "scenarioId": "basic_selection_move",
+  "runId": "20260912T124811.869428Z",
+  "status": "FAIL",
+  "seed": 640640,
+  "startedAt": "2026-09-12T12:48:11.869639+00:00",
+  "durationMs": 0,
+  "assertions": [],
+  "metrics": {},
+  "artifacts": [],
+  "warnings": [],
+  "errors": [
+    "validation runner did not produce report.json",
+    "Godot exit code: 1"
+  ]
+}

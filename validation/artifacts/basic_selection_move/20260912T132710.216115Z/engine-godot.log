@@ -1,0 +1,22 @@
+Godot Engine v4.7.2.stable.official.ed1daf0bf - https://godotengine.org
+
+Visual-pack handshake ready: mandate_of_war.prototype_visuals v1
+Loaded heightmap with 102400 values
+generate_terrain_mesh called with height data size: 102400
+Mesh surface count after generation: 1
+Started Broken Strait with 1 player Field Engineer and 1 AI Field Engineer
+VALIDATION PASS [selection.engineer_exists] The player engineer exists
+VALIDATION PASS [selection.click_selects_engineer] A real left-click selects the engineer
+VALIDATION PASS [movement.valid_target_found] A nearby traversable order target was found
+VALIDATION PASS [movement.unit_moves] The selected engineer moves after the order
+VALIDATION PASS [movement.reaches_target] The engineer reaches the bounded target tolerance
+VALIDATION PASS [scenario.completed] Selection and movement scenario completed
+VALIDATION PASS [framework.scenario_returned] The scenario reached its explicit completion sentinel
+ERROR: VALIDATION FAIL [framework.forced_failure] Intentional failure requested for artifact-pipeline validation | {}
+   at: push_error (core/variant/variant_utility.cpp:1023)
+   GDScript backtrace (most recent call first):
+       [0] _check (res://validation/validation_runner.gd:404)
+       [1] _run (res://validation/validation_runner.gd:63)
+       [2] _scenario_basic_selection_move (res://validation/validation_runner.gd:135)
+       [3] _destroy_skirmish (res://validation/validation_runner.gd:81)
+VALIDATION REPORT /home/conor/repos/mandate-of-war/validation/artifacts/basic_selection_move/20260912T132710.216115Z/report.json

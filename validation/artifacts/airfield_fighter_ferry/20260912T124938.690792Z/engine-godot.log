@@ -1,0 +1,27 @@
+Godot Engine v4.7.2.stable.official.ed1daf0bf - https://godotengine.org
+
+Visual-pack handshake ready: mandate_of_war.prototype_visuals v1
+Loaded heightmap with 102400 values
+generate_terrain_mesh called with height data size: 102400
+Mesh surface count after generation: 1
+Started Broken Strait with 1 player Field Engineer and 1 AI Field Engineer
+VALIDATION PASS [air.engineer_exists] The player engineer exists
+VALIDATION PASS [air.airfield_queued] The engineer queues an airfield on valid land
+VALIDATION PASS [air.airfield_completes] The airfield completes within the bounded tick budget
+ERROR: VALIDATION FAIL [air.fighter_queued] The completed airfield accepts a fighter ferry request | {"after":0,"before":0}
+   at: push_error (core/variant/variant_utility.cpp:1023)
+   GDScript backtrace (most recent call first):
+       [0] _check (res://validation/validation_runner.gd:344)
+       [1] _scenario_airfield_fighter_ferry (res://validation/validation_runner.gd:199)
+       [2] _create_skirmish (res://validation/validation_runner.gd:67)
+VALIDATION PASS [air.fighter_arrives] A fighter entity arrives within the bounded tick budget
+VALIDATION PASS [air.fighter_enters_from_off_map] The fighter is created beyond the tactical map edge
+ERROR: VALIDATION FAIL [air.fighter_flies_onto_map] The fighter crosses onto the tactical battlefield | {"position":{"x":-20062.5,"y":0.0},"ticks":700}
+   at: push_error (core/variant/variant_utility.cpp:1023)
+   GDScript backtrace (most recent call first):
+       [0] _check (res://validation/validation_runner.gd:344)
+       [1] _scenario_airfield_fighter_ferry (res://validation/validation_runner.gd:225)
+       [2] _create_skirmish (res://validation/validation_runner.gd:67)
+VALIDATION PASS [scenario.completed] Airfield and fighter ferry scenario completed
+VALIDATION PASS [framework.scenario_returned] The scenario reached its explicit completion sentinel
+VALIDATION REPORT /home/conor/repos/mandate-of-war/validation/artifacts/airfield_fighter_ferry/20260912T124938.690792Z/report.json

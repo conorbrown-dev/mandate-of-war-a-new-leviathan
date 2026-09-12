@@ -1,0 +1,13 @@
+Godot Engine v4.7.2.stable.official.ed1daf0bf - https://godotengine.org
+
+Visual-pack handshake ready: mandate_of_war.prototype_visuals v1
+Loaded heightmap with 102400 values
+generate_terrain_mesh called with height data size: 102400
+Mesh surface count after generation: 1
+Started Broken Strait with 1 player Field Engineer and 1 AI Field Engineer
+SCRIPT ERROR: Invalid call. Nonexistent 'int' constructor.
+   at: _scenario_basic_selection_move (res://validation/validation_runner.gd:77)
+   GDScript backtrace (most recent call first):
+       [0] _scenario_basic_selection_move (res://validation/validation_runner.gd:77)
+       [1] _create_skirmish (res://validation/validation_runner.gd:66)
+VALIDATION REPORT /home/conor/repos/mandate-of-war/validation/artifacts/basic_selection_move/20260912T124833.053983Z/report.json

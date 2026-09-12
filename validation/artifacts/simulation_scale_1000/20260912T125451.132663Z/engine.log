@@ -1,0 +1,47 @@
+RUN 1
+Scale benchmark passed
+  units: 1000
+  ticks: 100
+  unique destinations: 100
+  moved units: 1000
+  command enqueue: 0.056 ms
+  cold field generation: 628.329 ms
+  cache-hit simulation tick avg/p50/p95/max: 0.723 / 0.698 / 0.786 / 2.040 ms
+  full state snapshot average: 0.017 ms
+  current RSS / scenario delta: 39.938 / 33.895 MiB
+  initial/final state hash: 16017355346249412490 / 1900853887894023210
+CSV
+units,ticks,destinations,enqueue_ms,field_generation_ms,tick_avg_ms,tick_p50_ms,tick_p95_ms,tick_max_ms,snapshot_avg_ms,moved_units,rss_mib,rss_delta_mib,initial_hash,final_hash
+1000,100,100,0.056,628.329,0.723,0.698,0.786,2.040,0.017,1000,39.938,33.895,16017355346249412490,1900853887894023210
+
+RUN 2
+Scale benchmark passed
+  units: 1000
+  ticks: 100
+  unique destinations: 100
+  moved units: 1000
+  command enqueue: 0.055 ms
+  cold field generation: 627.186 ms
+  cache-hit simulation tick avg/p50/p95/max: 0.727 / 0.703 / 0.790 / 2.040 ms
+  full state snapshot average: 0.016 ms
+  current RSS / scenario delta: 39.945 / 33.891 MiB
+  initial/final state hash: 16017355346249412490 / 1900853887894023210
+CSV
+units,ticks,destinations,enqueue_ms,field_generation_ms,tick_avg_ms,tick_p50_ms,tick_p95_ms,tick_max_ms,snapshot_avg_ms,moved_units,rss_mib,rss_delta_mib,initial_hash,final_hash
+1000,100,100,0.055,627.186,0.727,0.703,0.790,2.040,0.016,1000,39.945,33.891,16017355346249412490,1900853887894023210
+
+RUN 3
+Scale benchmark passed
+  units: 1000
+  ticks: 100
+  unique destinations: 100
+  moved units: 1000
+  command enqueue: 0.056 ms
+  cold field generation: 622.171 ms
+  cache-hit simulation tick avg/p50/p95/max: 0.720 / 0.692 / 0.777 / 2.071 ms
+  full state snapshot average: 0.017 ms
+  current RSS / scenario delta: 39.898 / 33.898 MiB
+  initial/final state hash: 16017355346249412490 / 1900853887894023210
+CSV
+units,ticks,destinations,enqueue_ms,field_generation_ms,tick_avg_ms,tick_p50_ms,tick_p95_ms,tick_max_ms,snapshot_avg_ms,moved_units,rss_mib,rss_delta_mib,initial_hash,final_hash
+1000,100,100,0.056,622.171,0.720,0.692,0.777,2.071,0.017,1000,39.898,33.898,16017355346249412490,1900853887894023210

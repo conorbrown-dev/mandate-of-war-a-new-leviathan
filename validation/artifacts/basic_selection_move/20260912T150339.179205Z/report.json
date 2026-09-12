@@ -1,0 +1,118 @@
+{
+  "artifacts": [
+    {
+      "kind": "log",
+      "path": "engine.log"
+    },
+    {
+      "kind": "godotLog",
+      "path": "engine-godot.log"
+    }
+  ],
+  "assertions": [
+    {
+      "diagnostics": {
+        "entity_id": 2
+      },
+      "id": "selection.engineer_exists",
+      "message": "The player engineer exists",
+      "status": "PASS"
+    },
+    {
+      "diagnostics": {
+        "selected_ids": [
+          2
+        ]
+      },
+      "id": "selection.click_selects_engineer",
+      "message": "A real left-click selects the engineer",
+      "status": "PASS"
+    },
+    {
+      "diagnostics": {
+        "start": {
+          "x": -14500.0,
+          "y": 2000.0
+        },
+        "target": {
+          "x": -14470.0,
+          "y": 2000.0
+        }
+      },
+      "id": "movement.valid_target_found",
+      "message": "A nearby traversable order target was found",
+      "status": "PASS"
+    },
+    {
+      "diagnostics": {
+        "distance_m": 25.6399784088135,
+        "end": {
+          "x": -14474.45,
+          "y": 2002.09
+        },
+        "start": {
+          "x": -14500.0,
+          "y": 2000.0
+        }
+      },
+      "id": "movement.unit_moves",
+      "message": "The selected engineer moves after the order",
+      "status": "PASS"
+    },
+    {
+      "diagnostics": {
+        "target_error_m": 4.91194772720337,
+        "tick_limit": 600,
+        "ticks": 556
+      },
+      "id": "movement.reaches_target",
+      "message": "The engineer reaches the bounded target tolerance",
+      "status": "PASS"
+    },
+    {
+      "diagnostics": {},
+      "id": "scenario.completed",
+      "message": "Selection and movement scenario completed",
+      "status": "PASS"
+    },
+    {
+      "diagnostics": {},
+      "id": "framework.scenario_returned",
+      "message": "The scenario reached its explicit completion sentinel",
+      "status": "PASS"
+    }
+  ],
+  "checkpoints": [
+    "engineer_selected",
+    "move_order_issued",
+    "engineer_arrived"
+  ],
+  "description": "Select the production Field Engineer through mouse input and move it to a terrain-picked destination.",
+  "durationMs": 250,
+  "environment": {
+    "display_server": "headless",
+    "godot_version": "4.7.2-stable (official)",
+    "headless": true,
+    "renderer": "gl_compatibility"
+  },
+  "errors": [],
+  "metrics": {
+    "check_count": 7,
+    "duration_ms": 250,
+    "failure_count": 0,
+    "moved_distance_m": 25.64,
+    "simulation_ticks": 556,
+    "target_error_m": 4.91
+  },
+  "runId": "20260912T150339.179205Z",
+  "scenarioId": "basic_selection_move",
+  "schemaVersion": 1,
+  "seed": 640640,
+  "startedAt": "2026-09-12T15:03:39.179297+00:00",
+  "status": "PASS",
+  "warnings": [
+    "Screenshot checkpoint 'engineer_selected' skipped because no render-capable display is available",
+    "Screenshot checkpoint 'move_order_issued' skipped because no render-capable display is available",
+    "Screenshot checkpoint 'engineer_arrived' skipped because no render-capable display is available"
+  ]
+}

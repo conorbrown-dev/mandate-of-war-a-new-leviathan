@@ -1,0 +1,101 @@
+{
+  "schemaVersion": 1,
+  "scenarioId": "simulation_scale_1000",
+  "runId": "20260912T133202.264081Z",
+  "status": "PASS",
+  "seed": 640640,
+  "startedAt": "2026-09-12T13:32:02.264180+00:00",
+  "durationMs": 2105,
+  "assertions": [
+    {
+      "id": "benchmark.three-successful-runs",
+      "status": "PASS",
+      "message": "three 1,000-unit benchmark runs completed with structured metrics"
+    },
+    {
+      "id": "benchmark.all-units-moved",
+      "status": "PASS",
+      "message": "all benchmark units moved in every run"
+    }
+  ],
+  "metrics": {
+    "entityCount": 1000,
+    "warmupTicks": 100,
+    "measurementTicks": 100,
+    "runs": [
+      {
+        "run": 1,
+        "exitCode": 0,
+        "entityCount": 1000,
+        "measurementTicks": 100,
+        "uniqueDestinations": 100,
+        "commandEnqueueMs": 0.056,
+        "coldFieldGenerationMs": 630.503,
+        "simulationMsAvg": 0.76,
+        "simulationMsP50": 0.725,
+        "simulationMsP95": 0.943,
+        "simulationMsMax": 2.097,
+        "snapshotMsAvg": 0.016,
+        "movedUnits": 1000,
+        "rssMiB": 39.879,
+        "rssDeltaMiB": 33.809,
+        "initialStateHash": "16017355346249412490",
+        "finalStateHash": "1900853887894023210"
+      },
+      {
+        "run": 2,
+        "exitCode": 0,
+        "entityCount": 1000,
+        "measurementTicks": 100,
+        "uniqueDestinations": 100,
+        "commandEnqueueMs": 0.055,
+        "coldFieldGenerationMs": 630.945,
+        "simulationMsAvg": 0.73,
+        "simulationMsP50": 0.704,
+        "simulationMsP95": 0.807,
+        "simulationMsMax": 2.316,
+        "snapshotMsAvg": 0.017,
+        "movedUnits": 1000,
+        "rssMiB": 39.945,
+        "rssDeltaMiB": 33.906,
+        "initialStateHash": "16017355346249412490",
+        "finalStateHash": "1900853887894023210"
+      },
+      {
+        "run": 3,
+        "exitCode": 0,
+        "entityCount": 1000,
+        "measurementTicks": 100,
+        "uniqueDestinations": 100,
+        "commandEnqueueMs": 0.055,
+        "coldFieldGenerationMs": 610.234,
+        "simulationMsAvg": 0.713,
+        "simulationMsP50": 0.686,
+        "simulationMsP95": 0.774,
+        "simulationMsMax": 2.055,
+        "snapshotMsAvg": 0.016,
+        "movedUnits": 1000,
+        "rssMiB": 39.902,
+        "rssDeltaMiB": 33.867,
+        "initialStateHash": "16017355346249412490",
+        "finalStateHash": "1900853887894023210"
+      }
+    ],
+    "variance": {
+      "simulationMsAvgMean": 0.7343333333333333,
+      "simulationMsAvgStdDev": 0.01943078885571958,
+      "simulationMsAvgRange": 0.04700000000000004
+    },
+    "methodology": "100 warm-up ticks and 100 measured cache-hit ticks per repository benchmark invocation; cold flow-field generation is reported separately"
+  },
+  "artifacts": [
+    {
+      "kind": "log",
+      "path": "engine.log"
+    }
+  ],
+  "warnings": [
+    "simulation benchmark only; this is not rendering FPS evidence"
+  ],
+  "errors": []
+}

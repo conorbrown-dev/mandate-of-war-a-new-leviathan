@@ -1,0 +1,141 @@
+{
+  "artifacts": [
+    {
+      "kind": "log",
+      "path": "engine.log"
+    },
+    {
+      "kind": "godotLog",
+      "path": "engine-godot.log"
+    }
+  ],
+  "assertions": [
+    {
+      "diagnostics": {
+        "entity_id": 2
+      },
+      "id": "air.engineer_exists",
+      "message": "The player engineer exists",
+      "status": "PASS"
+    },
+    {
+      "diagnostics": {
+        "position": {
+          "x": -15500.0,
+          "y": 1000.0
+        }
+      },
+      "id": "air.airfield_queued",
+      "message": "The engineer queues an airfield on valid land",
+      "status": "PASS"
+    },
+    {
+      "diagnostics": {
+        "tick_limit": 900,
+        "ticks": 720
+      },
+      "id": "air.airfield_completes",
+      "message": "The airfield completes within the bounded tick budget",
+      "status": "PASS"
+    },
+    {
+      "diagnostics": {},
+      "id": "air.airfield_view_exists",
+      "message": "The completed airfield has its production presentation",
+      "status": "PASS"
+    },
+    {
+      "diagnostics": {
+        "after": 1,
+        "before": 0
+      },
+      "id": "air.fighter_queued",
+      "message": "The completed airfield accepts a fighter ferry request",
+      "status": "PASS"
+    },
+    {
+      "diagnostics": {
+        "tick_limit": 700,
+        "ticks": 400
+      },
+      "id": "air.fighter_arrives",
+      "message": "A fighter entity arrives within the bounded tick budget",
+      "status": "PASS"
+    },
+    {
+      "diagnostics": {
+        "entry": {
+          "x": -20062.5,
+          "y": 0.0
+        }
+      },
+      "id": "air.fighter_enters_from_off_map",
+      "message": "The fighter is created beyond the tactical map edge",
+      "status": "PASS"
+    },
+    {
+      "diagnostics": {
+        "position": {
+          "x": -19999.5,
+          "y": 0.0
+        },
+        "ticks": 9
+      },
+      "id": "air.fighter_flies_onto_map",
+      "message": "The fighter crosses onto the tactical battlefield",
+      "status": "PASS"
+    },
+    {
+      "diagnostics": {},
+      "id": "scenario.completed",
+      "message": "Airfield and fighter ferry scenario completed",
+      "status": "PASS"
+    },
+    {
+      "diagnostics": {},
+      "id": "framework.scenario_returned",
+      "message": "The scenario reached its explicit completion sentinel",
+      "status": "PASS"
+    },
+    {
+      "diagnostics": {},
+      "id": "framework.forced_failure",
+      "message": "Intentional failure requested for artifact-pipeline validation",
+      "status": "FAIL"
+    }
+  ],
+  "checkpoints": [
+    "airfield_complete",
+    "fighter_ingress"
+  ],
+  "description": "Construct an airfield, request a runway fighter, and verify its paid off-map airborne ingress.",
+  "durationMs": 304,
+  "environment": {
+    "display_server": "headless",
+    "godot_version": "4.7.2-stable (official)",
+    "headless": true,
+    "renderer": "gl_compatibility"
+  },
+  "errors": [
+    "framework.forced_failure: Intentional failure requested for artifact-pipeline validation",
+    "ERROR: VALIDATION FAIL [framework.forced_failure] Intentional failure requested for artifact-pipeline validation | {}"
+  ],
+  "metrics": {
+    "airfield_completion_ticks": 720,
+    "check_count": 11,
+    "duration_ms": 304,
+    "failure_count": 1,
+    "fighter_delivery_ticks": 400,
+    "fighter_ingress_ticks": 9
+  },
+  "runId": "20260912T132709.397745Z",
+  "scenarioId": "airfield_fighter_ferry",
+  "schemaVersion": 1,
+  "seed": 640640,
+  "startedAt": "2026-09-12T13:27:09.397838+00:00",
+  "status": "FAIL",
+  "warnings": [
+    "Screenshot checkpoint 'airfield_complete' skipped because no render-capable display is available",
+    "Screenshot checkpoint 'fighter_ingress' skipped because no render-capable display is available"
+  ]
+}
