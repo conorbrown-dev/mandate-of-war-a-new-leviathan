@@ -15,6 +15,18 @@ enum class FactionId : uint8_t {
 
 std::string faction_name(FactionId faction);
 
+// Unit capability tags for Forward Seizure operations
+enum class SeizureCapability : uint8_t {
+    RECON = 0,
+    SEIZURE = 1,
+    SECURE = 2,
+    CONSTRUCT_FOB = 3,
+    CONSTRUCT_LOGISTICS = 4,
+    ESTABLISH_BASE = 5,
+    DEFEND = 6,
+    HARVEST_SECURED = 7
+};
+
 // Unit type definitions for each faction
 enum class UnitType : uint8_t {
     // Elite Precision (Faction A)
@@ -34,7 +46,8 @@ enum class UnitType : uint8_t {
 
     // Goal 04 air prototypes
     ELITE_T1_FIGHTER = 9,
-    ELITE_T1_VTOL = 10
+    ELITE_T1_VTOL = 10,
+    ELITE_PATROL_BOAT = 11
 };
 
 struct UnitPrototype {
@@ -50,6 +63,7 @@ struct UnitPrototype {
     UnitType type;
     FactionId faction;
     std::vector<std::string> research_prerequisites;
+    bool is_naval = false;
     bool is_aircraft = false;
     bool requires_runway = false;
     float payload = 0.0f;
@@ -59,6 +73,8 @@ struct UnitPrototype {
     float max_airborne_time_seconds = 0.0f;
     float energy_consumption_rate = 0.0f;
     float material_consumption_rate = 0.0f;
+    std::string content_id = "";
+    std::vector<SeizureCapability> capabilities = {};
 };
 
 // Unit production data keyed by UnitType

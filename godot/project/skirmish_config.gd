@@ -5,6 +5,8 @@ const SUPPORTED_VERSION := 1
 const MAX_STARTING_UNITS := 1000
 const MAX_FACTION_ID := 2
 const MAX_UNIT_TYPE_ID := 10
+const DEFAULT_TERRAIN_WIDTH := 320
+const DEFAULT_TERRAIN_HEIGHT := 320
 const UNIT_TYPE_FACTIONS := {
 	0: 0,
 	1: 0,
@@ -30,17 +32,47 @@ static func load_definition(path: String) -> Dictionary:
 		return {"ok": false, "error": "Scenario definition must contain one JSON object"}
 
 	var definition: Dictionary = parsed
-	var validation_error := validate_definition(definition)
+	var terrain_file := ""
+	if typeof(definition.get("theater", null)) == TYPE_DICTIONARY \
+			and definition.theater.has("terrain") \
+			and typeof(definition.theater.terrain) == TYPE_DICTIONARY \
+			and definition.theater.terrain.get("type", "") == "heightmap":
+		terrain_file = definition.theater.terrain.data
+	var validation_error := validate_definition(definition, terrain_file)
 	if validation_error != "":
 		return {"ok": false, "error": validation_error}
 
-	return {"ok": true, "definition": definition}
+	var terrain_result := load_terrain_file(terrain_file)
+	
+	return {"ok": true, "definition": definition, "terrain": terrain_result}
 
 
-static func validate_definition(definition: Dictionary) -> String:
+static func load_terrain_file(terrain_data_path: String) -> Dictionary:
+	if not FileAccess.file_exists(terrain_data_path):
+		return {"ok": false, "error": "Terrain file not found: %s" % terrain_data_path}
+	
+	var file := FileAccess.open(terrain_data_path, FileAccess.READ)
+	if file == null:
+		return {"ok": false, "error": "Could not open terrain file: %s" % terrain_data_path}
+	
+	var size := file.get_length()
+	var expected_size := 320 * 320 * 4
+	if size != expected_size:
+		return {"ok": false, "error": "Terrain file must be exactly %d bytes (320x320 float32), got %d" % [expected_size, size]}
+	
+	return {"ok": true, "data": terrain_data_path, "width": 320, "height": 320}
+
+
+static func validate_definition(definition: Dictionary, terrain_path: String = "") -> String:
 	for required_key in ["version", "id", "display_name", "description", "theater", "player", "ai", "victory"]:
 		if not definition.has(required_key):
 			return "Scenario definition is missing '%s'" % required_key
+	if typeof(definition.theater) != TYPE_DICTIONARY:
+		return "Scenario theater must be an object"
+	var theater: Dictionary = definition.theater
+	for dimension in ["width", "height"]:
+		if not theater.has(dimension) or not _is_positive_finite_number(theater[dimension]):
+			return "Scenario theater.%s must be a positive finite number" % dimension
 
 	if not _is_integer_number(definition.version) or int(definition.version) != SUPPORTED_VERSION:
 		return "Scenario version must be %d" % SUPPORTED_VERSION
@@ -48,15 +80,15 @@ static func validate_definition(definition: Dictionary) -> String:
 		return "Scenario id and display_name must be non-empty strings"
 	if not _is_nonempty_string(definition.description):
 		return "Scenario description must be a non-empty string"
-
-	if typeof(definition.theater) != TYPE_DICTIONARY:
-		return "Scenario theater must be an object"
-	var theater: Dictionary = definition.theater
-	for dimension in ["width", "height"]:
-		if not theater.has(dimension) or not _is_positive_finite_number(theater[dimension]):
-			return "Scenario theater.%s must be a positive finite number" % dimension
 	if typeof(theater.get("landmasses", null)) != TYPE_ARRAY or theater.landmasses.size() < 2:
 		return "Scenario theater must define at least two landmasses"
+	
+	if theater.has("terrain"):
+		var terrain: Dictionary = theater.terrain
+		if terrain.type != "heightmap":
+			return "Scenario terrain.type must be 'heightmap' if specified"
+		if not terrain.has("data") or not _is_nonempty_string(terrain.data):
+			return "Scenario terrain.data must be a non-empty string (binary file path)"
 	var landmass_ids: Dictionary = {}
 	for landmass_value in theater.landmasses:
 		var landmass_error := _validate_landmass(landmass_value, theater)
@@ -77,6 +109,11 @@ static func validate_definition(definition: Dictionary) -> String:
 			return "Scenario %s spawn must be on a defined landmass" % side_name
 		side_landmass_indices[side_name] = landmass_index
 
+	if terrain_path != "":
+		var terrain_result := load_terrain_file(terrain_path)
+		if not terrain_result.ok:
+			return "Terrain validation failed: %s" % terrain_result.error
+
 	if int(definition.player.faction_id) == int(definition.ai.faction_id):
 		return "Player and AI factions must be different"
 	if side_landmass_indices.player == side_landmass_indices.ai:
@@ -85,8 +122,8 @@ static func validate_definition(definition: Dictionary) -> String:
 	if typeof(definition.victory) != TYPE_DICTIONARY:
 		return "Scenario victory must be an object"
 	var victory: Dictionary = definition.victory
-	if victory.get("type", "") != "last_faction_standing":
-		return "Only last_faction_standing victory is supported by this scenario slice"
+	if victory.get("type", "") not in ["last_faction_standing", "command_center"]:
+		return "Unsupported victory rule"
 	if not _is_nonempty_string(victory.get("description", "")):
 		return "Scenario victory description must be a non-empty string"
 

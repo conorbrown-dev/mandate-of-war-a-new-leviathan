@@ -1,0 +1,98 @@
+{
+  "artifacts": [],
+  "assertions": [
+    {
+      "diagnostics": {
+        "entity_id": 2
+      },
+      "id": "zoom.engineer_exists",
+      "message": "The player engineer exists",
+      "status": "PASS"
+    },
+    {
+      "diagnostics": {},
+      "id": "zoom.wrapper_exists",
+      "message": "The engineer presentation wrapper exists",
+      "status": "PASS"
+    },
+    {
+      "diagnostics": {},
+      "id": "zoom.tactical_model_visible",
+      "message": "The tactical model is visible at close zoom",
+      "status": "PASS"
+    },
+    {
+      "diagnostics": {
+        "camera_distance": 735.119351318447
+      },
+      "id": "zoom.reaches_strategic_distance",
+      "message": "Mouse-wheel input reaches strategic zoom",
+      "status": "PASS"
+    },
+    {
+      "diagnostics": {},
+      "id": "zoom.strategic_icon_replaces_model",
+      "message": "The tactical model is replaced at strategic zoom",
+      "status": "PASS"
+    },
+    {
+      "diagnostics": {
+        "selected_ids": [
+          2
+        ]
+      },
+      "id": "zoom.selection_persists",
+      "message": "Selection persists across the strategic transition",
+      "status": "PASS"
+    },
+    {
+      "diagnostics": {
+        "anchor_error_m": 0.271486133337021,
+        "cursor": {
+          "x": 1049.6,
+          "y": 201.6
+        }
+      },
+      "id": "zoom.cursor_anchor_preserved",
+      "message": "Strategic zoom remains anchored near the cursor",
+      "status": "PASS"
+    },
+    {
+      "diagnostics": {},
+      "id": "scenario.completed",
+      "message": "Strategic zoom scenario completed",
+      "status": "PASS"
+    },
+    {
+      "diagnostics": {},
+      "id": "framework.scenario_returned",
+      "message": "The scenario reached its explicit completion sentinel",
+      "status": "PASS"
+    }
+  ],
+  "durationMs": 135,
+  "environment": {
+    "display_server": "headless",
+    "godot_version": "4.7.2-stable (official)",
+    "headless": true,
+    "renderer": "gl_compatibility"
+  },
+  "errors": [],
+  "metrics": {
+    "camera_distance": 632.2,
+    "check_count": 9,
+    "cursor_anchor_error_m": 0.27,
+    "duration_ms": 135,
+    "failure_count": 0
+  },
+  "runId": "20260912T124935.238526Z",
+  "scenarioId": "strategic_zoom_transition",
+  "schemaVersion": 1,
+  "seed": 640640,
+  "startedAt": "2026-09-12T12:49:35.238685+00:00",
+  "status": "PASS",
+  "warnings": [
+    "Screenshot checkpoint 'tactical_model' skipped because no render-capable display is available",
+    "Screenshot checkpoint 'strategic_icon' skipped because no render-capable display is available"
+  ]
+}

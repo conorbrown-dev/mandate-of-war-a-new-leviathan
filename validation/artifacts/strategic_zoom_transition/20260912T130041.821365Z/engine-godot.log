@@ -1,0 +1,20 @@
+Godot Engine v4.7.2.stable.official.ed1daf0bf - https://godotengine.org
+OpenGL API 3.3.0 NVIDIA 595.91.07 - Compatibility - Using Device: NVIDIA - NVIDIA GeForce RTX 4070 Ti SUPER
+
+Visual-pack handshake ready: mandate_of_war.prototype_visuals v1
+Loaded heightmap with 102400 values
+generate_terrain_mesh called with height data size: 102400
+Mesh surface count after generation: 1
+Started Broken Strait with 1 player Field Engineer and 1 AI Field Engineer
+VALIDATION PASS [zoom.engineer_exists] The player engineer exists
+VALIDATION PASS [zoom.wrapper_exists] The engineer presentation wrapper exists
+VALIDATION PASS [zoom.tactical_model_visible] The tactical model is visible at close zoom
+VALIDATION PASS [capture.tactical_model] Screenshot checkpoint is non-empty
+VALIDATION PASS [zoom.reaches_strategic_distance] Mouse-wheel input reaches strategic zoom
+VALIDATION PASS [zoom.strategic_icon_replaces_model] The tactical model is replaced at strategic zoom
+VALIDATION PASS [zoom.selection_persists] Selection persists across the strategic transition
+VALIDATION PASS [capture.strategic_icon] Screenshot checkpoint is non-empty
+VALIDATION PASS [zoom.cursor_anchor_preserved] Strategic zoom remains anchored near the cursor
+VALIDATION PASS [scenario.completed] Strategic zoom scenario completed
+VALIDATION PASS [framework.scenario_returned] The scenario reached its explicit completion sentinel
+VALIDATION REPORT /home/conor/repos/mandate-of-war/validation/artifacts/strategic_zoom_transition/20260912T130041.821365Z/report.json

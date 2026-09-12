@@ -1,0 +1,18 @@
+{
+  "version": 1,
+  "id": "commander_start_skirmish_v1",
+  "display_name": "Broken Strait",
+  "description": "Begin with one Command Walker, build an army over time, and destroy the opposing commander.",
+  "theater": {
+    "width": 640,
+    "height": 640,
+    "landmasses": [
+      {"id": "west_landmass", "center": [-220, 0], "size": [190, 600]},
+      {"id": "east_landmass", "center": [220, 0], "size": [190, 600]}
+    ],
+    "terrain": {"type": "heightmap", "data": "res://scenarios/terrain.bin", "tiles_x": 320, "tiles_y": 320}
+  },
+  "player": {"faction_id": 0, "spawn": [-220, 0], "units": [{"unit_type": 0, "count": 1}]},
+  "ai": {"faction_id": 1, "spawn": [220, 0], "units": [{"unit_type": 3, "count": 1}]},
+  "victory": {"type": "command_center", "description": "Destroy the opposing commander."}
+}

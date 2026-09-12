@@ -1,3 +1,4 @@
+#include <cmath>
 #include "ecs/components/factions.hpp"
 #include <fstream>
 #include <iostream>
@@ -42,6 +43,7 @@ static std::optional<UnitType> parse_unit_type(const std::string& name) {
     if (name == "INDUSTRIAL_MBT") return UnitType::INDUSTRIAL_MBT;
     if (name == "INDUSTRIAL_MISSILE_PLATFORM") return UnitType::INDUSTRIAL_MISSILE_PLATFORM;
     if (name == "INDUSTRIAL_ENGINEERING") return UnitType::INDUSTRIAL_ENGINEERING;
+    if (name == "ELITE_PATROL_BOAT") return UnitType::ELITE_PATROL_BOAT;
     if (name == "ELITE_T1_FIGHTER") return UnitType::ELITE_T1_FIGHTER;
     if (name == "ELITE_T1_VTOL") return UnitType::ELITE_T1_VTOL;
     return std::nullopt;
@@ -83,18 +85,22 @@ static UnitPrototype parse_unit_prototype(const rts::data::JsonValue& obj) {
 
     UnitPrototype prototype{
         name_opt.value().as_string(),
-        mat_cost_opt.value().as_number(),
-        en_cost_opt.value().as_number(),
-        res_cost_opt.value().as_number(),
-        build_time_opt.value().as_number(),
-        hp_opt.value().as_number(),
-        speed_opt.value().as_number(),
-        range_opt.value().as_number(),
-        view_opt.value().as_number(),
+        static_cast<float>(mat_cost_opt.value().as_number()),
+        static_cast<float>(en_cost_opt.value().as_number()),
+        static_cast<float>(res_cost_opt.value().as_number()),
+        static_cast<float>(build_time_opt.value().as_number()),
+        static_cast<float>(hp_opt.value().as_number()),
+        static_cast<float>(speed_opt.value().as_number()),
+        static_cast<float>(range_opt.value().as_number()),
+        static_cast<float>(view_opt.value().as_number()),
         type.value(),
         faction.value(),
         {}
     };
+
+    if (auto content_id_opt = obj.get("content_id"); content_id_opt && content_id_opt->type() == rts::data::JsonValue::Type::String) {
+        prototype.content_id = content_id_opt->as_string();
+    }
 
     if (auto prerequisites = obj.get("research_prerequisites");
         prerequisites && prerequisites->type() == rts::data::JsonValue::Type::Array) {
@@ -130,6 +136,14 @@ static UnitPrototype parse_unit_prototype(const rts::data::JsonValue& obj) {
             prototype.energy_consumption_rate <= 0.0f || prototype.material_consumption_rate < 0.0f) {
             throw std::runtime_error("Invalid aircraft field in unit prototype");
         }
+    }
+    if (auto naval = obj.get("is_naval"); naval && naval->as_bool()) {
+        prototype.is_naval = true;
+        prototype.operational_energy = obj.get("operational_energy").value().as_number();
+        prototype.energy_consumption_rate = obj.get("energy_consumption_rate").value().as_number();
+        if (!std::isfinite(prototype.operational_energy) || prototype.operational_energy<=0 ||
+            !std::isfinite(prototype.energy_consumption_rate) || prototype.energy_consumption_rate<=0)
+            throw std::runtime_error("Invalid naval endurance data");
     }
     return prototype;
 }
@@ -215,23 +229,24 @@ static std::unordered_map<std::string, ResearchProject> load_research_projects_f
 static std::unordered_map<UnitType, UnitPrototype> load_unit_prototypes_from_json() {
     const std::filesystem::path data_path = content_data_path("unit_faction_stats.json");
     
-    if (!std::filesystem::exists(data_path)) {
-        std::cerr << "Warning: " << data_path << " not found, using default unit data\n";
-        static std::unordered_map<UnitType, UnitPrototype> prototypes = {
-            {UnitType::ELITE_MAIN_BATTLE_TANK, {"Elite MBT", 500.0f, 250.0f, 100.0f, 15.0f, 500.0f, 3.5f, 120.0f, 6.0f, UnitType::ELITE_MAIN_BATTLE_TANK, FactionId::ELITE_PRECISION, {}}},
-            {UnitType::ELITE_LONG_RANGE_ARTILLERY, {"Elite Artillery", 800.0f, 400.0f, 200.0f, 20.0f, 300.0f, 2.0f, 300.0f, 8.0f, UnitType::ELITE_LONG_RANGE_ARTILLERY, FactionId::ELITE_PRECISION, {}}},
-            {UnitType::ELITE_ANTI_AIR, {"Elite AA Vehicle", 350.0f, 200.0f, 150.0f, 12.0f, 250.0f, 4.0f, 100.0f, 7.0f, UnitType::ELITE_ANTI_AIR, FactionId::ELITE_PRECISION, {}}},
-            {UnitType::ELITE_T1_FIGHTER, {"Elite T1 Fighter", 250.0f, 100.0f, 100.0f, 8.0f, 350.0f, 2.0f, 150.0f, 3.0f, UnitType::ELITE_T1_FIGHTER, FactionId::ELITE_PRECISION, {}}},
-            {UnitType::ELITE_T1_VTOL, {"Elite T1 VTOL", 300.0f, 120.0f, 80.0f, 10.0f, 400.0f, 2.5f, 120.0f, 3.5f, UnitType::ELITE_T1_VTOL, FactionId::ELITE_PRECISION, {}}},
-            {UnitType::MASS_SWARM_TANK, {"Swarm Tank", 150.0f, 80.0f, 0.0f, 5.0f, 100.0f, 5.0f, 60.0f, 4.0f, UnitType::MASS_SWARM_TANK, FactionId::MASS_WARFARE, {}}},
-            {UnitType::MASS_ASSAULT_VEHICLE, {"Assault Vehicle", 250.0f, 120.0f, 0.0f, 7.5f, 180.0f, 4.5f, 80.0f, 5.0f, UnitType::MASS_ASSAULT_VEHICLE, FactionId::MASS_WARFARE, {}}},
-            {UnitType::MASS_ANTI_AIR, {"Mass AA Vehicle", 180.0f, 100.0f, 0.0f, 6.0f, 150.0f, 5.5f, 80.0f, 5.0f, UnitType::MASS_ANTI_AIR, FactionId::MASS_WARFARE, {}}},
-            {UnitType::INDUSTRIAL_MBT, {"Industrial MBT", 300.0f, 150.0f, 50.0f, 10.0f, 350.0f, 3.0f, 90.0f, 5.0f, UnitType::INDUSTRIAL_MBT, FactionId::INDUSTRIAL_EXPERIMENTAL, {}}},
-            {UnitType::INDUSTRIAL_MISSILE_PLATFORM, {"Missile Platform", 500.0f, 300.0f, 150.0f, 15.0f, 250.0f, 2.5f, 200.0f, 6.0f, UnitType::INDUSTRIAL_MISSILE_PLATFORM, FactionId::INDUSTRIAL_EXPERIMENTAL, {}}},
-            {UnitType::INDUSTRIAL_ENGINEERING, {"Engineering Unit", 200.0f, 100.0f, 80.0f, 12.0f, 200.0f, 2.0f, 50.0f, 5.0f, UnitType::INDUSTRIAL_ENGINEERING, FactionId::INDUSTRIAL_EXPERIMENTAL, {}}}
-        };
-        return prototypes;
-    }
+     if (!std::filesystem::exists(data_path)) {
+         std::cerr << "Warning: " << data_path << " not found, using default unit data\n";
+          static std::unordered_map<UnitType, UnitPrototype> prototypes = {
+              {UnitType::ELITE_MAIN_BATTLE_TANK, {"Elite MBT", 500.0f, 250.0f, 100.0f, 15.0f, 500.0f, 3.5f, 120.0f, 6.0f, UnitType::ELITE_MAIN_BATTLE_TANK, FactionId::ELITE_PRECISION, {"advanced_targeting"}, false, false, false, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, ""}},
+              {UnitType::ELITE_LONG_RANGE_ARTILLERY, {"Elite Artillery", 800.0f, 400.0f, 200.0f, 20.0f, 300.0f, 2.0f, 300.0f, 8.0f, UnitType::ELITE_LONG_RANGE_ARTILLERY, FactionId::ELITE_PRECISION, {"advance_ballistics"}, false, false, false, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, ""}},
+              {UnitType::ELITE_ANTI_AIR, {"Elite AA Vehicle", 350.0f, 200.0f, 150.0f, 12.0f, 250.0f, 4.0f, 100.0f, 7.0f, UnitType::ELITE_ANTI_AIR, FactionId::ELITE_PRECISION, {"stealth_tech"}, false, false, false, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, ""}},
+              {UnitType::ELITE_T1_FIGHTER, {"Elite T1 Fighter", 250.0f, 100.0f, 100.0f, 8.0f, 350.0f, 2.0f, 150.0f, 3.0f, UnitType::ELITE_T1_FIGHTER, FactionId::ELITE_PRECISION, {}, false, true, false, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, ""}},
+              {UnitType::ELITE_T1_VTOL, {"Elite T1 VTOL", 300.0f, 120.0f, 80.0f, 10.0f, 400.0f, 2.5f, 120.0f, 3.5f, UnitType::ELITE_T1_VTOL, FactionId::ELITE_PRECISION, {"vtol_flight_systems"}, false, true, false, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, ""}},
+              {UnitType::ELITE_PATROL_BOAT, {"Elite Patrol Boat", 200.0f, 80.0f, 50.0f, 10.0f, 200.0f, 2.5f, 80.0f, 5.0f, UnitType::ELITE_PATROL_BOAT, FactionId::ELITE_PRECISION, {}, false, false, false, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, ""}},
+              {UnitType::MASS_SWARM_TANK, {"Swarm Tank", 150.0f, 80.0f, 0.0f, 5.0f, 100.0f, 5.0f, 60.0f, 4.0f, UnitType::MASS_SWARM_TANK, FactionId::MASS_WARFARE, {"swarm_coordination"}, false, false, false, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, ""}},
+              {UnitType::MASS_ASSAULT_VEHICLE, {"Assault Vehicle", 250.0f, 120.0f, 0.0f, 7.5f, 180.0f, 4.5f, 80.0f, 5.0f, UnitType::MASS_ASSAULT_VEHICLE, FactionId::MASS_WARFARE, {"assault_support"}, false, false, false, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, ""}},
+              {UnitType::MASS_ANTI_AIR, {"Mass AA Vehicle", 180.0f, 100.0f, 0.0f, 6.0f, 150.0f, 5.5f, 80.0f, 5.0f, UnitType::MASS_ANTI_AIR, FactionId::MASS_WARFARE, {"rapid_response"}, false, false, false, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, ""}},
+              {UnitType::INDUSTRIAL_MBT, {"Industrial MBT", 300.0f, 150.0f, 50.0f, 10.0f, 350.0f, 3.0f, 90.0f, 5.0f, UnitType::INDUSTRIAL_MBT, FactionId::INDUSTRIAL_EXPERIMENTAL, {"heavy_machinery"}, false, false, false, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, ""}},
+              {UnitType::INDUSTRIAL_MISSILE_PLATFORM, {"Missile Platform", 500.0f, 300.0f, 150.0f, 15.0f, 250.0f, 2.5f, 200.0f, 6.0f, UnitType::INDUSTRIAL_MISSILE_PLATFORM, FactionId::INDUSTRIAL_EXPERIMENTAL, {"missile_systems"}, false, false, false, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, ""}},
+              {UnitType::INDUSTRIAL_ENGINEERING, {"Engineering Unit", 200.0f, 100.0f, 80.0f, 12.0f, 200.0f, 2.0f, 50.0f, 5.0f, UnitType::INDUSTRIAL_ENGINEERING, FactionId::INDUSTRIAL_EXPERIMENTAL, {"engineering_corps"}, false, false, false, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, ""}}
+          };
+         return prototypes;
+     }
 
     std::ifstream file(data_path);
     if (!file.is_open()) {

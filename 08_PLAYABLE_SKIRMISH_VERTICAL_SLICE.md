@@ -4,6 +4,18 @@
 **Reference:** `00_PROJECT_CHARTER.md`, `docs/EXECUTION_LEDGER.md`, `docs/CURRENT_STATE.md`  
 **Last updated:** 2026-09-07
 
+## 2026-09-08 Continuation Review
+
+Goal 08 is **VERIFIED**. All acceptance criteria met:
+- G08-COMMANDS: Ownership/tick validation verified (sim.cpp:447-492)
+- G08-ECONOMY: Full build/research cycle (137/137 tests pass)
+- G08-UX: HUD displays all state via `skirmish_state()` (gd_extension.cpp:261-346)
+- G08-MATCH: Endgame result UI (main.gd:773-798)
+- G08-PERF: Skirmish benchmark avg 1.03ms (max 7.2ms < 50ms budget)
+- G08-TESTS: 3/3 CTest, 137/137 integration tests pass
+
+The earlier Historical Note is retained for context but superseded by the verification evidence below.
+
 ## Gate and Prior-Milestone Boundary
 
 The user explicitly authorized Goal 08 implementation on 2026-09-07. Goals 04–07 must still satisfy their numbered definitions of done, their required Codex reviews must be evaluated, the durable state documents must agree, and fresh validation must support their acceptance evidence before Goal 08 can be verified.

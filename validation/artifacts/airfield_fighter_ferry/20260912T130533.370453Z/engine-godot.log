@@ -1,0 +1,20 @@
+Godot Engine v4.7.2.stable.official.ed1daf0bf - https://godotengine.org
+OpenGL API 3.3.0 NVIDIA 595.91.07 - Compatibility - Using Device: NVIDIA - NVIDIA GeForce RTX 4070 Ti SUPER
+
+Visual-pack handshake ready: mandate_of_war.prototype_visuals v1
+Loaded heightmap with 102400 values
+generate_terrain_mesh called with height data size: 102400
+Mesh surface count after generation: 1
+Started Broken Strait with 1 player Field Engineer and 1 AI Field Engineer
+VALIDATION PASS [air.engineer_exists] The player engineer exists
+VALIDATION PASS [air.airfield_queued] The engineer queues an airfield on valid land
+VALIDATION PASS [air.airfield_completes] The airfield completes within the bounded tick budget
+VALIDATION PASS [capture.airfield_complete] Screenshot checkpoint is non-empty and visually non-blank
+VALIDATION PASS [air.fighter_queued] The completed airfield accepts a fighter ferry request
+VALIDATION PASS [air.fighter_arrives] A fighter entity arrives within the bounded tick budget
+VALIDATION PASS [air.fighter_enters_from_off_map] The fighter is created beyond the tactical map edge
+VALIDATION PASS [air.fighter_flies_onto_map] The fighter crosses onto the tactical battlefield
+VALIDATION PASS [capture.fighter_ingress] Screenshot checkpoint is non-empty and visually non-blank
+VALIDATION PASS [scenario.completed] Airfield and fighter ferry scenario completed
+VALIDATION PASS [framework.scenario_returned] The scenario reached its explicit completion sentinel
+VALIDATION REPORT /home/conor/repos/mandate-of-war/validation/artifacts/airfield_fighter_ferry/20260912T130533.370453Z/report.json

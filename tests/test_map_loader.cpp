@@ -4,11 +4,16 @@
 #include <filesystem>
 #include <fstream>
 #include <cmath>
+#include <unistd.h>
+
+namespace {
+const std::filesystem::path test_root = std::filesystem::temp_directory_path() / ("rts-map-tests-" + std::to_string(getpid()));
+}
 
 namespace fs = std::filesystem;
 
 TEST(map_loader_load_empty_header) {
-    fs::path test_dir = fs::current_path() / "test_maps";
+    fs::path test_dir = test_root;
     fs::create_directories(test_dir);
     
     fs::path map_path = test_dir / "test_map.map";
@@ -111,7 +116,7 @@ TEST(map_loader_compute_hash) {
 }
 
 TEST(map_loader_load_spawnpoints) {
-    fs::path test_dir = fs::current_path() / "test_maps" / "spawn_test";
+    fs::path test_dir = test_root / "spawn_test";
     fs::remove_all(test_dir);
     fs::create_directories(test_dir);
     
@@ -176,7 +181,7 @@ TEST(map_loader_load_spawnpoints) {
 }
 
 TEST(map_loader_load_resources) {
-    fs::path test_dir = fs::current_path() / "test_maps" / "resource_test";
+    fs::path test_dir = test_root / "resource_test";
     fs::remove_all(test_dir);
     fs::create_directories(test_dir);
     
@@ -230,7 +235,7 @@ TEST(map_loader_load_resources) {
 }
 
 TEST(map_loader_load_entities) {
-    fs::path test_dir = fs::current_path() / "test_maps" / "entity_test";
+    fs::path test_dir = test_root / "entity_test";
     fs::remove_all(test_dir);
     fs::create_directories(test_dir);
     
@@ -285,7 +290,7 @@ TEST(map_loader_load_entities) {
 }
 
 TEST(map_loader_load_json_scenario) {
-    fs::path scenario_path = fs::current_path() / "godot" / "project" / "scenarios" / "two_landmass_skirmish.json";
+    fs::path scenario_path = fs::absolute(fs::current_path() / "godot" / "project" / "scenarios" / "two_landmass_skirmish.json");
     
     if (!fs::exists(scenario_path)) {
         throw std::runtime_error("Testscenario not found at: " + scenario_path.string());

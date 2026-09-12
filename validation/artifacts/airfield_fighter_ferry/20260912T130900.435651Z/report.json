@@ -1,0 +1,186 @@
+{
+  "artifacts": [
+    {
+      "checkpoint": "airfield_complete",
+      "height": 720,
+      "kind": "screenshot",
+      "path": "screenshots/01_airfield_complete.png",
+      "width": 1280
+    },
+    {
+      "checkpoint": "fighter_ingress",
+      "height": 720,
+      "kind": "screenshot",
+      "path": "screenshots/02_fighter_ingress.png",
+      "width": 1280
+    },
+    {
+      "kind": "log",
+      "path": "engine.log"
+    },
+    {
+      "kind": "godotLog",
+      "path": "engine-godot.log"
+    },
+    {
+      "kind": "video",
+      "path": "video/airfield_fighter_ferry.avi",
+      "bytes": 11841786,
+      "resolution": "1280x720",
+      "fps": 30.0,
+      "frames": 149,
+      "durationSeconds": 4.966667,
+      "seed": 640640,
+      "scenarioId": "airfield_fighter_ferry"
+    }
+  ],
+  "assertions": [
+    {
+      "diagnostics": {
+        "entity_id": 2
+      },
+      "id": "air.engineer_exists",
+      "message": "The player engineer exists",
+      "status": "PASS"
+    },
+    {
+      "diagnostics": {
+        "position": {
+          "x": -15500.0,
+          "y": 1000.0
+        }
+      },
+      "id": "air.airfield_queued",
+      "message": "The engineer queues an airfield on valid land",
+      "status": "PASS"
+    },
+    {
+      "diagnostics": {
+        "tick_limit": 900,
+        "ticks": 675
+      },
+      "id": "air.airfield_completes",
+      "message": "The airfield completes within the bounded tick budget",
+      "status": "PASS"
+    },
+    {
+      "diagnostics": {},
+      "id": "air.airfield_view_exists",
+      "message": "The completed airfield has its production presentation",
+      "status": "PASS"
+    },
+    {
+      "diagnostics": {
+        "error": 0,
+        "height": 720,
+        "path": "/home/conor/repos/mandate-of-war/validation/artifacts/airfield_fighter_ferry/20260912T130900.435651Z/screenshots/01_airfield_complete.png",
+        "sanity": {
+          "luminance_range": 0.934558438137174,
+          "mean_luminance": 0.222614661743864,
+          "samples": 960
+        },
+        "width": 1280
+      },
+      "id": "capture.airfield_complete",
+      "message": "Screenshot checkpoint is non-empty and visually non-blank",
+      "status": "PASS"
+    },
+    {
+      "diagnostics": {
+        "after": 1,
+        "before": 0
+      },
+      "id": "air.fighter_queued",
+      "message": "The completed airfield accepts a fighter ferry request",
+      "status": "PASS"
+    },
+    {
+      "diagnostics": {
+        "tick_limit": 700,
+        "ticks": 354
+      },
+      "id": "air.fighter_arrives",
+      "message": "A fighter entity arrives within the bounded tick budget",
+      "status": "PASS"
+    },
+    {
+      "diagnostics": {
+        "entry": {
+          "x": -20062.5,
+          "y": 0.0
+        }
+      },
+      "id": "air.fighter_enters_from_off_map",
+      "message": "The fighter is created beyond the tactical map edge",
+      "status": "PASS"
+    },
+    {
+      "diagnostics": {
+        "position": {
+          "x": -19999.5,
+          "y": 0.0
+        },
+        "ticks": 7
+      },
+      "id": "air.fighter_flies_onto_map",
+      "message": "The fighter crosses onto the tactical battlefield",
+      "status": "PASS"
+    },
+    {
+      "diagnostics": {
+        "error": 0,
+        "height": 720,
+        "path": "/home/conor/repos/mandate-of-war/validation/artifacts/airfield_fighter_ferry/20260912T130900.435651Z/screenshots/02_fighter_ingress.png",
+        "sanity": {
+          "luminance_range": 0.711411761119962,
+          "mean_luminance": 0.322245768473173,
+          "samples": 960
+        },
+        "width": 1280
+      },
+      "id": "capture.fighter_ingress",
+      "message": "Screenshot checkpoint is non-empty and visually non-blank",
+      "status": "PASS"
+    },
+    {
+      "diagnostics": {},
+      "id": "scenario.completed",
+      "message": "Airfield and fighter ferry scenario completed",
+      "status": "PASS"
+    },
+    {
+      "diagnostics": {},
+      "id": "framework.scenario_returned",
+      "message": "The scenario reached its explicit completion sentinel",
+      "status": "PASS"
+    }
+  ],
+  "checkpoints": [
+    "airfield_complete",
+    "fighter_ingress"
+  ],
+  "description": "Construct an airfield, request a runway fighter, and verify its paid off-map airborne ingress.",
+  "durationMs": 3163,
+  "environment": {
+    "display_server": "X11",
+    "godot_version": "4.7.2-stable (official)",
+    "headless": false,
+    "renderer": "gl_compatibility"
+  },
+  "errors": [],
+  "metrics": {
+    "airfield_completion_ticks": 675,
+    "check_count": 12,
+    "duration_ms": 3163,
+    "failure_count": 0,
+    "fighter_delivery_ticks": 354,
+    "fighter_ingress_ticks": 7
+  },
+  "runId": "20260912T130900.435651Z",
+  "scenarioId": "airfield_fighter_ferry",
+  "schemaVersion": 1,
+  "seed": 640640,
+  "startedAt": "2026-09-12T13:09:00.435758+00:00",
+  "status": "PASS",
+  "warnings": []
+}

@@ -11,7 +11,7 @@
 namespace rts {
 
 // Version 2 assigns signed centiunit semantics to InputCommand target coordinates.
-constexpr uint32_t NETWORK_PROTOCOL_VERSION = 2;
+constexpr uint32_t NETWORK_PROTOCOL_VERSION = 3;
 constexpr uint32_t MAX_COMMANDS_PER_TICK = 256;
 constexpr uint32_t SNAPSHOT_HISTORY_SIZE = 32;
 constexpr uint32_t MAX_SNAPSHOT_ENTITIES = 1024;
@@ -52,7 +52,9 @@ enum class CommandType : uint8_t {
     HARVEST = 4,
     RETURN = 5,
     DEFEND = 6,
-    PATROL = 7
+    PATROL = 7,
+    RESEARCH = 8,
+    INSTALL = 9
 };
 
 constexpr size_t INPUT_COMMAND_WIRE_SIZE = 20;

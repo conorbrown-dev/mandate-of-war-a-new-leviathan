@@ -3,6 +3,7 @@ extends SceneTree
 const SkirmishConfigLoader := preload("res://skirmish_config.gd")
 
 func _init() -> void:
+	OS.set_environment("RTS_DATA_ROOT", ProjectSettings.globalize_path("res://../../data").simplify_path())
 	var scenario_result: Dictionary = SkirmishConfigLoader.load_definition("res://scenarios/two_landmass_skirmish.json")
 	if not scenario_result.get("ok", false):
 		push_error("Goal 08 scenario definition failed validation: %s" % scenario_result.get("error", "unknown error"))
@@ -11,6 +12,16 @@ func _init() -> void:
 	var scenario_definition: Dictionary = scenario_result.definition
 	if scenario_definition.id != "two_landmass_skirmish_v1":
 		push_error("Goal 08 scenario definition returned the wrong id")
+		quit(1)
+		return
+	var player_starting_units := 0
+	for unit in scenario_definition.player.units:
+		player_starting_units += int(unit.count)
+	var ai_starting_units := 0
+	for unit in scenario_definition.ai.units:
+		ai_starting_units += int(unit.count)
+	if player_starting_units != 20 or ai_starting_units != 26:
+		push_error("Scenario roster regression: expected 20 player and 26 AI units, got %d and %d" % [player_starting_units, ai_starting_units])
 		quit(1)
 		return
 	var invalid_definition: Dictionary = scenario_definition.duplicate(true)
@@ -175,5 +186,28 @@ func _init() -> void:
 	
 	extension.call("stop_simulation")
 	
+	# Test 4: exported AI state shares the fixed-tick simulation owner.
+	extension.call("start_simulation")
+	extension.call("ai_init")
+	extension.call("ai_set_faction_id", 1)
+	extension.call("create_unit_with_type", 0.0, 0.0, 3, 1)
+	extension.call("create_unit_with_type", 1.0, 0.0, 0, 0)
+	extension.call("create_unit_with_type", 300.0, 0.0, 0, 0)
+	extension.call("ai_update", 1000.0)
+	if extension.call("ai_get_visible_unit_count") != 1 or extension.call("ai_get_enemy_unit_count") != 1:
+		push_error("AI bindings must share simulation state and exclude hidden enemies")
+		quit(1)
+		return
+	extension.call("ai_set_faction_id", 4294967297)
+	if extension.call("ai_get_visible_unit_count") != 1:
+		push_error("AI faction binding must reject overflowing IDs before narrowing")
+		quit(1)
+		return
+	extension.call("reset_simulation")
+	if extension.call("ai_get_visible_unit_count") != 0 or extension.call("ai_get_enemy_unit_count") != 0:
+		push_error("Rematch must clear AI observations across the native boundary")
+		quit(1)
+		return
+	extension.call("stop_simulation")
 	print("RtsExtension smoke test passed")
 	quit(0)

@@ -134,14 +134,6 @@ public:
                 }
             }
         }
-        if (positions_.size() <= 10) {
-            std::cerr << "DEBUG GRID: query_all positions_ size = " << positions_.size() << ", grid size = " << grid_.size() << '\n';
-            std::cerr << "DEBUG GRID: All entities in positions_: ";
-            for (const auto& p : positions_) {
-                std::cerr << p.first << " ";
-            }
-            std::cerr << '\n';
-        }
         return result;
     }
 

@@ -30,10 +30,11 @@ public:
     void produce_units();
     void attack_enemy();
     void defend_base();
+    void set_objective(float x, float y);
 
 private:
     Simulation* simulation_ = nullptr;
-    FactionId faction_id_ = FactionId::ELITE_PRECISION;
+    FactionId faction_id_ = FactionId::MASS_WARFARE;
     
     std::vector<EntityId> visible_units_;
     std::vector<EntityId> enemy_units_;
@@ -42,10 +43,8 @@ private:
     const float decision_interval_ = 1000.0f;
     
     void update_visibility();
-    int count_visible_extractor_slots() const;
-    void build_extractor_if_needed();
-    void produce_defensive_units();
-    void produce_attack_units();
+    bool objective_set_ = false;
+    float objective_x_ = 0, objective_y_ = 0;
 };
 
 } // namespace rts

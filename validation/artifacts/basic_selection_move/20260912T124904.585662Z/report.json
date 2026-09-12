@@ -1,0 +1,108 @@
+{
+  "artifacts": [],
+  "assertions": [
+    {
+      "diagnostics": {
+        "entity_id": 2
+      },
+      "id": "selection.engineer_exists",
+      "message": "The player engineer exists",
+      "status": "PASS"
+    },
+    {
+      "diagnostics": {
+        "selected_ids": [
+          2
+        ]
+      },
+      "id": "selection.click_selects_engineer",
+      "message": "A real left-click selects the engineer",
+      "status": "PASS"
+    },
+    {
+      "diagnostics": {
+        "start": {
+          "x": -14500.0,
+          "y": 2000.0
+        },
+        "target": {
+          "x": -13850.0,
+          "y": 2000.0
+        }
+      },
+      "id": "movement.valid_target_found",
+      "message": "A nearby traversable order target was found",
+      "status": "PASS"
+    },
+    {
+      "diagnostics": {
+        "distance_m": 39.9562606811523,
+        "end": {
+          "x": -14461.13,
+          "y": 2009.25
+        },
+        "start": {
+          "x": -14500.0,
+          "y": 2000.0
+        }
+      },
+      "id": "movement.unit_moves",
+      "message": "The selected engineer moves after the order",
+      "status": "FAIL"
+    },
+    {
+      "diagnostics": {
+        "target_error_m": 611.199951171875,
+        "tick_limit": 600,
+        "ticks": 600
+      },
+      "id": "movement.reaches_target",
+      "message": "The engineer reaches the bounded target tolerance",
+      "status": "FAIL"
+    },
+    {
+      "diagnostics": {},
+      "id": "scenario.completed",
+      "message": "Selection and movement scenario completed",
+      "status": "PASS"
+    },
+    {
+      "diagnostics": {},
+      "id": "framework.scenario_returned",
+      "message": "The scenario reached its explicit completion sentinel",
+      "status": "PASS"
+    }
+  ],
+  "durationMs": 252,
+  "environment": {
+    "display_server": "headless",
+    "godot_version": "4.7.2-stable (official)",
+    "headless": true,
+    "renderer": "gl_compatibility"
+  },
+  "errors": [
+    "movement.unit_moves: The selected engineer moves after the order",
+    "movement.reaches_target: The engineer reaches the bounded target tolerance",
+    "ERROR: VALIDATION FAIL [movement.unit_moves] The selected engineer moves after the order | {\"distance_m\":39.9562606811523,\"end\":{\"x\":-14461.13,\"y\":2009.25},\"start\":{\"x\":-14500.0,\"y\":2000.0}}",
+    "ERROR: VALIDATION FAIL [movement.reaches_target] The engineer reaches the bounded target tolerance | {\"target_error_m\":611.199951171875,\"tick_limit\":600,\"ticks\":600}"
+  ],
+  "metrics": {
+    "check_count": 7,
+    "duration_ms": 252,
+    "failure_count": 2,
+    "moved_distance_m": 39.96,
+    "simulation_ticks": 600,
+    "target_error_m": 611.2
+  },
+  "runId": "20260912T124904.585662Z",
+  "scenarioId": "basic_selection_move",
+  "schemaVersion": 1,
+  "seed": 640640,
+  "startedAt": "2026-09-12T12:49:04.585750+00:00",
+  "status": "FAIL",
+  "warnings": [
+    "Screenshot checkpoint 'engineer_selected' skipped because no render-capable display is available",
+    "Screenshot checkpoint 'move_order_issued' skipped because no render-capable display is available",
+    "Screenshot checkpoint 'engineer_arrived' skipped because no render-capable display is available"
+  ]
+}

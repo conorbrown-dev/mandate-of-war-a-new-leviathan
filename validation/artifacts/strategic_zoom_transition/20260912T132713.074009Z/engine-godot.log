@@ -1,0 +1,24 @@
+Godot Engine v4.7.2.stable.official.ed1daf0bf - https://godotengine.org
+
+Visual-pack handshake ready: mandate_of_war.prototype_visuals v1
+Loaded heightmap with 102400 values
+generate_terrain_mesh called with height data size: 102400
+Mesh surface count after generation: 1
+Started Broken Strait with 1 player Field Engineer and 1 AI Field Engineer
+VALIDATION PASS [zoom.engineer_exists] The player engineer exists
+VALIDATION PASS [zoom.wrapper_exists] The engineer presentation wrapper exists
+VALIDATION PASS [zoom.tactical_model_visible] The tactical model is visible at close zoom
+VALIDATION PASS [zoom.reaches_strategic_distance] Mouse-wheel input reaches strategic zoom
+VALIDATION PASS [zoom.strategic_icon_replaces_model] The tactical model is replaced at strategic zoom
+VALIDATION PASS [zoom.selection_persists] Selection persists across the strategic transition
+VALIDATION PASS [zoom.cursor_anchor_preserved] Strategic zoom remains anchored near the cursor
+VALIDATION PASS [scenario.completed] Strategic zoom scenario completed
+VALIDATION PASS [framework.scenario_returned] The scenario reached its explicit completion sentinel
+ERROR: VALIDATION FAIL [framework.forced_failure] Intentional failure requested for artifact-pipeline validation | {}
+   at: push_error (core/variant/variant_utility.cpp:1023)
+   GDScript backtrace (most recent call first):
+       [0] _check (res://validation/validation_runner.gd:404)
+       [1] _run (res://validation/validation_runner.gd:63)
+       [2] _scenario_strategic_zoom_transition (res://validation/validation_runner.gd:175)
+       [3] _destroy_skirmish (res://validation/validation_runner.gd:81)
+VALIDATION REPORT /home/conor/repos/mandate-of-war/validation/artifacts/strategic_zoom_transition/20260912T132713.074009Z/report.json

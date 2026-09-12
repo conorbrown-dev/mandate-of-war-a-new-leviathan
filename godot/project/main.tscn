@@ -1,6 +1,37 @@
-[gd_scene load_steps=6 format=3]
+[gd_scene load_steps=16 format=3]
 
 [ext_resource type="Script" path="res://main.gd" id="1_main"]
+[ext_resource type="Shader" path="res://terrain.gdshader" id="2_terrain_shader"]
+[ext_resource type="Shader" path="res://territory_terrain.gdshader" id="10_territory_shader"]
+[ext_resource type="Texture2D" path="res://assets/terrain/ocean_tile_v1.png" id="3_ocean"]
+[ext_resource type="Texture2D" path="res://assets/terrain/shore_tile_v1.png" id="4_shore"]
+[ext_resource type="Texture2D" path="res://assets/terrain/grassland_tile_v1.png" id="5_grassland"]
+[ext_resource type="Texture2D" path="res://assets/terrain/downloaded/forest_ground_06_diff_2k.jpg" id="7_forest"]
+[ext_resource type="Texture2D" path="res://assets/terrain/downloaded/mud_forest_diff_2k.jpg" id="8_mud"]
+[ext_resource type="Texture2D" path="res://assets/terrain/downloaded/rocky_terrain_03_diff_2k.jpg" id="9_rocky"]
+[ext_resource type="Script" path="res://command_hud.gd" id="6_command_hud"]
+
+[sub_resource type="ShaderMaterial" id="TerrainShaderMaterial"]
+shader = ExtResource("2_terrain_shader")
+shader_parameter/ocean_texture = ExtResource("3_ocean")
+shader_parameter/shore_texture = ExtResource("4_shore")
+shader_parameter/grassland_texture = ExtResource("5_grassland")
+shader_parameter/forest_texture = ExtResource("7_forest")
+shader_parameter/mud_texture = ExtResource("8_mud")
+shader_parameter/rocky_texture = ExtResource("9_rocky")
+shader_parameter/texture_tiling = 14.0
+
+[sub_resource type="ShaderMaterial" id="TerritoryShaderMaterial"]
+shader = ExtResource("10_territory_shader")
+shader_parameter/ocean_texture = ExtResource("3_ocean")
+shader_parameter/shore_texture = ExtResource("4_shore")
+shader_parameter/grassland_texture = ExtResource("5_grassland")
+shader_parameter/forest_texture = ExtResource("7_forest")
+shader_parameter/mud_texture = ExtResource("8_mud")
+shader_parameter/rocky_texture = ExtResource("9_rocky")
+shader_parameter/texture_tiling = 14.0
+shader_parameter/territory_texture = null
+shader_parameter/territory_intensity = 0.4
 
 [sub_resource type="StandardMaterial3D" id="TerrainMaterial"]
 albedo_color = Color(0.025, 0.13, 0.22, 1)
@@ -27,6 +58,7 @@ script = ExtResource("1_main")
 
 [node name="Ocean" type="MeshInstance3D" parent="."]
 mesh = SubResource("TerrainMesh")
+material_override = SubResource("TerrainShaderMaterial")
 
 [node name="WestLandmass" type="MeshInstance3D" parent="."]
 position = Vector3(-105, 0.12, 0)
@@ -38,6 +70,16 @@ mesh = SubResource("LandMesh")
 
 [node name="Units" type="MultiMeshInstance3D" parent="."]
 
+[node name="UnitModels" type="Node3D" parent="."]
+
+[node name="ConstructionFrames" type="Node3D" parent="."]
+
+[node name="ResourceSites" type="Node3D" parent="."]
+
+[node name="TerrainTrees" type="MultiMeshInstance3D" parent="."]
+
+[node name="ForestLandmarks" type="Node3D" parent="."]
+
 [node name="Camera3D" type="Camera3D" parent="."]
 transform = Transform3D(1, 0, 0, 0, 0.707107, 0.707107, 0, -0.707107, 0.707107, 0, 70, 70)
 current = true
@@ -48,6 +90,17 @@ rotation_degrees = Vector3(-55, -35, 0)
 shadow_enabled = true
 
 [node name="HUD" type="CanvasLayer" parent="."]
+
+[node name="CommandHUD" type="Control" parent="HUD"]
+visible = false
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+script = ExtResource("6_command_hud")
 
 [node name="DebugPanel" type="ColorRect" parent="HUD"]
 visible = false
@@ -83,7 +136,7 @@ offset_right = -12.0
 offset_bottom = -12.0
 grow_horizontal = 2
 grow_vertical = 0
-text = "Drag-select  |  Right-click move  |  X stop  |  Wheel zoom  |  Arrow/WASD pan  |  Esc quit"
+text = "Drag-select  |  Right-click move  |  Ctrl+Right-click attack  |  X stop  |  Wheel zoom  |  Arrow/WASD pan  |  Esc quit"
 horizontal_alignment = 1
 
 [node name="SelectionRect" type="ColorRect" parent="HUD"]
@@ -148,3 +201,22 @@ autowrap_mode = 2
 custom_minimum_size = Vector2(0, 52)
 layout_mode = 2
 text = "START SKIRMISH"
+
+[node name="TerritoryManager" type="Node" parent="."]
+script = ExtResource("1_main")
+
+[node name="TerritoryDebugLabel" type="Label" parent="HUD"]
+layout_mode = 1
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -150.0
+offset_top = -20.0
+offset_right = 150.0
+offset_bottom = 20.0
+grow_horizontal = 0
+grow_vertical = 0
+text = "Territory: Neutral"
+horizontal_alignment = 1

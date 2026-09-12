@@ -3,6 +3,7 @@
 #include <cstdint>
 #include <vector>
 #include <queue>
+#include <string>
 
 #include "ecs/entity.hpp"
 #include "factions.hpp"
@@ -27,6 +28,7 @@ struct Extractor {
     float extraction_rate;
     float last_extraction_tick;
     bool active;
+    EntityId storage_id = INVALID_ENTITY;
 };
 
 struct Storage {
@@ -56,6 +58,10 @@ struct ConstructionQueueEntry {
     float research_per_tick;
     float build_time_seconds;
     bool completed;
+    uint8_t structure_type = 0;
+    std::string display_name;
+    float target_x = 0.0f;
+    float target_y = 0.0f;
 };
 
 struct ProductionLine {

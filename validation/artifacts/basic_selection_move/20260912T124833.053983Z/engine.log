@@ -1,0 +1,26 @@
+Godot Engine v4.7.2.stable.official.ed1daf0bf - https://godotengine.org
+
+Visual-pack handshake ready: mandate_of_war.prototype_visuals v1
+Loaded heightmap with 102400 values
+generate_terrain_mesh called with height data size: 102400
+Mesh surface count after generation: 1
+DEBUG: economy_add_resource_node called: node_id=900 before_add_size=0
+DEBUG: economy_add_resource_node after_add_size=1
+DEBUG: economy_add_resource_node called: node_id=901 before_add_size=1
+DEBUG: economy_add_resource_node after_add_size=2
+DEBUG: economy_add_resource_node called: node_id=902 before_add_size=2
+DEBUG: economy_add_resource_node after_add_size=3
+DEBUG: economy_add_resource_node called: node_id=903 before_add_size=3
+DEBUG: economy_add_resource_node after_add_size=4
+DEBUG: find_or_create_extractor called at (10500, -11000)
+DEBUG: extractors size: 0, resource_nodes size: 4
+DEBUG: find_or_create_extractor called at (15500, 9000)
+DEBUG: extractors size: 1, resource_nodes size: 4
+DEBUG: checking existing extractor at (10500, -11000), dist_sq = 4.25e+08
+Started Broken Strait with 1 player Field Engineer and 1 AI Field Engineer
+SCRIPT ERROR: Invalid call. Nonexistent 'int' constructor.
+          at: _scenario_basic_selection_move (res://validation/validation_runner.gd:77)
+          GDScript backtrace (most recent call first):
+              [0] _scenario_basic_selection_move (res://validation/validation_runner.gd:77)
+              [1] _create_skirmish (res://validation/validation_runner.gd:66)
+VALIDATION REPORT /home/conor/repos/mandate-of-war/validation/artifacts/basic_selection_move/20260912T124833.053983Z/report.json
