@@ -12,7 +12,7 @@ int main() {
     using namespace rts::test;
     
     try {
-        test_runner.run_all();
+        test_runner().run_all();
         std::cout << "All portable_snapshot tests passed" << std::endl;
         return 0;
     } catch (const std::exception& e) {

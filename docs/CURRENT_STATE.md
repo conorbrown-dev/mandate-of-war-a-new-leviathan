@@ -1,14 +1,15 @@
 # Current State — Reconciled Evidence Boundary
 
 **Date:** 2026-09-12
-**Milestone state:** `G03-COMBAT-BENCH` is ACTIVE. Goals 04–11 are gated. This checkout has substantial uncommitted candidate work beyond `main`; it is preserved but not accepted as a milestone bypass. See `docs/WORKTREE_RECONCILIATION.md`.
+**Milestone state:** Goal 03 is verified and `G04-BENCH` is ACTIVE. Goals 05–11 are gated. Consolidated candidate work on `main` is not accepted as a milestone bypass. See `docs/WORKTREE_RECONCILIATION.md`.
 
 ## Reconciliation Result — 2026-09-12
 
-The prior Goal 11 headline is historical, not current acceptance. Fresh local evidence passes the Release build, CTest 3/3, direct runners (18/18, 21/21, 164/164), Godot smoke, 91-check presentation harness, and four repository-owned validation scenarios. It does not pass the two required milestone benchmarks below:
+The prior Goal 11 headline is historical, not current acceptance. Fresh local evidence passes the Release build, CTest 3/3, direct runners, Godot smoke, 91-check presentation harness, and four repository-owned validation scenarios. Goal 03 now passes its required benchmark; Goal 04 remains open:
 
-- `rts_combat_benchmark 2000 100` fails with zero projectiles and zero destructions.
 - `rts_logistics_benchmark 10000 30 100` fails at 20.920 ms/tick against its 15 ms limit.
+
+`rts_combat_benchmark 2000 100` now passes with 2,000 destroyed units, 1,038 actual projectile spawns, a changed state hash, and 11.058 ms cache-hit average. The benchmark no longer incorrectly derives destruction from dead entities that the simulation has already removed.
 
 The previously cited `9c295bf` baseline is absent. Existing text below records implementation history and candidate functionality; it must not be read as current sequential-goal sign-off.
 

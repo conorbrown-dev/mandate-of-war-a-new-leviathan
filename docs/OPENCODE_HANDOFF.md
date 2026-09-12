@@ -15,11 +15,11 @@
 
 ## Current State
 
-**Active goal:** `G03-COMBAT-BENCH` recovery. Goals 04–11 are gated. Earlier Goal 11 and Goal 12 wording below is historical implementation context, not current acceptance routing.
+**Active goal:** `G04-BENCH` logistics recovery. Goals 05–11 are gated. Earlier Goal 11 and Goal 12 wording below is historical implementation context, not current acceptance routing.
 
 **Reconciliation:** `main` is `1846132`; the prior `9c295bf` baseline is absent. A substantial dirty-tree implementation package is preserved, and `stash@{0}` remains unapplied user work. The model-integration branch has no commits absent from `main`, while its registered external worktree is unavailable. See `docs/WORKTREE_RECONCILIATION.md`.
 
-**Current blockers:** `rts_combat_benchmark 2000 100` fails with no projectile activity or destructions; `rts_logistics_benchmark 10000 30 100` fails at 20.920 ms/tick versus the 15 ms gate. Do not advance the goal sequence until Goal 03 has fresh, meaningful combat evidence.
+**Current blocker:** `rts_logistics_benchmark 10000 30 100` fails at 20.920 ms/tick versus the 15 ms gate. Goal 03 is verified: its fresh 2,000-vs-2,000 benchmark has target acquisition, 1,038 actual projectile spawns, 2,000 destructions, a changed state hash, and an 11.058 ms cache-hit average. Do not advance the goal sequence until Goal 04 has fresh, passing logistics evidence.
 
 **Last verified:** 2026-09-12
 

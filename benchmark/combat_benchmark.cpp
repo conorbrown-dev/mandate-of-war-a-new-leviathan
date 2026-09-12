@@ -142,17 +142,11 @@ CombatResult run_combat_scenario(int units_per_faction, int tick_count) {
     std::vector<double> tick_samples;
     tick_samples.reserve(static_cast<std::size_t>(tick_count));
 
-    size_t projectiles_spawned = 0;
-
     for (int tick = 0; tick < tick_count; ++tick) {
         const auto tick_start = Clock::now();
         simulation.update(50.0f);
         tick_samples.push_back(elapsed_ms(tick_start, Clock::now()));
         
-        auto state = simulation.get_state();
-
-        const auto& current_projectile_count = simulation.combat_manager().projectile_manager().active_count();
-        projectiles_spawned += current_projectile_count;
     }
 
     const rts::SimulationState final_state = simulation.get_state();
@@ -167,16 +161,11 @@ CombatResult run_combat_scenario(int units_per_faction, int tick_count) {
          if (!final_state.is_dead[i]) final_live++;
      }
     
-    size_t initial_dead = 0;
-    for (size_t i = 0; i < initial_state.entity_ids.size(); ++i) {
-        if (initial_state.is_dead[i]) initial_dead++;
-    }
-    size_t final_dead = 0;
-    for (size_t i = 0; i < final_state.entity_ids.size(); ++i) {
-        if (final_state.is_dead[i]) final_dead++;
-     }
-     
-      size_t units_destroyed = final_dead - initial_dead;
+    // Dead units are removed from SimulationState during the combat phase, so
+    // state-local dead counts cannot measure losses. Live-count reduction is
+    // the authoritative destruction signal for this scenario.
+    const size_t units_destroyed = initial_live >= final_live ? initial_live - final_live : 0;
+    const size_t projectiles_spawned = simulation.combat_manager().projectile_manager().total_spawned();
 
      return {
         units_per_faction,
@@ -205,7 +194,7 @@ CombatResult run_combat_scenario(int units_per_faction, int tick_count) {
 
 void print_result(const CombatResult& result) {
     std::cout << std::fixed << std::setprecision(3);
-    std::cout << "Combat benchmark passed\n"
+    std::cout << "Combat benchmark results\n"
               << "  units per faction: " << result.units_per_faction << '\n'
               << "  total initial units: " << result.initial_live_factions << '\n'
               << "  total final units: " << result.final_live_factions << '\n'
@@ -216,7 +205,7 @@ void print_result(const CombatResult& result) {
               << "  cold first tick: " << result.cold_first_tick_ms << " ms\n"
               << "  cache-hit tick avg/p50/p95/max: "
               << result.cache_hit_tick_average_ms << " / " << result.cache_hit_tick_p50_ms << " / "
-              << result.cache_hit_tick_max_ms << " ms\n"
+              << result.cache_hit_tick_p95_ms << " / " << result.cache_hit_tick_max_ms << " ms\n"
               << "  initial/final state hash: " << result.initial_hash << " / " << result.final_hash << '\n';
 }
 

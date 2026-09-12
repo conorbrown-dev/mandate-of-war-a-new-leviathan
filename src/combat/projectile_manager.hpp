@@ -40,10 +40,12 @@ public:
     const std::vector<Projectile>& projectiles() const { return projectiles_; }
     
     size_t active_count() const;
+    size_t total_spawned() const { return total_spawned_; }
 
 private:
     std::vector<Projectile> projectiles_;
     size_t max_projectiles_;
+    size_t total_spawned_{0};
     
     void check_impact(Projectile& p, SpatialGrid& spatial_grid, ComponentManager& component_manager);
     void apply_damage(EntityId entity_id, float damage, ComponentManager& component_manager);

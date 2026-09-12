@@ -42,6 +42,7 @@ void ProjectileManager::spawn(float x, float y, float vel_x, float vel_y,
     p.active = true;
     
     projectiles_.push_back(p);
+    ++total_spawned_;
 }
 
 void ProjectileManager::update(float delta_ms, SpatialGrid& spatial_grid, ComponentManager& component_manager) {
@@ -126,6 +127,7 @@ void ProjectileManager::apply_damage(EntityId entity_id, float damage, Component
 
 void ProjectileManager::clear() {
     projectiles_.clear();
+    total_spawned_ = 0;
 }
 
 size_t ProjectileManager::active_count() const {

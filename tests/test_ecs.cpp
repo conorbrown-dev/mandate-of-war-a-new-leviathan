@@ -189,7 +189,7 @@ int main() {
     using namespace rts::test;
     
     try {
-        test_runner.run_all();
+        test_runner().run_all();
         return 0;
     } catch (const std::exception& e) {
         std::cerr << e.what() << std::endl;

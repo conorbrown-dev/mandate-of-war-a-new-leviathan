@@ -60,13 +60,18 @@ private:
     namespace { \
         struct reg_##name { \
             reg_##name() { \
-                rts::test::test_runner.add_test(#name, test_##name); \
+                rts::test::test_runner().add_test(#name, test_##name); \
             } \
         } reg_##name##_instance; \
     } \
     void test_##name()
 
-inline TestRunner test_runner;
+inline TestRunner& test_runner() {
+    // Registrations run during static initialization across many translation
+    // units, so a function-local singleton avoids initialization-order UB.
+    static TestRunner runner;
+    return runner;
+}
 
 } // namespace test
 } // namespace rts

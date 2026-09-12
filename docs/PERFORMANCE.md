@@ -1,8 +1,17 @@
 # Performance Evidence
 
-**Last updated:** 2026-09-09
+**Last updated:** 2026-09-12
 
-**Current milestone:** Goal 11 active. Goal 10 complete: Terrain system integration verified. All integration tests pass (134/137, 6 pre-existing failures unrelated to terrain).
+**Current milestone:** Goal 04 active. Historical Goal 10/11 statements below are implementation history, not current sequential acceptance.
+
+## 2026-09-12 Reconciled Benchmark Evidence
+
+| Workload | Result | Status |
+|---|---:|---|
+| 2,000 vs 2,000 combat / 100 ticks | 11.058 ms cache-hit average; 1,038 projectiles; 2,000 destroyed | PASS (`G03-COMBAT-BENCH`) |
+| 10,000 logistics units / 30 carriers / 100 ticks | 20.920 ms average against 15 ms gate | FAIL (`G04-BENCH`) |
+
+The combat benchmark now measures cumulative successful projectile spawns and derives losses from the state live-count reduction because combat cleanup removes dead entities. It is not valid to treat this combat result as Godot rendering/FPS evidence.
 
 ## 2026-09-04 Logistics Benchmark Validation
 
