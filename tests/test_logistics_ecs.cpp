@@ -292,6 +292,26 @@ TEST(multiple_facility_types) {
         throw std::runtime_error("multiple_facility_types_air");
 }
 
+TEST(recovery_facility_supports_air_and_naval_capabilities) {
+    ComponentManager component_manager;
+    LogisticsManager manager;
+    manager.set_component_manager(&component_manager);
+
+    Airbase airbase{};
+    airbase.x = 10.0f;
+    airbase.y = 20.0f;
+    airbase.runway_usable = true;
+    manager.add_airbase(90, airbase);
+    manager.add_naval_base(90, 10.0f, 20.0f, 75.0f);
+
+    const auto* facility = component_manager.get_component<RecoveryFacility>(90);
+    if (!facility || !facility->supports(RecoveryFacility::Type::AIRBASE) ||
+        !facility->supports(RecoveryFacility::Type::NAVAL_BASE) ||
+        manager.find_nearest_recovery_facility(10.0f, 20.0f, RecoveryFacility::Type::NAVAL_BASE) != 90) {
+        throw std::runtime_error("recovery_facility_missing_combined_capabilities");
+    }
+}
+
 TEST(component_removal) {
     ComponentManager component_manager;
     LogisticsManager manager;

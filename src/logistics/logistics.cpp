@@ -215,7 +215,7 @@ EntityId LogisticsManager::find_nearest_recovery_facility(float x, float y, Reco
 
     for (EntityId entity_id : facilities->second) {
         auto* facility = component_manager_->get_component<RecoveryFacility>(entity_id);
-        if (!facility || facility->type != type || !compatible_facility(observer, entity_id)) {
+        if (!facility || !facility->supports(type) || !compatible_facility(observer, entity_id)) {
             continue;
         }
         if (type == RecoveryFacility::Type::AIRBASE) {
@@ -495,6 +495,7 @@ void LogisticsManager::add_airbase(EntityId airbase_id, const Airbase& airbase) 
     facility.y = airbase.y;
     facility.max_recovery_distance = 500.0f;
     facility.type = RecoveryFacility::Type::AIRBASE;
+    facility.capabilities = RecoveryFacility::AIR_RECOVERY;
     component_manager_->add_component<RecoveryFacility>(airbase_id, facility);
     flight_deck_operations_[airbase_id] = FlightDeckOperations{};
     index_recovery_facility(airbase_id, facility.type);
@@ -981,6 +982,7 @@ void LogisticsManager::add_carrier(EntityId carrier_id, const Carrier& carrier) 
     facility.y = carrier.y;
     facility.max_recovery_distance = 300.0f;
     facility.type = RecoveryFacility::Type::CARRIER;
+    facility.capabilities = RecoveryFacility::AIR_RECOVERY;
     component_manager_->add_component<RecoveryFacility>(carrier_id, facility);
     flight_deck_operations_[carrier_id] = FlightDeckOperations{};
     index_recovery_facility(carrier_id, facility.type);
@@ -992,13 +994,19 @@ void LogisticsManager::add_naval_base(EntityId base_id, float x, float y, float 
         return;
     }
     
-    RecoveryFacility facility;
-    facility.x = x;
-    facility.y = y;
-    facility.max_recovery_distance = max_recovery_distance;
-    facility.type = RecoveryFacility::Type::NAVAL_BASE;
-    component_manager_->add_component<RecoveryFacility>(base_id, facility);
-    index_recovery_facility(base_id, facility.type);
+    if (auto* facility = component_manager_->get_component<RecoveryFacility>(base_id)) {
+        facility->capabilities |= RecoveryFacility::NAVAL_RESUPPLY;
+        facility->max_recovery_distance = std::max(facility->max_recovery_distance, max_recovery_distance);
+    } else {
+        RecoveryFacility naval_facility;
+        naval_facility.x = x;
+        naval_facility.y = y;
+        naval_facility.max_recovery_distance = max_recovery_distance;
+        naval_facility.type = RecoveryFacility::Type::NAVAL_BASE;
+        naval_facility.capabilities = RecoveryFacility::NAVAL_RESUPPLY;
+        component_manager_->add_component<RecoveryFacility>(base_id, naval_facility);
+    }
+    index_recovery_facility(base_id, RecoveryFacility::Type::NAVAL_BASE);
     invalidate_facility_caches();
 }
 

@@ -134,6 +134,7 @@ bool Skirmish::load(const std::string& path) {
         airbase.refuel_rate=20; airbase.rearm_rate=10; airbase.max_fuel=10000; airbase.current_fuel=10000;
         airbase.max_munitions=10000; airbase.current_munitions=10000; airbase.runway_usable=true;
         simulation_.logistics_manager().add_airbase(bases_[0],airbase);
+        simulation_.logistics_manager().add_naval_base(bases_[0], x[0], y[0], 80.0f);
         for(int i=0;i<planes;++i) {
             auto id=simulation_.create_unit_with_type(x[0],y[0]+2*i,UnitType::ELITE_T1_FIGHTER,FactionId::ELITE_PRECISION);
             auto* aircraft=simulation_.component_manager().get_component<Aircraft>(id);

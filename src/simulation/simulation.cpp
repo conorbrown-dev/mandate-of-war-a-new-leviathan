@@ -391,6 +391,14 @@ void Simulation::return_unit(EntityId entity) {
     if (!base_pos) return;
     
     if (auto* vessel = component_manager_.get_component<NavalVessel>(entity)) {
+        const EntityId naval_base = logistics_manager_.find_nearest_recovery_facility(
+            vessel->x, vessel->y, RecoveryFacility::Type::NAVAL_BASE, entity
+        );
+        const auto* facility = component_manager_.get_component<RecoveryFacility>(naval_base);
+        if (!facility) return;
+        const float dx = vessel->x - facility->x;
+        const float dy = vessel->y - facility->y;
+        if (dx * dx + dy * dy > facility->max_recovery_distance * facility->max_recovery_distance) return;
         auto funds = production_manager_.storages().find(base);
         const float needed = vessel->max_fuel - vessel->fuel;
         if (funds != production_manager_.storages().end() && funds->second.energy_storage >= needed) {
@@ -604,8 +612,13 @@ bool Simulation::validate_command(const InputCommand& cmd, uint32_t execution_ti
                 fprintf(stderr, "VALIDATE_FAIL: RETURN naval base check failed (entity=%u base=%u)\n", cmd.entity_id, base);
                 return false;
             }
-            const float dx=vessel->x-position->x,dy=vessel->y-position->y;
-            bool ok = dx*dx+dy*dy<=80*80 && funds->second.energy_storage>=vessel->max_fuel-vessel->fuel;
+            const EntityId naval_base=const_cast<LogisticsManager&>(logistics_manager_).find_nearest_recovery_facility(
+                vessel->x, vessel->y, RecoveryFacility::Type::NAVAL_BASE, cmd.entity_id
+            );
+            const auto* facility=component_manager_.get_component<RecoveryFacility>(naval_base);
+            const float dx=facility ? vessel->x-facility->x : std::numeric_limits<float>::infinity();
+            const float dy=facility ? vessel->y-facility->y : std::numeric_limits<float>::infinity();
+            bool ok = facility && dx*dx+dy*dy<=facility->max_recovery_distance*facility->max_recovery_distance && funds->second.energy_storage>=vessel->max_fuel-vessel->fuel;
             if (!ok) fprintf(stderr, "VALIDATE_FAIL: RETURN naval position/fuel check failed (entity=%u dist=%.2f fuel=%.2f)\n", cmd.entity_id, sqrt(dx*dx+dy*dy), funds->second.energy_storage - vessel->max_fuel + vessel->fuel);
             return ok;
         }

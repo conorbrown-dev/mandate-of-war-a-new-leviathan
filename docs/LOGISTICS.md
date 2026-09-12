@@ -11,6 +11,8 @@
 
 Focused review remediation: remembered intelligence is archived outside the live ECS component stores on entity destruction, decays deterministically, and is cleared before a recycled entity ID is created. `intelligence_memory_does_not_leak_across_entity_id_reuse` covers the lifecycle boundary.
 
+Recovery facilities now advertise capabilities rather than being limited to one exclusive role: `AIR_RECOVERY` and `NAVAL_RESUPPLY`. Existing `Type` values remain for compatibility and indexing. A single owned installation can therefore serve both runway recovery and naval resupply; naval RETURN validation resolves the naval capability and its radius explicitly. `recovery_facility_supports_air_and_naval_capabilities` covers the combined installation contract.
+
 `G04-AIRBASE` provides deterministic per-airbase takeoff and landing queues, runway-capacity enforcement, unusable-runway gating, explicit fixed-wing lifecycle states, recovery-radius admission, and finite-stock refuel/rearm. Release build, CTest 1/1, and 115 behavior assertions pass.
 
 `G04-AIR_RANGE` adds fixed-tick Energy, Material, and airborne-time consumption plus conservative direct-flight return estimates. Recovery facilities are indexed by compatibility type and cached spatially with a mathematically bounded nearest-facility stability radius; aircraft estimates are invalidated after meaningful movement or any facility move. Release build, CTest 1/1, and 115 behavior assertions pass.
