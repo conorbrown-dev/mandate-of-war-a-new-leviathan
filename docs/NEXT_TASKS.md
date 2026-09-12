@@ -1,12 +1,12 @@
 # Next Tasks — Reconciled Sequential Recovery
 
-**Updated:** 2026-09-12. Goal 04 acceptance is active; its performance gate is verified. Goals 05–11 are gated; substantial later-system work remains preserved in the dirty tree but is not accepted. See `docs/WORKTREE_RECONCILIATION.md`.
+**Updated:** 2026-09-12. Goal 04 is verified; Goal 05 is active. Goals 06–11 are gated. See `docs/WORKTREE_RECONCILIATION.md`.
 
-## Active: Goal 04 acceptance and review
+## Active: Goal 05 — modding, asset pipeline, map editor
 
-1. Reconcile each of Goal 04's 14 required prototype behaviors to a current deterministic scenario or integration assertion; add only missing coverage.
-2. Perform the required focused logistics architecture review, addressing any warranted scalability, scheduling, determinism, or replay risks.
-3. Rerun the Goal 04 scenario matrix, Release build, CTest, and the 10,000-aircraft/30-carrier benchmark before considering Goal 05.
+1. Read `05_MODDING_ASSET_PIPELINE_MAP_EDITOR.md` and reconcile its acceptance criteria with current code.
+2. Select one narrow, end-to-end Goal 05 proof path: load a test mod, spawn its generated unit, and save/load a map.
+3. Add behavior assertions and perform the required modding/asset/map review before advancing.
 
 ## Gated work
 

@@ -15,11 +15,11 @@
 
 ## Current State
 
-**Active goal:** Goal 04 acceptance reconciliation and logistics architecture review. Goals 05–11 are gated. Earlier Goal 11 and Goal 12 wording below is historical implementation context, not current acceptance routing.
+**Active goal:** Goal 05 modding, asset pipeline, and map-editor acceptance. Goals 06–11 are gated. Earlier Goal 11 and Goal 12 wording below is historical implementation context, not current acceptance routing.
 
 **Reconciliation:** `main` is `1846132`; the prior `9c295bf` baseline is absent. A substantial dirty-tree implementation package is preserved, and `stash@{0}` remains unapplied user work. The model-integration branch has no commits absent from `main`, while its registered external worktree is unavailable. See `docs/WORKTREE_RECONCILIATION.md`.
 
-**Current boundary:** `rts_logistics_benchmark 10000 30 100` passes at 0.871 ms cache-hit average against the 15 ms gate. It measures 10,000 airborne conventional aircraft, 30 moving carriers, safe-return/facility lookup caching, and periodic intelligence updates—not unrelated simulation phases. Goal 03 remains verified. Do not advance the goal sequence until all 14 Goal 04 behaviors have current deterministic evidence and the focused logistics architecture review is complete.
+**Current boundary:** Goal 04 is verified: the full behavior suite, focused review, Release build, CTest 3/3, direct integration 167/167, and logistics benchmark all passed. Goal 05 is active; begin with `05_MODDING_ASSET_PIPELINE_MAP_EDITOR.md` and do not advance until its end-to-end mod/map acceptance proof and review are complete.
 
 **Last verified:** 2026-09-12
 

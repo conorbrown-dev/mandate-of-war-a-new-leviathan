@@ -1,13 +1,13 @@
 # Near-Future RTS — Logistics System
 
-> **Goal 04 is active.** `G04-BENCH` is verified; full closure still requires current deterministic evidence for all 14 required behaviors and the focused logistics architecture review. Historical prototype claims below are design inventory, not acceptance evidence.
+> **Goal 04 is verified.** Its 14 required behaviors, focused architecture review, Release build, CTest, direct integration runner, and logistics performance gate are recorded in `docs/LOGISTICS_ARCHITECTURE_REVIEW.md`. Goal 05 is now active. Historical prototype claims below are design inventory, not acceptance evidence.
 
 **Last updated:** 2026-09-12
-**Milestone:** Canonical Goal 04 active
+**Milestone:** Goal 04 verified; canonical Goal 05 active
 
 ## Verified Goal 04 Slice
 
-`G04-BENCH` now runs an isolated Release logistics workload of 10,000 airborne conventional aircraft and 30 moving T1 carriers for 100 ticks. It executes endurance updates, safe-return estimation, facility lookup, carrier recovery-point movement, and periodic intelligence updates; prediction, combat, economy, and snapshot costs are explicitly outside this measurement. The 2026-09-12 run passed at 0.871 ms cache-hit average (p50 0.664, p95 1.371; 15 ms acceptance limit), with 957,800 safe-return cache hits and 42,200 misses. Carrier movement clears nearest-facility lookup entries but safe-return estimates retain bounded aircraft/facility position snapshots and expire once either endpoint moves more than 25 m. Production movement synchronizes a carrier's `RecoveryFacility` position, covered by `simulation_movement_keeps_carrier_recovery_position_in_sync`.
+`G04-BENCH` runs an isolated Release logistics workload of 10,000 airborne conventional aircraft and 30 moving T1 carriers for 100 ticks. It executes endurance updates, safe-return estimation, facility lookup, carrier recovery-point movement, and periodic intelligence updates; prediction, combat, economy, and snapshot costs are explicitly outside this measurement. The final 2026-09-12 run passed at 0.951 ms cache-hit average (p50 0.700, p95 1.488; 15 ms acceptance limit). Carrier movement clears nearest-facility lookup entries but safe-return estimates retain bounded aircraft/facility position snapshots and expire once either endpoint moves more than 25 m. Production movement synchronizes a carrier's `RecoveryFacility` position, covered by `simulation_movement_keeps_carrier_recovery_position_in_sync`.
 
 Focused review remediation: remembered intelligence is archived outside the live ECS component stores on entity destruction, decays deterministically, and is cleared before a recycled entity ID is created. `intelligence_memory_does_not_leak_across_entity_id_reuse` covers the lifecycle boundary.
 
