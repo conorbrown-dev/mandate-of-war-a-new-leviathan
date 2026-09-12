@@ -3,10 +3,10 @@
 > **Goal 05 status (2026-09-12):** A manifest-declared generated unit is now
 > schema-validated with its placeholder mesh, assigned a stable SHA-256 content
 > handle, and spawnable through the development simulation bridge. Dependency
-> presence and `>=` version constraints are enforced against already loaded
-> content. Deterministic batch ordering, replacement semantics, and scripts
-> remain unimplemented acceptance work; the Lua sections below are design
-> direction, not a shipped runtime.
+> presence and `>=` version constraints are enforced, including deterministic
+> dependency-first batch ordering. Replacement semantics, atomic rollback on a
+> late content-read failure, and scripts remain unimplemented acceptance work;
+> the Lua sections below are design direction, not a shipped runtime.
 
 ## Objective
 

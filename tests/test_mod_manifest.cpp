@@ -233,3 +233,15 @@ TEST(mod_manifest_load_mod) {
         throw std::runtime_error("Spawned generated unit did not receive authored runtime data");
     }
 }
+
+TEST(mod_manifest_batch_loads_dependencies_in_stable_order) {
+    const fs::path root = fs::current_path() / "test_mods";
+    rts::ModManager manager;
+    if (!manager.load_mod_batch({root / "test_mod_1", root / "base_content"})) {
+        throw std::runtime_error("Batch loader should resolve a dependency provided later in input");
+    }
+    const auto& manifests = manager.get_loaded_manifests();
+    if (manifests.size() != 2 || manifests[0].id != "base_content" || manifests[1].id != "test_mod_1") {
+        throw std::runtime_error("Batch loader did not apply deterministic dependency order");
+    }
+}

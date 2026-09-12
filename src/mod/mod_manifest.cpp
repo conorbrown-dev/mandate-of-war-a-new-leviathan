@@ -7,6 +7,8 @@
 #include <regex>
 #include <algorithm>
 #include <cmath>
+#include <map>
+#include <set>
 
 namespace rts {
 
@@ -324,6 +326,55 @@ bool ModManager::load_mod(const fs::path& mod_dir) {
     loaded_mod_ids_.insert(manifest.id);
     generated_units_.insert(generated_units_.end(), loaded_units.begin(), loaded_units.end());
     
+    return true;
+}
+
+bool ModManager::load_mod_batch(const std::vector<fs::path>& mod_dirs) {
+    struct Pending { fs::path path; ModManifest manifest; };
+    ModManifestLoader loader;
+    std::map<std::string, Pending> pending;
+    for (const auto& path : mod_dirs) {
+        const auto manifest = loader.load_manifest(path);
+        if (!manifest || !loader.validate_manifest(*manifest) || loaded_mod_ids_.count(manifest->id) ||
+            !pending.emplace(manifest->id, Pending{path, *manifest}).second) {
+            load_errors_.push_back("Invalid or duplicate manifest in mod batch: " + path.string());
+            return false;
+        }
+    }
+    std::map<std::string, int> indegree;
+    std::map<std::string, std::vector<std::string>> graph;
+    for (const auto& [id, item] : pending) {
+        indegree[id] = 0;
+        for (const auto& dependency : item.manifest.dependencies) {
+            const auto candidate = pending.find(dependency.id);
+            if (candidate != pending.end()) {
+                if (!loader.check_version_constraint(candidate->second.manifest.version, dependency.version_constraint)) {
+                    load_errors_.push_back("Dependency version mismatch in mod batch: " + dependency.id);
+                    return false;
+                }
+                graph[dependency.id].push_back(id);
+                ++indegree[id];
+                continue;
+            }
+            const auto loaded = std::find_if(loaded_manifests_.begin(), loaded_manifests_.end(), [&](const auto& value) { return value.id == dependency.id; });
+            if (loaded == loaded_manifests_.end() || !loader.check_version_constraint(loaded->version, dependency.version_constraint)) {
+                load_errors_.push_back("Unsatisfied dependency in mod batch: " + dependency.id);
+                return false;
+            }
+        }
+    }
+    std::set<std::string> ready;
+    for (const auto& [id, degree] : indegree) if (degree == 0) ready.insert(id);
+    std::vector<std::string> order;
+    while (!ready.empty()) {
+        const std::string id = *ready.begin(); ready.erase(ready.begin()); order.push_back(id);
+        for (const auto& dependent : graph[id]) if (--indegree[dependent] == 0) ready.insert(dependent);
+    }
+    if (order.size() != pending.size()) {
+        load_errors_.push_back("Circular dependency detected in mod batch");
+        return false;
+    }
+    for (const auto& id : order) if (!load_mod(pending.at(id).path)) return false;
     return true;
 }
 

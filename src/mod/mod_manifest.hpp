@@ -80,6 +80,7 @@ public:
     ModManager() = default;
     
     bool load_mod(const fs::path& mod_dir);
+    bool load_mod_batch(const std::vector<fs::path>& mod_dirs);
     bool load_base_content(const fs::path& base_dir);
     std::vector<std::string> get_load_errors() const;
     const std::vector<ModManifest>& get_loaded_manifests() const { return loaded_manifests_; }
