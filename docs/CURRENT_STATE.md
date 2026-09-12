@@ -31,6 +31,11 @@ round-trips a YAML header and terrain/resource/spawn/entity sidecars with
 assertions over editable data. An interactive editor UI and remaining map
 validation rules are still open Goal 05 work.
 
+`MapEditorModel` now provides standalone Godot-side editable state for terrain,
+water cells, playable bounds, spawns, resources, and entities. Its headless
+test proves valid mutation and rejects duplicate or out-of-bounds placement;
+native serializer wiring and rendered editor controls remain open.
+
 Manifest loading now rejects missing or incompatible `>=` dependencies before
 unit content is registered; the integration suite proves reject-before-base,
 accept-after-compatible-base, and incompatible-version rejection. Batch
