@@ -574,6 +574,31 @@ TEST(simulation_updates_aircraft_endurance_and_safe_return_diagnostics) {
         throw std::runtime_error("grounded_aircraft_consumed_endurance");
 }
 
+TEST(simulation_movement_keeps_carrier_recovery_position_in_sync) {
+    Simulation simulation;
+    simulation.start();
+
+    const Entity carrier_entity = simulation.create_unit(0.0f, 0.0f);
+    Carrier carrier{};
+    carrier.x = 0.0f;
+    carrier.y = 0.0f;
+    carrier.runway_capacity = 1;
+    carrier.runway_usable = true;
+    carrier.deck_capacity = 2;
+    simulation.logistics_manager().add_carrier(carrier_entity.id, carrier);
+
+    simulation.move_unit(carrier_entity.id, 100.0f, 0.0f);
+    simulation.update(50.0f);
+
+    const auto* position = simulation.component_manager().get_component<Position>(carrier_entity.id);
+    const auto* facility = simulation.component_manager().get_component<RecoveryFacility>(carrier_entity.id);
+    if (!position || !facility || position->x <= 0.0f ||
+        std::abs(position->x - facility->x) > 0.0001f ||
+        std::abs(position->y - facility->y) > 0.0001f) {
+        throw std::runtime_error("moving_carrier_recovery_position_desynchronized");
+    }
+}
+
 TEST(unusable_runway_exhaustion_removes_aircraft_and_cleans_queue) {
     Simulation simulation;
     simulation.start();

@@ -9,9 +9,9 @@
 | Workload | Result | Status |
 |---|---:|---|
 | 2,000 vs 2,000 combat / 100 ticks | 11.058 ms cache-hit average; 1,038 projectiles; 2,000 destroyed | PASS (`G03-COMBAT-BENCH`) |
-| 10,000 logistics units / 30 carriers / 100 ticks | 20.920 ms average against 15 ms gate | FAIL (`G04-BENCH`) |
+| 10,000 airborne aircraft / 30 moving carriers / 100 ticks | 0.871 ms cache-hit average against 15 ms gate | PASS (`G04-BENCH`) |
 
-The combat benchmark now measures cumulative successful projectile spawns and derives losses from the state live-count reduction because combat cleanup removes dead entities. It is not valid to treat this combat result as Godot rendering/FPS evidence.
+The combat benchmark now measures cumulative successful projectile spawns and derives losses from the state live-count reduction because combat cleanup removes dead entities. It is not valid to treat this combat result as Godot rendering/FPS evidence. The logistics harness measures logistics only: endurance updates, safe-return estimation, facility lookup, carrier recovery-point movement, and intelligence staleness. It deliberately excludes prediction, combat, economy, and snapshot time.
 
 ## 2026-09-04 Logistics Benchmark Validation
 

@@ -1,17 +1,15 @@
 # Next Tasks — Reconciled Sequential Recovery
 
-**Updated:** 2026-09-12. `G03-COMBAT-BENCH` is active. Goals 04–11 are gated; substantial later-system work remains preserved in the dirty tree but is not accepted. See `docs/WORKTREE_RECONCILIATION.md`.
+**Updated:** 2026-09-12. Goal 04 acceptance is active; its performance gate is verified. Goals 05–11 are gated; substantial later-system work remains preserved in the dirty tree but is not accepted. See `docs/WORKTREE_RECONCILIATION.md`.
 
-## Active: G03-COMBAT-BENCH
+## Active: Goal 04 acceptance and review
 
-1. Inspect the failing 2,000-vs-2,000 workload and determine why it produces no projectiles or destructions.
-2. Make one narrow production or benchmark correction only after identifying the cause.
-3. Run the benchmark plus the relevant native behavior tests; record exact build, workload, assertions, and metrics.
-4. Reconcile Goal 03's economy/data/review requirements before considering Goal 04.
+1. Reconcile each of Goal 04's 14 required prototype behaviors to a current deterministic scenario or integration assertion; add only missing coverage.
+2. Perform the required focused logistics architecture review, addressing any warranted scalability, scheduling, determinism, or replay risks.
+3. Rerun the Goal 04 scenario matrix, Release build, CTest, and the 10,000-aircraft/30-carrier benchmark before considering Goal 05.
 
 ## Gated work
 
-- **Goal 04:** 10,000-unit logistics benchmark currently exceeds its 15 ms gate.
 - **Goals 05–08:** their own specifications retain unproven or TODO requirements.
 - **Goals 09 and 11:** lack canonical numbered root specifications.
 - Do not apply `stash@{0}` or repair/remove the unavailable model-integration worktree without explicit user authorization.

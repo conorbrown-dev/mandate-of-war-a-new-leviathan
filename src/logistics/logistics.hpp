@@ -144,6 +144,8 @@ private:
     struct SafeReturnCacheEntry {
         float x = 0.0f;
         float y = 0.0f;
+        float facility_x = 0.0f;
+        float facility_y = 0.0f;
         float cruise_speed = 0.0f;
         float energy_rate = 0.0f;
         float material_rate = 0.0f;

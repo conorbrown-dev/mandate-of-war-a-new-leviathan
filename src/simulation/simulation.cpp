@@ -900,6 +900,9 @@ void Simulation::prediction_phase(float delta_ms) {
         }
         spatial_grid_.update(entity_id, pos->x, pos->y);
         if (vessel) { vessel->x = pos->x; vessel->y = pos->y; }
+        if (component_manager_.get_component<Carrier>(entity_id)) {
+            logistics_manager_.update_recovery_facility_position(entity_id, pos->x, pos->y);
+        }
         auto patrol = patrol_orders_.find(entity_id);
         if (patrol != patrol_orders_.end() && move_targets_.find(entity_id) == move_targets_.end()) {
             patrol->second.returning = !patrol->second.returning;

@@ -2,7 +2,7 @@
 
 **Last updated:** 2026-09-12
 
-**Sequence mode:** reconciliation complete; Goal 03 is verified and `G04-BENCH` is ACTIVE. Goals 05–11 are GATED.
+**Sequence mode:** reconciliation complete; Goal 03 is verified and Goal 04 acceptance is ACTIVE. Goals 05–11 are GATED.
 
 **Milestone state:** Goals 02 and 03 have current local validation evidence. Goal 04 is now the active acceptance gate; candidate later-goal implementation cannot bypass it. See `docs/WORKTREE_RECONCILIATION.md`.
 
@@ -15,7 +15,7 @@ This section supersedes contradictory historical status claims below. It is base
 - `9c295bf` is absent; claims tied to it are historical and non-verifiable here.
 - Release build, CTest (3/3), direct native runners (18/18, 21/21, 164/164), Godot smoke, Godot presentation (91/91), and the four repository-owned validation scenarios pass on the current dirty tree.
 - `G03-COMBAT-BENCH` passes: `rts_combat_benchmark 2000 100` reports 4,000 initial units, 2,000 destroyed, 1,038 projectiles, changed state hash, and 11.058 ms cache-hit average (2026-09-12).
-- `G04-BENCH` fails: `rts_logistics_benchmark 10000 30 100` returns non-zero at 20.920 ms/tick, above its 15 ms acceptance limit.
+- `G04-BENCH` passes: `rts_logistics_benchmark 10000 30 100` measures 10,000 airborne conventional aircraft, 30 moving carriers, safe-return/facility cache behavior, and intelligence updates at 0.871 ms cache-hit average (2026-09-12). It is isolated from prediction/combat/economy/snapshot timing by design.
 - No canonical Goal 09 or Goal 11 specification exists at repository root. The Goal 06 and Goal 08 specifications also contain explicit TODO/in-progress gates that contradict their historical closure claims.
 
 ## Milestone Queue
@@ -26,7 +26,7 @@ Historical Goal 04–11 labels below are retained as implementation reports, not
 |---|---|
 | Goal 02 — simulation, scale, rendering, controls | `HISTORICAL` | Functional scale harnesses remain available, but historical performance rows are not current evidence for this dirty checkout. |
 | Goal 03 — economy, combat, factions | `VERIFIED` | `G03-COMBAT-BENCH` passes with meaningful target acquisition, projectile fire, destruction, state evolution, and a cache-hit average under the 12 ms gate. |
-| Goal 04 — logistics, air, naval, intelligence | `ACTIVE` | `G04-BENCH` remains failing: fresh 10,000-unit logistics benchmark exceeds its 15 ms gate; focused review is required. |
+| Goal 04 — logistics, air, naval, intelligence | `ACTIVE` | `G04-BENCH` passes. Before closure, reconcile the 14 required prototype behaviors with current scenario assertions and complete the focused logistics architecture review. |
 | Goal 05 — modding, asset pipeline, map editor | `GATED` | Specification requires a loadable test mod, a spawnable generated unit, map save/load, and evaluated review; current evidence is insufficient. |
 | Goal 06 — multiplayer, replays, stats, AI | `GATED` | Its own numbered specification marks all acceptance criteria TODO. |
 | Goal 07 — deterministic AI foundation | `GATED` | Candidate implementation exists, but it cannot close while earlier goals are gated. |

@@ -1,11 +1,13 @@
 # Near-Future RTS — Logistics System
 
-> **Goal 04 is active.** `G04-AIRBASE`, `G04-AIR_RANGE`, `G04-AIR_CRASH`, `G04-VTOL`, `G04-CARRIER`, `G04-NAVAL_RANGE`, `G04-NAVAL_BASE`, `G04-RECON`, `G04-INTEL`, and `G04-SCENARIO` are verified; `G04-UI`, `G04-BENCH` remain open unless `docs/EXECUTION_LEDGER.md` says otherwise. Historical prototype claims below are design inventory, not acceptance evidence.
+> **Goal 04 is active.** `G04-BENCH` is verified; full closure still requires current deterministic evidence for all 14 required behaviors and the focused logistics architecture review. Historical prototype claims below are design inventory, not acceptance evidence.
 
-**Last updated:** 2026-09-04
+**Last updated:** 2026-09-12
 **Milestone:** Canonical Goal 04 active
 
 ## Verified Goal 04 Slice
+
+`G04-BENCH` now runs an isolated Release logistics workload of 10,000 airborne conventional aircraft and 30 moving T1 carriers for 100 ticks. It executes endurance updates, safe-return estimation, facility lookup, carrier recovery-point movement, and periodic intelligence updates; prediction, combat, economy, and snapshot costs are explicitly outside this measurement. The 2026-09-12 run passed at 0.871 ms cache-hit average (p50 0.664, p95 1.371; 15 ms acceptance limit), with 957,800 safe-return cache hits and 42,200 misses. Carrier movement clears nearest-facility lookup entries but safe-return estimates retain bounded aircraft/facility position snapshots and expire once either endpoint moves more than 25 m. Production movement synchronizes a carrier's `RecoveryFacility` position, covered by `simulation_movement_keeps_carrier_recovery_position_in_sync`.
 
 `G04-AIRBASE` provides deterministic per-airbase takeoff and landing queues, runway-capacity enforcement, unusable-runway gating, explicit fixed-wing lifecycle states, recovery-radius admission, and finite-stock refuel/rearm. Release build, CTest 1/1, and 115 behavior assertions pass.
 

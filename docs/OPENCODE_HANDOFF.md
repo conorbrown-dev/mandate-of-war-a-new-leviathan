@@ -15,11 +15,11 @@
 
 ## Current State
 
-**Active goal:** `G04-BENCH` logistics recovery. Goals 05–11 are gated. Earlier Goal 11 and Goal 12 wording below is historical implementation context, not current acceptance routing.
+**Active goal:** Goal 04 acceptance reconciliation and logistics architecture review. Goals 05–11 are gated. Earlier Goal 11 and Goal 12 wording below is historical implementation context, not current acceptance routing.
 
 **Reconciliation:** `main` is `1846132`; the prior `9c295bf` baseline is absent. A substantial dirty-tree implementation package is preserved, and `stash@{0}` remains unapplied user work. The model-integration branch has no commits absent from `main`, while its registered external worktree is unavailable. See `docs/WORKTREE_RECONCILIATION.md`.
 
-**Current blocker:** `rts_logistics_benchmark 10000 30 100` fails at 20.920 ms/tick versus the 15 ms gate. Goal 03 is verified: its fresh 2,000-vs-2,000 benchmark has target acquisition, 1,038 actual projectile spawns, 2,000 destructions, a changed state hash, and an 11.058 ms cache-hit average. Do not advance the goal sequence until Goal 04 has fresh, passing logistics evidence.
+**Current boundary:** `rts_logistics_benchmark 10000 30 100` passes at 0.871 ms cache-hit average against the 15 ms gate. It measures 10,000 airborne conventional aircraft, 30 moving carriers, safe-return/facility lookup caching, and periodic intelligence updates—not unrelated simulation phases. Goal 03 remains verified. Do not advance the goal sequence until all 14 Goal 04 behaviors have current deterministic evidence and the focused logistics architecture review is complete.
 
 **Last verified:** 2026-09-12
 

@@ -1,15 +1,17 @@
 # Current State — Reconciled Evidence Boundary
 
 **Date:** 2026-09-12
-**Milestone state:** Goal 03 is verified and `G04-BENCH` is ACTIVE. Goals 05–11 are gated. Consolidated candidate work on `main` is not accepted as a milestone bypass. See `docs/WORKTREE_RECONCILIATION.md`.
+**Milestone state:** Goals 03 and the Goal 04 performance gate are verified; Goal 04 acceptance remains ACTIVE. Goals 05–11 are gated. Consolidated candidate work on `main` is not accepted as a milestone bypass. See `docs/WORKTREE_RECONCILIATION.md`.
 
 ## Reconciliation Result — 2026-09-12
 
-The prior Goal 11 headline is historical, not current acceptance. Fresh local evidence passes the Release build, CTest 3/3, direct runners, Godot smoke, 91-check presentation harness, and four repository-owned validation scenarios. Goal 03 now passes its required benchmark; Goal 04 remains open:
+The prior Goal 11 headline is historical, not current acceptance. Fresh local evidence passes the Release build, CTest 3/3, direct runners, Godot smoke, 91-check presentation harness, and four repository-owned validation scenarios. Goals 03 and 04's dedicated benchmarks now pass; Goal 04 remains open for its complete behavior/review gate:
 
-- `rts_logistics_benchmark 10000 30 100` fails at 20.920 ms/tick against its 15 ms limit.
+- `rts_logistics_benchmark 10000 30 100` passes at 0.871 ms cache-hit average against its 15 ms limit, exercising 10,000 airborne conventional aircraft, 30 mobile carriers, safe-return and facility lookup caches, and periodic intelligence updates.
 
 `rts_combat_benchmark 2000 100` now passes with 2,000 destroyed units, 1,038 actual projectile spawns, a changed state hash, and 11.058 ms cache-hit average. The benchmark no longer incorrectly derives destruction from dead entities that the simulation has already removed.
+
+The logistics benchmark previously measured 10,000 tanks and zero logistics operations. It now deliberately excludes combat/prediction/economy/snapshot timing, because it is a logistics performance harness. Moving a carrier updates its authoritative recovery position; bounded aircraft/facility displacement keeps safe-return cache entries valid without global invalidation on every carrier movement. The integration suite asserts that production carrier movement keeps recovery coordinates synchronized. Full Goal 04 closure still requires an explicit reconciliation of all 14 required prototype behaviors and a focused architecture review.
 
 The previously cited `9c295bf` baseline is absent. Existing text below records implementation history and candidate functionality; it must not be read as current sequential-goal sign-off.
 

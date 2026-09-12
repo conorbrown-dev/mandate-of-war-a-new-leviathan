@@ -93,9 +93,21 @@ SafeReturnEstimate LogisticsManager::estimate_safe_return(
         const float dy = aircraft->y - cached->second.y;
         const bool position_is_cached = dx * dx + dy * dy <=
             SAFE_RETURN_CACHE_DISTANCE * SAFE_RETURN_CACHE_DISTANCE;
-        const EntityId current_facility = find_aircraft_recovery_facility(aircraft_id, *aircraft);
-        if (position_is_cached && cached->second.facility_revision == facility_revision_ &&
-            cached->second.estimate.facility_id == current_facility &&
+        const auto* cached_facility = component_manager_->get_component<RecoveryFacility>(
+            cached->second.estimate.facility_id
+        );
+        const bool facility_is_cached = cached_facility &&
+            cached_facility->x - cached->second.facility_x <= SAFE_RETURN_CACHE_DISTANCE &&
+            cached_facility->x - cached->second.facility_x >= -SAFE_RETURN_CACHE_DISTANCE &&
+            cached_facility->y - cached->second.facility_y <= SAFE_RETURN_CACHE_DISTANCE &&
+            cached_facility->y - cached->second.facility_y >= -SAFE_RETURN_CACHE_DISTANCE;
+        const bool facility_available = cached_facility &&
+            (cached_facility->type != RecoveryFacility::Type::CARRIER ||
+             carrier_has_available_recovery_slot(cached->second.estimate.facility_id) ||
+             carrier_has_recovery_reservation(cached->second.estimate.facility_id, aircraft_id));
+        if (position_is_cached && facility_is_cached && facility_available &&
+            cached->second.facility_revision == facility_revision_ &&
+            compatible_facility(aircraft_id, cached->second.estimate.facility_id) &&
             cached->second.cruise_speed == aircraft->cruise_speed &&
             cached->second.energy_rate == aircraft->fuel_consumption_rate &&
             cached->second.material_rate == aircraft->material_consumption_rate) {
@@ -116,6 +128,8 @@ SafeReturnEstimate LogisticsManager::estimate_safe_return(
         safe_return_cache_[aircraft_id] = {
             aircraft->x,
             aircraft->y,
+            0.0f,
+            0.0f,
             aircraft->cruise_speed,
             aircraft->fuel_consumption_rate,
             aircraft->material_consumption_rate,
@@ -137,6 +151,8 @@ SafeReturnEstimate LogisticsManager::estimate_safe_return(
     safe_return_cache_[aircraft_id] = {
         aircraft->x,
         aircraft->y,
+        facility->x,
+        facility->y,
         aircraft->cruise_speed,
         aircraft->fuel_consumption_rate,
         aircraft->material_consumption_rate,
@@ -289,6 +305,7 @@ bool LogisticsManager::update_recovery_facility_position(EntityId facility_id, f
         return false;
     }
 
+    const bool moved = facility->x != x || facility->y != y;
     facility->x = x;
     facility->y = y;
     if (auto* airbase = component_manager_->get_component<Airbase>(facility_id)) {
@@ -312,7 +329,13 @@ bool LogisticsManager::update_recovery_facility_position(EntityId facility_id, f
             }
         }
     }
-    invalidate_facility_caches();
+    // Moving a carrier must refresh future nearest-facility lookups, but it
+    // must not discard every aircraft's safe-return estimate. Those entries
+    // carry both aircraft and facility positions and expire after bounded
+    // movement, preserving the return-distance reserve.
+    if (moved) {
+        facility_lookup_cache_.clear();
+    }
     return true;
 }
 
