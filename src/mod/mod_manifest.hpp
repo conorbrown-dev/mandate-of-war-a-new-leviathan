@@ -97,6 +97,7 @@ private:
     
     bool resolve_dependencies();
     bool topological_sort();
+    bool load_mod_batch_in_place(const std::vector<fs::path>& mod_dirs);
     std::optional<GeneratedUnitDefinition> load_generated_unit(
         const ModManifest& manifest, const fs::path& mod_dir, const ContentEntry& entry);
 };

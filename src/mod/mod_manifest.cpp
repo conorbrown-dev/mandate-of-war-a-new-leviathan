@@ -330,6 +330,16 @@ bool ModManager::load_mod(const fs::path& mod_dir) {
 }
 
 bool ModManager::load_mod_batch(const std::vector<fs::path>& mod_dirs) {
+    ModManager staged = *this;
+    if (!staged.load_mod_batch_in_place(mod_dirs)) {
+        load_errors_.insert(load_errors_.end(), staged.load_errors_.begin(), staged.load_errors_.end());
+        return false;
+    }
+    *this = std::move(staged);
+    return true;
+}
+
+bool ModManager::load_mod_batch_in_place(const std::vector<fs::path>& mod_dirs) {
     struct Pending { fs::path path; ModManifest manifest; };
     ModManifestLoader loader;
     std::map<std::string, Pending> pending;

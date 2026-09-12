@@ -9,8 +9,9 @@
 3. Verified slice: native map save/load round-trips terrain, resources, spawn points, and initial entities.
 4. Verified slice: manifest loading enforces already-loaded dependency presence and compatible `>=` versions.
 5. Verified slice: batch mod loading preflights dependencies and applies them in deterministic dependency-first ID order.
-6. Next: provide atomic rollback for a late content-read failure, then add the minimal interactive map-editor surface or clearly bound the editor foundation.
-7. Add behavior assertions and perform the required modding/asset/map review before advancing.
+6. Verified slice: staged batch loading publishes no partial manifests or generated units when a later asset fails.
+7. Next: add the minimal interactive map-editor surface or clearly bound the editor foundation.
+8. Add behavior assertions and perform the required modding/asset/map review before advancing.
 
 ## Gated work
 

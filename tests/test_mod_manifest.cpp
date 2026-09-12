@@ -245,3 +245,23 @@ TEST(mod_manifest_batch_loads_dependencies_in_stable_order) {
         throw std::runtime_error("Batch loader did not apply deterministic dependency order");
     }
 }
+
+TEST(mod_manifest_batch_failure_is_atomic) {
+    const fs::path root = fs::temp_directory_path() / "rts-broken-mod-batch";
+    fs::remove_all(root);
+    fs::create_directories(root / "broken");
+    {
+        std::ofstream manifest(root / "broken" / "manifest.yaml");
+        manifest << "manifest_version: \"1.0\"\nid: \"broken\"\nversion: \"1.0.0\"\n";
+        manifest << "dependencies:\n  - id: \"base_content\"\n    version: \">=1.0.0\"\n";
+        manifest << "units:\n  - path: \"units/missing.json\"\n    replace: false\n";
+    }
+    rts::ModManager manager;
+    const fs::path base = fs::current_path() / "test_mods" / "base_content";
+    if (manager.load_mod_batch({base, root / "broken"})) {
+        throw std::runtime_error("Batch with a missing generated asset must fail");
+    }
+    if (!manager.get_loaded_manifests().empty() || !manager.generated_units().empty()) {
+        throw std::runtime_error("Failed batch must not publish partial manager state");
+    }
+}
