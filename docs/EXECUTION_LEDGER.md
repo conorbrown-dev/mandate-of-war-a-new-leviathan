@@ -15,12 +15,16 @@ This file is the durable milestone state used after a restart, compaction, or au
 - Ground height queries now interpolate the exact triangle split rendered by
   Godot; the Field Engineer's lowest mesh point remains 5 cm above that surface
   through movement.
-- Airfield placement uses a 250 x 750 m tactical operational footprint and the
-  UI resolves nearby valid sites in deterministic 125 m rings up to 1 km.
+- Airfield placement uses a 250 x 750 m tactical operational footprint. Each
+  faction starts on a 2.8 x 3.8 km level construction core with a 900 m smooth
+  terrain transition; the Field Engineer has eight traversable one-kilometer
+  exits. The UI preserves the exact cursor location for the ghost and order;
+  invalid terrain is rejected in place rather than snapped to a distant site.
 - Evidence: Release build; CTest 3/3 outside the localhost-restricted sandbox;
-  direct integration 178/178; headless and NVIDIA-rendered
-  `basic_selection_move` and `airfield_fighter_ferry`, including screenshots and
-  AVI recordings.
+  direct integration 178/178; headless `basic_selection_move` and
+  `airfield_fighter_ferry`; and fresh NVIDIA-rendered screenshot/AVI captures
+  for the pad layout at `basic_selection_move/20260913T223848.490122Z` and
+  `airfield_fighter_ferry/20260913T223858.982668Z`.
 
 This section supersedes contradictory historical status claims below. It is based on the current repository object graph and fresh local validation:
 

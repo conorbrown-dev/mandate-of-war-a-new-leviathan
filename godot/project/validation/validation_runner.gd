@@ -104,6 +104,12 @@ func _scenario_basic_selection_move() -> void:
 	var start_surface_height := float(view.call("_terrain_height_at", start.x, start.y))
 	var start_model_bottom: float = engineer_view.global_position.y + float(engineer_view.call("model_bottom_height")) if engineer_view != null else INF
 	_check(engineer_view != null and absf(start_model_bottom - start_surface_height - 0.05) <= 0.02, "movement.engineer_grounded_at_start", "The engineer's lowest mesh point sits five centimeters above the rendered terrain", {"clearance_m": start_model_bottom - start_surface_height})
+	var traversable_pad_exits := 0
+	for offset in [Vector2(1000.0, 0.0), Vector2(-1000.0, 0.0), Vector2(0.0, 1000.0), Vector2(0.0, -1000.0), Vector2(1000.0, 1000.0), Vector2(-1000.0, 1000.0), Vector2(1000.0, -1000.0), Vector2(-1000.0, -1000.0)]:
+		var exit: Vector2 = start + offset
+		if bool(view.get("extension").call("is_land_position", exit.x, exit.y)) and bool(view.get("extension").call("validate_road_placement", start.x, start.y, exit.x, exit.y)):
+			traversable_pad_exits += 1
+	_check(traversable_pad_exits == 8, "movement.starting_pad_has_open_approaches", "The level starting pad has eight traversable one-kilometer exits", {"traversable_exits": traversable_pad_exits})
 	var screen_position := view.get_viewport().get_camera_3d().unproject_position(view.call("_entity_world_position", engineer_id))
 	_send_mouse_button(view, MOUSE_BUTTON_LEFT, screen_position)
 	await process_frame
@@ -282,10 +288,15 @@ func _scenario_airfield_fighter_ferry() -> void:
 		return
 
 	view.call("_set_selected", engineer_id, true)
-	var requested_build_position := Vector2(-12500.0, 0.0)
-	var build_position: Vector2 = view.call("_resolve_structure_placement_target", 2, requested_build_position)
-	_check(build_position != Vector2.INF and build_position.distance_to(requested_build_position) <= 1000.0, "air.placement_snaps_near_request", "An uneven airfield request resolves to a nearby valid operational footprint", {"requested": _vec2(requested_build_position), "resolved": _vec2(build_position), "snap_distance_m": requested_build_position.distance_to(build_position)})
-	if build_position == Vector2.INF:
+	var build_position := Vector2(-12500.0, 0.0)
+	var airfield_pad_heights: Array[float] = []
+	for offset_x in [-125.0, 125.0]:
+		for offset_z in [-375.0, 375.0]:
+			airfield_pad_heights.append(float(view.call("_terrain_height_at", build_position.x + offset_x, build_position.y + offset_z)))
+	var pad_height_variation: float = float(airfield_pad_heights.max()) - float(airfield_pad_heights.min())
+	_check(bool(extension.call("validate_structure_placement", 2, build_position.x, build_position.y)), "air.starting_pad_accepts_airfield", "The cursor location on the starting pad accepts the full airfield footprint", {"position": _vec2(build_position)})
+	_check(pad_height_variation <= 0.05, "air.starting_pad_is_level", "The complete initial airfield footprint is level", {"height_variation_m": pad_height_variation})
+	if not bool(extension.call("validate_structure_placement", 2, build_position.x, build_position.y)):
 		await _destroy_skirmish(view)
 		return
 	var airfield_queued := bool(view.call("_queue_commander_structure", 2, build_position))

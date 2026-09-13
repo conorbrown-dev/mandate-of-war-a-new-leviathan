@@ -762,10 +762,10 @@ func _process(delta: float) -> void:
 			add_child(build_ghost)
 		var ghost_valid := true
 		if build_mode_type >= 100 and extension != null:
-			var snapped_target := _resolve_structure_placement_target(build_mode_type - 100, ghost_target)
-			ghost_valid = snapped_target != Vector2.INF
-			if ghost_valid:
-				ghost_target = snapped_target
+			# The preview must remain beneath the cursor. Construction pads make the
+			# starting area permissive; away from them an invalid cursor location is
+			# communicated by the ghost colour, never by silently moving the order.
+			ghost_valid = bool(extension.call("validate_structure_placement", build_mode_type - 100, ghost_target.x, ghost_target.y))
 		_set_build_ghost_valid(ghost_valid)
 		build_ghost.position = Vector3(ghost_target.x, _terrain_height_at(ghost_target.x, ghost_target.y) + 0.8, ghost_target.y)
 	if extension == null or not match_started:
@@ -2324,12 +2324,9 @@ func _order_commander_to_build(build_type: int, target: Vector2) -> void:
 	var commander_id := _player_engineer_id()
 	if commander_id < 0:
 		return
-	if build_type >= 100:
-		var snapped_target := _resolve_structure_placement_target(build_type - 100, target)
-		if snapped_target == Vector2.INF:
-			push_warning("No valid structure site was found near the requested location")
-			return
-		target = snapped_target
+	if build_type >= 100 and not bool(extension.call("validate_structure_placement", build_type - 100, target.x, target.y)):
+		push_warning("Structure placement rejected at the cursor location")
+		return
 	var commander_position := Vector2(float(extension.call("get_unit_x", commander_id)), float(extension.call("get_unit_y", commander_id)))
 	var direction := (target - commander_position).normalized()
 	if direction.length_squared() < 0.001:
@@ -2344,24 +2341,6 @@ func _order_commander_to_build(build_type: int, target: Vector2) -> void:
 		push_warning("Field Engineer could not reach the build location")
 		return
 	pending_build_order = {"type": build_type, "target": target, "approach": approach_target}
-
-
-func _resolve_structure_placement_target(structure_type: int, requested: Vector2) -> Vector2:
-	if extension == null:
-		return Vector2.INF
-	if bool(extension.call("validate_structure_placement", structure_type, requested.x, requested.y)):
-		return requested
-	# The native navigation grid is 125 m on the 40 km map. Search nearby cell
-	# centers in stable rings so slightly uneven cursor hits snap to the closest
-	# viable construction site while water and cliffs remain hard barriers.
-	for ring in range(1, 9):
-		var radius := float(ring) * 125.0
-		for index in range(16):
-			var angle := TAU * float(index) / 16.0
-			var candidate := requested + Vector2(cos(angle), sin(angle)) * radius
-			if bool(extension.call("validate_structure_placement", structure_type, candidate.x, candidate.y)):
-				return candidate
-	return Vector2.INF
 
 func _process_pending_build_order() -> void:
 	if pending_build_order.is_empty():

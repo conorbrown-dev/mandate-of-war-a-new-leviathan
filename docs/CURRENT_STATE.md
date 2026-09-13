@@ -74,13 +74,22 @@ Industrial Field Engineer is grounded by its actual lowest mesh point with a
 5 cm clearance, and the movement validation measures that clearance throughout
 the route. Structure profiles now use tactical footprints and more forgiving
 grade limits; airfields reserve a 250 x 750 m operational corridor instead of
-the previous 600 x 1,800 m footprint. Interactive placement searches stable
-125 m rings up to 1 km and shows/uses the same nearby valid target.
+the previous 600 x 1,800 m footprint. The generated Broken Strait heightfield
+now authors a 2.8 x 3.8 km level core at each faction start, with a 900 m
+feathered transition to surrounding relief. The Field Engineer spawns on that
+pad; all eight one-kilometer cardinal/diagonal exits are land and road-valid.
+Interactive structure placement never relocates a cursor request: the ghost
+and the queued target remain exactly under the cursor, with invalid terrain
+shown as invalid rather than silently snapped to a distant site.
 
 Current evidence: Release build passes; CTest passes 3/3 outside the sandbox
 (localhost TCP is denied inside it); the direct integration runner passes
-178/178; `basic_selection_move` and `airfield_fighter_ferry` pass headlessly and
-as NVIDIA GPU-rendered runs with required screenshots and AVI recordings.
+178/178; `basic_selection_move` and `airfield_fighter_ferry` pass headlessly
+and on the NVIDIA GPU with required screenshots and AVI recordings. The latter
+asserts the exact starting-pad airfield footprint is level and valid; the former
+asserts eight open pad exits. The fresh rendered reports are
+`validation/artifacts/basic_selection_move/20260913T223848.490122Z/report.json`
+and `validation/artifacts/airfield_fighter_ferry/20260913T223858.982668Z/report.json`.
 
 ## Gameplay Validation Package — 2026-09-12
 

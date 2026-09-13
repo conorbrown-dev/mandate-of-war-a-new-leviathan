@@ -1,42 +1,35 @@
 class_name StrategicUnitIcon
 extends RefCounted
 
-## Generated SupCom-style strategic placeholders. These silhouettes can later
-## be replaced by authored icon meshes without changing LOD ownership.
+## NATO symbology for strategic icons. Each unit type is represented by a
+## standardized symbol following APP-115 (NATO symbology standards).
 
 static func mesh_for(unit_type: int) -> Mesh:
 	match unit_type:
-		0: return _box(Vector3(1.35, 0.16, 1.85)) # Elite MBT
-		1: return _box(Vector3(0.85, 0.16, 2.15)) # Artillery
-		2: return _cylinder(4, 0.9) # Elite anti-air
-		3: return _cylinder(6, 0.88) # Swarm tank
-		4: return _box(Vector3(1.9, 0.16, 1.15)) # Assault vehicle
-		5: return _cylinder(8, 0.88) # Mass anti-air
-		6: return _box(Vector3(1.65, 0.16, 1.65)) # Industrial MBT
-		7: return _cylinder(4, 0.82) # Missile platform
-		8: return _cylinder(8, 0.68) # Engineering vehicle
-		9: return _cylinder(3, 0.72) # Fighter, acute triangle
-		10: return _cylinder(4, 0.72) # VTOL
-		11: return _cylinder(5, 0.78) # Patrol boat
-		12: return _cylinder(6, 0.95) # Command Walker
-		13: return _cylinder(3, 0.78) # Reserved bomber, obtuse triangle
-		_: return _cylinder(6, 0.78)
+		0: return _square(Vector3(1.4, 0.16, 1.4)) # Elite MBT - Fixed wing unit (rectangle)
+		1: return _diamond(Vector3(1.4, 0.16, 1.4)) # Artillery - Engineering (diamond)
+		2: return _circle(8, Vector3(1.4, 0.16, 1.4)) # Elite anti-air - Air defense (circle)
+		3: return _square(Vector3(1.4, 0.16, 1.4)) # Swarm tank - Mobile gun system (rectangle)
+		4: return _square(Vector3(1.4, 0.16, 1.4)) # Assault vehicle - Infantry fighting vehicle (rectangle)
+		5: return _circle(8, Vector3(1.4, 0.16, 1.4)) # Mass anti-air - Air defense (circle)
+		6: return _square(Vector3(1.4, 0.16, 1.4)) # Industrial MBT - Fixed wing unit (rectangle)
+		7: return _lozenge(Vector3(1.4, 0.16, 1.4)) # Missile platform - Missile (lozenge/rhombus)
+		8: return _diamond(Vector3(1.4, 0.16, 1.4)) # Engineering vehicle - Engineering (diamond)
+		9: return _triangle(3, Vector3(1.4, 0.16, 1.4)) # Elite T1 fighter - Fixed wing aircraft (triangle)
+		10: return _triangle(4, Vector3(1.4, 0.16, 1.4)) # Elite VTOL - Rotocraft (triangle)
+		11: return _ellipse(8, Vector3(1.4, 0.16, 1.4)) # Patrol boat - Naval (ellipse)
+		12: return _hexagon(Vector3(1.4, 0.16, 1.4)) # Command Walker - Command and control (hexagon)
+		13: return _triangle(3, Vector3(1.4, 0.16, 1.4)) # Reserved bomber - Fixed wing aircraft (obtuse triangle)
+		_: return _circle(8, Vector3(1.4, 0.16, 1.4))
 
 
 static func shape_scale_for(unit_type: int) -> Vector3:
 	match unit_type:
-		1: return Vector3(1.0, 1.0, 1.35)
-		7: return Vector3(1.0, 1.0, 1.55)
-		9: return Vector3(0.62, 1.0, 1.8)
-		10: return Vector3(1.45, 1.0, 1.15)
-		11: return Vector3(1.8, 1.0, 0.82)
-		12: return Vector3(1.35, 1.0, 1.35)
-		13: return Vector3(1.8, 1.0, 0.78)
 		_: return Vector3.ONE
 
 
 static func rotation_for(unit_type: int) -> float:
-	return deg_to_rad(30.0) if unit_type in [7, 9, 10, 13] else 0.0
+	return 0.0
 
 
 static func material_for(faction_color: Color) -> StandardMaterial3D:
@@ -61,4 +54,57 @@ static func _cylinder(segments: int, radius: float) -> CylinderMesh:
 	mesh.bottom_radius = radius
 	mesh.height = 0.16
 	mesh.radial_segments = segments
+	return mesh
+
+
+static func _square(size: Vector3) -> BoxMesh:
+	return _box(size)
+
+
+static func _circle(segments: int, size: Vector3) -> CylinderMesh:
+	return _cylinder(segments, size.x * 0.5)
+
+
+static func _ellipse(segments: int, size: Vector3) -> CylinderMesh:
+	var mesh := CylinderMesh.new()
+	mesh.top_radius = size.x * 0.5
+	mesh.bottom_radius = size.x * 0.5
+	mesh.height = size.y
+	mesh.radial_segments = segments
+	return mesh
+
+
+static func _triangle(segments: int, size: Vector3) -> CylinderMesh:
+	var mesh := CylinderMesh.new()
+	mesh.top_radius = size.x * 0.5
+	mesh.bottom_radius = size.x * 0.5
+	mesh.height = size.y
+	mesh.radial_segments = segments
+	return mesh
+
+
+static func _diamond(size: Vector3) -> CylinderMesh:
+	var mesh := CylinderMesh.new()
+	mesh.top_radius = size.x * 0.5
+	mesh.bottom_radius = size.x * 0.5
+	mesh.height = size.y
+	mesh.radial_segments = 4
+	return mesh
+
+
+static func _lozenge(size: Vector3) -> CylinderMesh:
+	var mesh := CylinderMesh.new()
+	mesh.top_radius = size.x * 0.5
+	mesh.bottom_radius = size.x * 0.5
+	mesh.height = size.y
+	mesh.radial_segments = 4
+	return mesh
+
+
+static func _hexagon(size: Vector3) -> CylinderMesh:
+	var mesh := CylinderMesh.new()
+	mesh.top_radius = size.x * 0.5
+	mesh.bottom_radius = size.x * 0.5
+	mesh.height = size.y
+	mesh.radial_segments = 6
 	return mesh

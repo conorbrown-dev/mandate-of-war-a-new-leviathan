@@ -34,7 +34,10 @@ The next numbered gameplay goal still requires a canonical goal document. When o
 Terrain grounding and structure placement were corrected on 2026-09-13. Keep
 Godot and native terrain sampling aligned to the rendered 320 x 320 triangle
 mesh, preserve the Field Engineer's mesh-bottom grounding assertion, and route
-interactive structure placement through the bounded nearby-site resolver.
+interactive structure placement directly to the cursor location. The authored
+start pads provide a 2.8 x 3.8 km level core and 900 m smooth transition around
+each engineer, so an initial airfield can be placed without distant snapping
+and units have traversable approaches in all directions.
 Airfield validation now uses a 250 x 750 m operational footprint and accepts
 manageable broad slopes while continuing to reject water, map edges, blocked
 cells, and cliffs.

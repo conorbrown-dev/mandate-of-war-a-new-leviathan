@@ -162,8 +162,8 @@ TEST(structure_placement_validates_land_footprint_and_boundaries) {
           "structure footprint rejects the theater water channel");
     check(!s.validate_structure_placement(0, -19950.0f, 0.0f),
           "structure footprint rejects a map-edge placement");
-    check(!s.validate_structure_placement(0, -12500.0f, 0.0f),
-          "structure footprint rejects excessive slope and height variation");
+    check(s.validate_structure_placement(0, -12500.0f, 0.0f),
+          "starting construction pad accepts an outpost footprint");
     s.pathfinding().block_world_area(-16500.0f, -1500.0f, 0.0f);
     check(!s.validate_structure_placement(0, -16500.0f, -1500.0f),
           "structure footprint rejects an occupied strategic cell");
@@ -190,10 +190,10 @@ TEST(engineers_spawn_only_on_ground_suitable_for_construction) {
           s.create_unit_with_type(-19950.0f, 0.0f, UnitType::INDUSTRIAL_ENGINEERING,
                                   FactionId::INDUSTRIAL_EXPERIMENTAL) < 0,
           "engineer rejects a map-edge spawn without construction footprint");
-    check(!s.validate_engineer_placement(-12500.0f, 0.0f) &&
+    check(s.validate_engineer_placement(-12500.0f, 0.0f) &&
           s.create_unit_with_type(-12500.0f, 0.0f, UnitType::INDUSTRIAL_ENGINEERING,
-                                  FactionId::INDUSTRIAL_EXPERIMENTAL) < 0,
-          "engineer rejects an excessively sloped spawn");
+                                  FactionId::INDUSTRIAL_EXPERIMENTAL) >= 0,
+          "engineer starts on the level construction pad");
     s.pathfinding().block_world_area(-16500.0f, -1500.0f, 0.0f);
     check(!s.validate_engineer_placement(-16500.0f, -1500.0f) &&
           s.create_unit_with_type(-16500.0f, -1500.0f, UnitType::INDUSTRIAL_ENGINEERING,

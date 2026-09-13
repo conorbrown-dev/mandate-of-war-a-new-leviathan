@@ -40,11 +40,15 @@ slice is deterministic, transactional ordering for a batch of dependent mods.
 - Corrected terrain authority for moving ground units and structure placement:
   native and Godot sampling now interpolate the rendered heightfield triangles,
   the Field Engineer is grounded from its lowest imported mesh point at 5 cm,
-  airfield clearance is 250 x 750 m with forgiving grade limits, and interactive
-  structure requests snap deterministically to a valid site within 1 km.
-  Release build, CTest 3/3, direct integration 178/178, and rendered
-  `basic_selection_move`/`airfield_fighter_ferry` validations pass with
-  screenshots and video on the NVIDIA GPU.
+  airfield clearance is 250 x 750 m with forgiving grade limits, and each
+  faction start has a 2.8 x 3.8 km level construction core with a 900 m smooth
+  transition. Interactive structure ghosts and orders now stay at the exact
+  cursor position; invalid terrain is rejected in place rather than snapped
+  toward a distant site. Release build, CTest 3/3, direct integration 178/178,
+  `basic_selection_move`, and `airfield_fighter_ferry` pass headlessly and in
+  fresh NVIDIA-rendered captures with required screenshots and AVI recordings:
+  `validation/artifacts/basic_selection_move/20260913T223848.490122Z/` and
+  `validation/artifacts/airfield_fighter_ferry/20260913T223858.982668Z/`.
 - Implemented full territorial control domain model (`src/ecs/components/territorial_control.{hpp,cpp}`)
 - Integrated `TerritorialControlManager` into `Simulation` class (`src/simulation/simulation.hpp:225`)
 - Updated documentation: `CURRENT_STATE.md`, `NEXT_TASKS.md`, `EXECUTION_LEDGER.md`, `OPENCODE_HANDOFF.md`

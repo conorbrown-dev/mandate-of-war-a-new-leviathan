@@ -201,8 +201,13 @@ func _run() -> void:
 	var attack_hex := first_model.get_node("AttackHex") as MeshInstance3D
 	check(visibility_hex.visible and radar_hex.visible and attack_hex.visible and visibility_hex.mesh is ImmediateMesh and radar_hex.mesh is ImmediateMesh and attack_hex.mesh is ImmediateMesh, "unselected units show flat blue visibility, purple radar, and red attack hex line ranges")
 	var requested_airfield_target := Vector2(-12500.0, 0.0)
-	var airfield_target: Vector2 = view._resolve_structure_placement_target(2, requested_airfield_target)
-	check(airfield_target != Vector2.INF and airfield_target.distance_to(requested_airfield_target) <= 1000.0 and bool(view.extension.call("validate_structure_placement", 2, airfield_target.x, airfield_target.y)), "Airfield placement snaps nearby uneven terrain to a valid operational footprint")
+	var airfield_target := requested_airfield_target
+	check(bool(view.extension.call("validate_structure_placement", 2, airfield_target.x, airfield_target.y)), "Airfield placement accepts the exact cursor location on the level starting pad")
+	view._set_selected(engineer_id, true)
+	view._order_commander_to_build(102, airfield_target)
+	var pending_airfield_order: Dictionary = view.pending_build_order
+	check(not pending_airfield_order.is_empty() and (pending_airfield_order.get("target", Vector2.INF) as Vector2).distance_to(airfield_target) <= 0.01, "Airfield input preserves the exact cursor target without distant snapping")
+	view.pending_build_order.clear()
 	check(view._queue_commander_structure(2, airfield_target), "Command Walker queues an airfield structure on land")
 	for _tick in range(750):
 		view.extension.call("update_simulation", 50.0)
