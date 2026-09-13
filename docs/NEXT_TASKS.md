@@ -11,8 +11,8 @@
 5. Verified slice: batch mod loading preflights dependencies and applies them in deterministic dependency-first ID order.
 6. Verified slice: staged batch loading publishes no partial manifests or generated units when a later asset fails.
 7. Verified slice: standalone Godot editor state supports terrain/water, bounds, spawns, resources, and entities with headless assertions.
-8. Next: wire the editor model to the native map serializer and add the rendered editor surface.
-9. Add behavior assertions and perform the required modding/asset/map review before advancing.
+8. Verified slice: editor state exports a canonical map bundle and native MapLoader reloads it through RtsExtension.
+9. Finish asset reproducibility metadata and required modding/asset/map review before advancing.
 
 ## Gated work
 

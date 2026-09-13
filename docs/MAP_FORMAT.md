@@ -7,6 +7,10 @@
 > This is the serialization foundation; an interactive Godot map-editor UI is
 > still future work.
 
+The standalone Godot editor can export its editable terrain, spawn, resource,
+and entity state to this canonical sidecar bundle; `test_map_editor_export.gd`
+then loads the export through the native `MapLoader` binding.
+
 ## Objective
 
 Define a data-driven map format supporting terrain, entities, resource deposits, spawns, and objectives. Maps must be deterministic for simulation reproducibility and scalable to large areas.

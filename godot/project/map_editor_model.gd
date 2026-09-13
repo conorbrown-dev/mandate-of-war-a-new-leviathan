@@ -121,6 +121,26 @@ func to_dictionary() -> Dictionary:
 	water.sort_custom(func(a, b): return a[1] < b[1] or (a[1] == b[1] and a[0] < b[0]))
 	return {"id": map_id, "width": width, "height": height, "tile_size": tile_size, "terrain": Array(terrain), "water": water, "spawns": serialize.call(spawn_points), "resources": serialize.call(resources), "entities": serialize.call(entities)}
 
+func export_native_bundle(directory: String) -> bool:
+	if not validate().is_empty(): return false
+	if DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(directory)) != OK: return false
+	var header := FileAccess.open(directory.path_join("map.yaml"), FileAccess.WRITE)
+	var terrain_file := FileAccess.open(directory.path_join("terrain.bin"), FileAccess.WRITE)
+	if header == null or terrain_file == null: return false
+	header.store_string("map_version: \"1.0\"\nid: \"%s\"\nname: \"%s\"\ndimensions:\n  width: %d\n  height: %d\n  tile_size: %s\n  max_elevation: 512\n" % [map_id, map_id, width, height, tile_size])
+	for height_value in terrain: terrain_file.store_float(height_value)
+	var spawns := FileAccess.open(directory.path_join("spawnpoints.yaml"), FileAccess.WRITE)
+	var deposits := FileAccess.open(directory.path_join("resources.yaml"), FileAccess.WRITE)
+	var map_entities := FileAccess.open(directory.path_join("entities.yaml"), FileAccess.WRITE)
+	if spawns == null or deposits == null or map_entities == null: return false
+	spawns.store_string("spawnpoints:\n")
+	for entry in spawn_points: spawns.store_string("  - id: \"%s\"\n    faction: \"%s\"\n    position: [%s, %s]\n    heading: %s\n    type: \"%s\"\n" % [entry.id, entry.faction, entry.position.x, entry.position.y, entry.heading, entry.type])
+	deposits.store_string("resources:\n")
+	for entry in resources: deposits.store_string("  - id: \"%s\"\n    type: \"%s\"\n    position: [%s, %s]\n    amount: %s\n    radius: %s\n    quality: 1.0\n" % [entry.id, entry.type, entry.position.x, entry.position.y, entry.amount, entry.radius])
+	map_entities.store_string("entities:\n")
+	for entry in entities: map_entities.store_string("  - id: \"%s\"\n    type: \"unit\"\n    content_id: \"%s\"\n    position: [%s, %s]\n    heading: 0.0\n    velocity: [0.0, 0.0]\n    hp: 1.0\n" % [entry.id, entry.content_id, entry.position.x, entry.position.y])
+	return header.get_error() == OK and terrain_file.get_error() == OK and spawns.get_error() == OK and deposits.get_error() == OK and map_entities.get_error() == OK
+
 func _cell_index(cell_x: int, cell_y: int) -> int:
 	var columns := width / int(tile_size)
 	var rows := height / int(tile_size)

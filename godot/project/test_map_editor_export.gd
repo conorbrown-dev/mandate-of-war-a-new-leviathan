@@ -1,0 +1,16 @@
+extends SceneTree
+const MapEditorModelScript = preload("res://map_editor_model.gd")
+func _init() -> void:
+	var editor = MapEditorModelScript.new()
+	assert(editor.create_map("native_editor", 64, 64, 16.0))
+	assert(editor.set_height(1, 1, 8.0))
+	assert(editor.add_spawn("player", "faction_a", Vector2(16, 16)))
+	assert(editor.add_resource("metal", "material", Vector2(32, 32), 100.0, 4.0))
+	assert(editor.add_entity("unit", "unit|test_mod|heavy", Vector2(48, 48)))
+	assert(editor.export_native_bundle("res://.editor_native"))
+	var extension = ClassDB.instantiate("RtsExtension")
+	var loaded: Dictionary = extension.map_loader_load_map("res://.editor_native/map.yaml")
+	assert(loaded.get("ok", false) and loaded.get("id", "") == "native_editor" and loaded.get("width", 0) == 64)
+	DirAccess.remove_absolute(ProjectSettings.globalize_path("res://.editor_native"))
+	print("Map editor native export assertions passed")
+	quit()
