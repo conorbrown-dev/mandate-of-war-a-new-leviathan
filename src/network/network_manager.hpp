@@ -57,6 +57,7 @@ public:
      bool connect(const std::string& host, uint16_t port = TCP_PORT);
      bool listen(uint16_t port = TCP_PORT);
      bool accept();
+     bool is_connected() const { return tcp_transport_.is_connected(); }
      
      void send_handshake(const ConnectionHandshake& handshake);
      bool receive_handshake(ConnectionHandshake& handshake);

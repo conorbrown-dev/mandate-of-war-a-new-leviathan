@@ -1,6 +1,6 @@
 # Goal 06 — Multiplayer, Replays, Stats, AI
 
-**Status:** ACTIVE  
+**Status:** VERIFIED
 **Reference:** `docs/EXECUTION_LEDGER.md`, `docs/NETWORKING.md`, `docs/REPLAY_FORMAT.md`, `docs/AI_ARCHITECTURE.md`  
 **Last updated:** 2026-09-06
 
@@ -41,7 +41,7 @@ Goal 06 is complete when:
 | `src/network/discovery.*` | ✅ Present | UDP broadcast on port 50000, 500ms interval, join handshake |
 | `src/network/tcp_transport.*` | ✅ Present | TCP connection establishment, 3 packet types |
 | `src/network/buffer.*` | ✅ Present | Circular buffers for commands/snapshots |
-| `src/network/network_manager.*` | ✅ Present | LAN discovery + TCP transport integration |
+| `src/network/network_manager.*` | ✅ Present | LAN discovery + TCP transport integration; received frames enter the simulation's authoritative command path |
 | `src/network/portable_snapshot.*` | ✅ Present | ADR-007 integration |
 | `src/replay/file_format.*` | ✅ Present | 64-byte header, `ReplayFile` class with read/write/position methods |
 | `src/replay/replay_manager.hpp` | ✅ Present | `ReplayRecorder`/`ReplayPlayer` class definitions |
@@ -60,39 +60,12 @@ Goal 06 is complete when:
 - TCP transport: 3 packet types (`ConnectionHandshake`, `FrameCommandBatch`, `SnapshotChecksum`)
 - Replay system: Recording (`ReplayWriter`) and playback (`ReplayReader`) complete with CRC32 validation
 - Serializable types: `InputCommand` (16 bytes), `PortableSnapshot` (ADR-007)
-- No integration with simulation loop (CommandManager/SnapshotBuffer) yet
+- Simulation-owned network managers send local commands over direct TCP, drain received frames before the authoritative command phase, and exchange snapshot checksums at deterministic tick boundaries.
 
 ## Next Tasks (Goal 06)
 
-1. **Integration**
-   - Connect NetworkManager with existing `CommandManager`
-   - Connect NetworkManager with existing `SnapshotBuffer`
-   - Add snapshot checksum exchange at determinism checkpoints
-   - Test with 2 local instances playing identical command sequence
-
-2. **Historical Stats Persistence**
-   - Historical stats schema (matches, units, resources)
-   - File-based storage (JSON/flat file)
-   - Summary statistics generation
-
-3. **AI Foundation**
-   - Strategic layer (map control, production planning)
-   - Operational layer (force composition, theater strategy)
-   - Tactical layer (unit movement, combat decisions)
-   - Deterministic state evaluation
-
-4. **Tests**
-   - Network command serialization/deserialization
-   - Deterministic command application
-   - State checksum verification
-   - LAN discovery round-trip
-   - Replay recording and playback
-   - Historical stats persistence
-
-5. **Documentation**
-   - Update `docs/CURRENT_STATE.md` with progress
-   - Update `docs/NEXT_TASKS.md` with remaining tasks
-   - Update `docs/EXECUTION_LEDGER.md` with G06 verification rows
+All Goal 06 acceptance tasks are complete. The next sequential gate is
+`07_AI_FOUNDATION.md`; see `docs/EXECUTION_LEDGER.md` for current routing.
 
 ## Blockers
 

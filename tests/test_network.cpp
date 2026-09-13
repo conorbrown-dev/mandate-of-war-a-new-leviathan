@@ -189,24 +189,21 @@ TEST(network_loopback_batch_drives_identical_local_match_tick) {
     const auto scenario = (std::filesystem::current_path() / "godot/project/scenarios/two_landmass_skirmish.json").string();
     if (!client_match.load(scenario) || !server_match.load(scenario)) throw std::runtime_error("Local matches failed to load");
     constexpr uint16_t port = 51235;
-    NetworkManager server, client;
+    auto& server = server_simulation.network_manager();
+    auto& client = client_simulation.network_manager();
     if (!server.listen(port)) { std::cout << "Loopback TCP unavailable in this environment; external match proof required\n"; return; }
     bool connected = false;
     std::thread connector([&] { connected = client.connect("127.0.0.1", port); });
     if (!server.accept()) { connector.join(); throw std::runtime_error("Match server failed to accept"); }
     connector.join();
     if (!connected) throw std::runtime_error("Match client failed to connect");
-    FrameCommandBatch batch{};
-    batch.tick = 1; batch.command_count = 1;
-    batch.commands[0] = {1, 2, 0, static_cast<uint8_t>(CommandType::MOVE), -10000, 0, 0};
-    if (!client_simulation.command_manager().inject_local_command(batch.commands[0])) throw std::runtime_error("Client could not queue command");
-    client.send_frame_command_batch(batch);
-    FrameCommandBatch remote{};
-    if (!server.receive_frame_command_batch(remote) || !server_simulation.command_manager().inject_local_command(remote.commands[0])) throw std::runtime_error("Server could not receive command");
+    InputCommand command{1, 2, 0, static_cast<uint8_t>(CommandType::MOVE), -10000, 0, 0};
+    const float initial_x = client_simulation.get_unit_x(command.entity_id);
+    if (!client_simulation.command_manager().inject_local_command(command)) throw std::runtime_error("Client could not queue command");
     client_match.update(50); server_match.update(50);
     if (client_simulation.command_log().size() != 1 || server_simulation.command_log().size() != 1 ||
-        client_simulation.command_log().front().entity_id != batch.commands[0].entity_id ||
-        server_simulation.command_log().front().entity_id != batch.commands[0].entity_id) {
+        client_simulation.command_log().front().entity_id != command.entity_id ||
+        server_simulation.command_log().front().entity_id != command.entity_id) {
         throw std::runtime_error("Networked command was not recorded by both local matches");
     }
     const auto a = client_simulation.get_state(), b = server_simulation.get_state();
@@ -214,6 +211,12 @@ TEST(network_loopback_batch_drives_identical_local_match_tick) {
         a.health_current != b.health_current || client_match.checksums() != server_match.checksums()) {
         throw std::runtime_error("Networked local matches diverged after the exchanged command");
     }
+    if (std::abs(client_simulation.get_unit_x(command.entity_id) - initial_x) < 0.0001f ||
+        std::abs(server_simulation.get_unit_x(command.entity_id) - initial_x) < 0.0001f) {
+        throw std::runtime_error("Networked MOVE command did not alter both authoritative matches");
+    }
+    client.reset();
+    server.reset();
     while (client_match.result() == -1) client_match.update(50);
     const auto replay_path = (std::filesystem::temp_directory_path() / "g06-networked-match.replay").string();
     if (!client_match.save_replay(replay_path) || !client_match.replay(replay_path)) {

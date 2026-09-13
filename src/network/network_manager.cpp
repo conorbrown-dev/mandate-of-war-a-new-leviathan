@@ -139,6 +139,19 @@ void NetworkManager::update(float delta_ms) {
 }
 
 void NetworkManager::send_command(const InputCommand& cmd) {
+    // A connected match sends authoritative input over the framed TCP path.
+    // `input_buffer_` is exclusively the inbound queue consumed by Simulation.
+    if (tcp_transport_.is_connected()) {
+        FrameCommandBatch batch{};
+        batch.tick = cmd.tick_id;
+        batch.command_count = 1;
+        batch.commands[0] = cmd;
+        send_frame_command_batch(batch);
+        return;
+    }
+
+    // Preserve the legacy local diagnostic behavior for callers that use the
+    // NetworkManager without a connection.
     input_buffer_.push(cmd);
     
     RetransmissionEntry entry;
@@ -360,7 +373,7 @@ bool NetworkManager::receive_command(InputCommand& cmd) {
              }
               case TransportType::SNAPSHOT_CHECKSUM: {
                   SnapshotChecksum checksum;
-                  if (receive_snapshot_checksum(checksum)) {
+                  if (deserialize_snapshot_checksum(packet_data + 8, packet_size, checksum) == packet_size) {
                       pending_remote_checksum_ = checksum;
                       has_pending_remote_checksum_ = true;
                   }

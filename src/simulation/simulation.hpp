@@ -173,6 +173,7 @@ public:
     void update_economy(float delta_ms) { production_manager_.update_all(delta_ms); }
 
     void process_commands();
+    void process_network_commands();
     void process_command_internal(const InputCommand& cmd);
     bool is_position_visible_to(FactionId faction, float x, float y) const;
     bool is_visible_to(FactionId faction, EntityId target) const;

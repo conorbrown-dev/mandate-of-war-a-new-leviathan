@@ -23,8 +23,10 @@ The previously cited `9c295bf` baseline is absent. Existing text below records i
 reload into correct global and per-map summary statistics.
 
 Two independently loaded local skirmishes now exchange a tick-1 MOVE command
-over TCP loopback, record it in each match's command log, and assert identical
-post-tick state/checksum. The sending match then runs to a legal terminal
+over TCP loopback through their simulation-owned network managers. The received
+command enters the authoritative command phase, is recorded in each match's
+command log, changes both unit positions, and leaves state/checksums identical.
+The sending match then runs to a legal terminal
 result, saves a replay, and validates that replay against its recorded checksum
 sequence. The offline skirmish scenario separately proves the AI produces
 units, completes research, and reaches a legal terminal result. The configured
