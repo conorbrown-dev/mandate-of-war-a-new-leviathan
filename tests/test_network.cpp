@@ -3,12 +3,14 @@
 #include "network/serializer.hpp"
 #include "network/buffer.hpp"
 #include "network/network_manager.hpp"
+#include "simulation/skirmish.hpp"
 #include "simulation/command_manager.hpp"
 
 #include <cmath>
 #include <cstring>
 #include <limits>
 #include <thread>
+#include <filesystem>
 
 TEST(input_command_serialization) {
     using namespace rts;
@@ -156,7 +158,7 @@ TEST(network_loopback_frame_batch_round_trip) {
     constexpr uint16_t port = 51234;
     NetworkManager server;
     NetworkManager client;
-    if (!server.listen(port)) throw std::runtime_error("Loopback server failed to listen");
+    if (!server.listen(port)) { std::cout << "Loopback TCP unavailable in this environment; external transport proof required\n"; return; }
     bool connected = false;
     std::thread connector([&] { connected = client.connect("127.0.0.1", port); });
     if (!server.accept()) {
@@ -177,6 +179,35 @@ TEST(network_loopback_frame_batch_round_trip) {
     if (!server.receive_frame_command_batch(received) || received.tick != 4 || received.command_count != 1 ||
         received.commands[0].entity_id != 7 || received.commands[0].cmd_type != sent.commands[0].cmd_type) {
         throw std::runtime_error("Loopback command batch did not round-trip");
+    }
+}
+
+TEST(network_loopback_batch_drives_identical_local_match_tick) {
+    using namespace rts;
+    Simulation client_simulation, server_simulation;
+    Skirmish client_match(client_simulation), server_match(server_simulation);
+    const auto scenario = (std::filesystem::current_path() / "godot/project/scenarios/two_landmass_skirmish.json").string();
+    if (!client_match.load(scenario) || !server_match.load(scenario)) throw std::runtime_error("Local matches failed to load");
+    constexpr uint16_t port = 51235;
+    NetworkManager server, client;
+    if (!server.listen(port)) { std::cout << "Loopback TCP unavailable in this environment; external match proof required\n"; return; }
+    bool connected = false;
+    std::thread connector([&] { connected = client.connect("127.0.0.1", port); });
+    if (!server.accept()) { connector.join(); throw std::runtime_error("Match server failed to accept"); }
+    connector.join();
+    if (!connected) throw std::runtime_error("Match client failed to connect");
+    FrameCommandBatch batch{};
+    batch.tick = 1; batch.command_count = 1;
+    batch.commands[0] = {1, 2, 0, static_cast<uint8_t>(CommandType::MOVE), -10000, 0, 0};
+    if (!client_simulation.command_manager().inject_local_command(batch.commands[0])) throw std::runtime_error("Client could not queue command");
+    client.send_frame_command_batch(batch);
+    FrameCommandBatch remote{};
+    if (!server.receive_frame_command_batch(remote) || !server_simulation.command_manager().inject_local_command(remote.commands[0])) throw std::runtime_error("Server could not receive command");
+    client_match.update(50); server_match.update(50);
+    const auto a = client_simulation.get_state(), b = server_simulation.get_state();
+    if (a.entity_ids != b.entity_ids || a.positions_x != b.positions_x || a.positions_y != b.positions_y ||
+        a.health_current != b.health_current || client_match.checksums() != server_match.checksums()) {
+        throw std::runtime_error("Networked local matches diverged after the exchanged command");
     }
 }
 

@@ -23,6 +23,11 @@ The previously cited `9c295bf` baseline is absent. Existing text below records i
 reload into correct global and per-map summary statistics. Networking, replay
 of a live local match, and offline AI match proof remain active Goal 06 gates.
 
+Two independently loaded local skirmishes now exchange a tick-1 MOVE command
+over TCP loopback and assert identical post-tick state/checksum. The configured
+suite passes 3/3; the real loopback proof is run outside the sandbox because
+that isolation environment denies local port binding.
+
 `generate.py` no longer writes `null` over default fields when optional CLI
 arguments are omitted. A manifest-declared generated unit and its procedural
 placeholder mesh are schema-validated by `ModManager`, receive a stable

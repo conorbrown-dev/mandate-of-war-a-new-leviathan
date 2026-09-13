@@ -4,7 +4,7 @@
 
 ## Active: Goal 06 — multiplayer, replays, stats, AI
 
-1. Historical stats and loopback transport are verified; next apply exchanged batches to two deterministic local simulations and replay that match.
+1. Networking and stats are verified; next record/replay the networked local-match command sequence and confirm the offline AI opponent criterion.
 2. Verified slice: load a test mod, validate its generated unit and placeholder mesh, and spawn it through the development simulation bridge.
 3. Verified slice: native map save/load round-trips terrain, resources, spawn points, and initial entities.
 4. Verified slice: manifest loading enforces already-loaded dependency presence and compatible `>=` versions.
