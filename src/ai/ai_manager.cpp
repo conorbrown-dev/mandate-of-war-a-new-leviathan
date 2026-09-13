@@ -33,6 +33,7 @@ void AIManager::update(float delta_ms) {
         update_visibility();
         gather_resources();
         produce_units();
+        update_operational_plan();
         defend_base();
         
         if (!visible_units_.empty()) {
@@ -44,6 +45,9 @@ void AIManager::update(float delta_ms) {
 void AIManager::reset() {
     visible_units_.clear();
     enemy_units_.clear();
+    army_groups_.clear();
+    focus_target_ = INVALID_ENTITY;
+    front_x_ = front_y_ = staging_x_ = staging_y_ = 0.0f;
     time_since_last_decision_ = 0.0f;
     objective_set_ = false;
 }
@@ -134,12 +138,33 @@ void AIManager::attack_enemy() {
     // Scenario objectives are public map positions, never hidden enemy queries.
     if (base == INVALID_ENTITY || simulation_->get_unit_is_dead(base)) return;
     update_visibility(); // Refresh once per decision, not once per unit/target pair.
+    focus_target_ = select_focus_target(base);
     for (auto unit : visible_units_) {
         if (unit == base) continue;
         const auto* position = simulation_->component_manager().get_component<Position>(unit);
         const auto* weapon = simulation_->component_manager().get_component<Weapon>(unit);
         const auto* sensor = simulation_->component_manager().get_component<UnitData>(unit);
         if (!position || !weapon || !sensor || sensor->speed <= 0) continue;
+        const auto* health = simulation_->component_manager().get_component<Health>(unit);
+        if (health && health->max > 0.0f && health->current / health->max <= 0.30f) {
+            simulation_->issue_commands({unit}, faction_id_, CommandType::MOVE,
+                                        simulation_->get_unit_x(base), simulation_->get_unit_y(base));
+            continue;
+        }
+        if (focus_target_ != INVALID_ENTITY) {
+            const float dx = simulation_->get_unit_x(focus_target_) - position->x;
+            const float dy = simulation_->get_unit_y(focus_target_) - position->y;
+            const float distance = dx * dx + dy * dy;
+            const float range = std::min(weapon->range, sensor->view_range) * 0.8f;
+            if (distance > range * range) {
+                simulation_->issue_commands({unit}, faction_id_, CommandType::MOVE,
+                                            simulation_->get_unit_x(focus_target_), simulation_->get_unit_y(focus_target_));
+            } else {
+                simulation_->issue_stop_commands({unit}, faction_id_);
+                simulation_->issue_attack_commands({unit}, faction_id_, focus_target_);
+            }
+            continue;
+        }
         EntityId target = INVALID_ENTITY;
         float best = std::numeric_limits<float>::infinity();
         bool defending = false;
@@ -171,6 +196,58 @@ void AIManager::attack_enemy() {
             simulation_->issue_commands({unit}, faction_id_, CommandType::MOVE, x, y);
         }
     }
+}
+
+EntityId AIManager::select_focus_target(EntityId base) const {
+    EntityId selected = INVALID_ENTITY;
+    float selected_distance = std::numeric_limits<float>::infinity();
+    bool selected_is_base_threat = false;
+    const float base_x = simulation_->get_unit_x(base), base_y = simulation_->get_unit_y(base);
+    for (EntityId enemy : enemy_units_) {
+        const float dx = simulation_->get_unit_x(enemy) - base_x;
+        const float dy = simulation_->get_unit_y(enemy) - base_y;
+        const float distance = dx * dx + dy * dy;
+        const bool is_base_threat = distance <= 40.0f * 40.0f;
+        if ((is_base_threat && !selected_is_base_threat) ||
+            (is_base_threat == selected_is_base_threat &&
+             (distance < selected_distance || (distance == selected_distance && enemy < selected)))) {
+            selected = enemy;
+            selected_distance = distance;
+            selected_is_base_threat = is_base_threat;
+        }
+    }
+    return selected;
+}
+
+void AIManager::update_operational_plan() {
+    army_groups_.clear();
+    const auto base = simulation_->production_manager().faction_line(faction_id_);
+    if (base == INVALID_ENTITY) return;
+    std::vector<EntityId> mobile;
+    for (EntityId unit : visible_units_) {
+        if (unit == base) continue;
+        const auto* data = simulation_->component_manager().get_component<UnitData>(unit);
+        if (data && data->speed > 0.0f) mobile.push_back(unit);
+    }
+    std::sort(mobile.begin(), mobile.end());
+    constexpr size_t group_size = 8;
+    for (size_t offset = 0; offset < mobile.size(); offset += group_size) {
+        army_groups_.emplace_back(mobile.begin() + static_cast<std::ptrdiff_t>(offset),
+                                  mobile.begin() + static_cast<std::ptrdiff_t>(std::min(mobile.size(), offset + group_size)));
+    }
+    if (!enemy_units_.empty()) {
+        const EntityId target = select_focus_target(base);
+        front_x_ = simulation_->get_unit_x(target);
+        front_y_ = simulation_->get_unit_y(target);
+    } else if (objective_set_) {
+        front_x_ = objective_x_;
+        front_y_ = objective_y_;
+    } else {
+        front_x_ = simulation_->get_unit_x(base);
+        front_y_ = simulation_->get_unit_y(base);
+    }
+    staging_x_ = (simulation_->get_unit_x(base) + front_x_) * 0.5f;
+    staging_y_ = (simulation_->get_unit_y(base) + front_y_) * 0.5f;
 }
 
 void AIManager::defend_base() {
