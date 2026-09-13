@@ -96,6 +96,8 @@ func load_from_file(path: String) -> bool:
 	var heights: Array = data.get("terrain", [])
 	if heights.size() != terrain.size(): return false
 	for index in heights.size(): terrain[index] = float(heights[index])
+	for cell in data.get("water", []):
+		if not set_water(int(cell[0]), int(cell[1]), true): return false
 	for entry in data.get("spawns", []):
 		if not add_spawn(String(entry.id), String(entry.faction), Vector2(entry.position[0], entry.position[1]), float(entry.get("heading", 0.0)), String(entry.get("type", "land"))): return false
 	for entry in data.get("resources", []):
@@ -114,7 +116,10 @@ func to_dictionary() -> Dictionary:
 				copy.position = [position.x, position.y]
 			output.append(copy)
 		return output
-	return {"id": map_id, "width": width, "height": height, "tile_size": tile_size, "terrain": Array(terrain), "spawns": serialize.call(spawn_points), "resources": serialize.call(resources), "entities": serialize.call(entities)}
+	var water: Array = []
+	for key in water_cells.keys(): water.append([key.x, key.y])
+	water.sort_custom(func(a, b): return a[1] < b[1] or (a[1] == b[1] and a[0] < b[0]))
+	return {"id": map_id, "width": width, "height": height, "tile_size": tile_size, "terrain": Array(terrain), "water": water, "spawns": serialize.call(spawn_points), "resources": serialize.call(resources), "entities": serialize.call(entities)}
 
 func _cell_index(cell_x: int, cell_y: int) -> int:
 	var columns := width / int(tile_size)
