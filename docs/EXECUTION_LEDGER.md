@@ -2,9 +2,9 @@
 
 **Last updated:** 2026-09-12
 
-**Sequence mode:** reconciliation complete; Goals 03–05 are verified and Goal 06 is ACTIVE. Goals 07–11 are GATED.
+**Sequence mode:** reconciliation complete; Goals 03–06 are verified and Goal 07 is ACTIVE. Goals 08–11 are GATED.
 
-**Milestone state:** Goals 02–04 have current local validation evidence. Goal 05 is now the active acceptance gate; candidate later-goal implementation cannot bypass it. See `docs/WORKTREE_RECONCILIATION.md`.
+**Milestone state:** Goals 02–06 have current local validation evidence. Goal 07 is now the active acceptance gate; candidate later-goal implementation cannot bypass it. See `docs/WORKTREE_RECONCILIATION.md`.
 
 This file is the durable milestone state used after a restart, compaction, or automatic continuation. It records gates and acceptance evidence; it does not weaken the completion criteria in the numbered goal files. Session titles, chat summaries, and OpenCode's session-local todos are non-authoritative.
 
@@ -28,8 +28,8 @@ Historical Goal 04–11 labels below are retained as implementation reports, not
 | Goal 03 — economy, combat, factions | `VERIFIED` | `G03-COMBAT-BENCH` passes with meaningful target acquisition, projectile fire, destruction, state evolution, and a cache-hit average under the 12 ms gate. |
 | Goal 04 — logistics, air, naval, intelligence | `VERIFIED` | All 14 required behaviors map to current deterministic assertions; focused review and remediation are recorded in `docs/LOGISTICS_ARCHITECTURE_REVIEW.md`; Release/CTest/direct/benchmark evidence passed 2026-09-12. |
 | Goal 05 — modding, asset pipeline, map editor | `VERIFIED` | Loadable test mod, generated-unit spawning, native map round-trip, editor draft/native export, deterministic atomic dependencies, reproducibility metadata, and focused review all pass (Release; CTest 3/3; direct 170/170; headless editor/export assertions; 2026-09-12). |
-| Goal 06 — multiplayer, replays, stats, AI | `ACTIVE` | Begin with its canonical numbered specification; historical candidate systems are not acceptance evidence. |
-| Goal 07 — deterministic AI foundation | `GATED` | Candidate implementation exists, but it cannot close while earlier goals are gated. |
+| Goal 06 — multiplayer, replays, stats, AI | `VERIFIED` | Direct TCP loopback command exchange is asserted in two loaded matches; its recorded command replays checksum-identically to terminal state; stats persist/aggregate; offline AI produces, researches, and terminates. Review: `docs/GOAL_06_ARCHITECTURE_REVIEW.md`. Release/CTest 3/3/direct 171/171 pass (2026-09-12). |
+| Goal 07 — deterministic AI foundation | `ACTIVE` | Begin with its canonical numbered specification; prior candidate implementation is not acceptance evidence. |
 | Goal 08 — playable skirmish vertical slice | `GATED` | Its specification retains in-progress rows and requires complete-flow visual/replay/stat evidence. |
 | Goal 09 — logistics improvements | `UNSPECIFIED` | No canonical root goal document exists. |
 | Goal 10 — terrain system | `GATED` | Its specification retains pending roads and terrain-collision criteria. |

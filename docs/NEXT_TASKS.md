@@ -1,18 +1,12 @@
 # Next Tasks — Reconciled Sequential Recovery
 
-**Updated:** 2026-09-12. Goal 05 is verified; Goal 06 is active. Goals 07–11 are gated. See `docs/WORKTREE_RECONCILIATION.md`.
+**Updated:** 2026-09-12. Goals 05 and 06 are verified; Goal 07 is active. Goals 08–11 are gated. See `docs/WORKTREE_RECONCILIATION.md`.
 
-## Active: Goal 06 — multiplayer, replays, stats, AI
+## Active: Goal 07 — deterministic AI foundation
 
-1. Networking and stats are verified; next record/replay the networked local-match command sequence and confirm the offline AI opponent criterion.
-2. Verified slice: load a test mod, validate its generated unit and placeholder mesh, and spawn it through the development simulation bridge.
-3. Verified slice: native map save/load round-trips terrain, resources, spawn points, and initial entities.
-4. Verified slice: manifest loading enforces already-loaded dependency presence and compatible `>=` versions.
-5. Verified slice: batch mod loading preflights dependencies and applies them in deterministic dependency-first ID order.
-6. Verified slice: staged batch loading publishes no partial manifests or generated units when a later asset fails.
-7. Verified slice: standalone Godot editor state supports terrain/water, bounds, spawns, resources, and entities with headless assertions.
-8. Verified slice: editor state exports a canonical map bundle and native MapLoader reloads it through RtsExtension.
-9. Goal 05 review is recorded in `docs/GOAL_05_ARCHITECTURE_REVIEW.md`; rerun the full closure matrix and advance only if it passes.
+1. Read `07_DETERMINISTIC_AI_FOUNDATION.md` and reconcile its criteria against current code before accepting historical AI claims.
+2. Add only the narrow deterministic behavior evidence required by the Goal 07 criteria, then run its focused tests, Release build, CTest, and direct runner.
+3. Record the focused review and advance only after every Goal 07 criterion is evidenced.
 
 ## Gated work
 

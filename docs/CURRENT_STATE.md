@@ -1,11 +1,11 @@
 # Current State — Reconciled Evidence Boundary
 
 **Date:** 2026-09-12
-**Milestone state:** Goals 03–05 are verified; Goal 06 is ACTIVE. Goals 07–11 are gated. Consolidated candidate work on `main` is not accepted as a milestone bypass. See `docs/WORKTREE_RECONCILIATION.md`.
+**Milestone state:** Goals 03–06 are verified; Goal 07 is ACTIVE. Goals 08–11 are gated. Consolidated candidate work on `main` is not accepted as a milestone bypass. See `docs/WORKTREE_RECONCILIATION.md`.
 
 ## Reconciliation Result — 2026-09-12
 
-The prior Goal 11 headline is historical, not current acceptance. Fresh local evidence passes the Release build, CTest 3/3, direct runners, Godot smoke, 91-check presentation harness, and four repository-owned validation scenarios. Goals 03 and 04 are verified; Goal 05 is the active sequential gate.
+The prior Goal 11 headline is historical, not current acceptance. Fresh local evidence passes the Release build, CTest 3/3, direct runners, Godot smoke, 91-check presentation harness, and four repository-owned validation scenarios. Goals 03–06 are verified; Goal 07 is the active sequential gate.
 
 - `rts_logistics_benchmark 10000 30 100` passes at 0.951 ms cache-hit average (p95 1.488 ms) against its 15 ms limit, exercising 10,000 airborne conventional aircraft, 30 mobile carriers, safe-return and facility lookup caches, and periodic intelligence updates.
 
@@ -17,14 +17,17 @@ The previously cited `9c295bf` baseline is absent. Existing text below records i
 
 ## Goal 05 progress — generated unit vertical slice
 
-## Goal 06 progress — historical stats
+## Goal 06 closure — networking, replay, stats, and AI
 
 `StatsManager` now has current behavior evidence: two persisted match records
-reload into correct global and per-map summary statistics. Networking, replay
-of a live local match, and offline AI match proof remain active Goal 06 gates.
+reload into correct global and per-map summary statistics.
 
 Two independently loaded local skirmishes now exchange a tick-1 MOVE command
-over TCP loopback and assert identical post-tick state/checksum. The configured
+over TCP loopback, record it in each match's command log, and assert identical
+post-tick state/checksum. The sending match then runs to a legal terminal
+result, saves a replay, and validates that replay against its recorded checksum
+sequence. The offline skirmish scenario separately proves the AI produces
+units, completes research, and reaches a legal terminal result. The configured
 suite passes 3/3; the real loopback proof is run outside the sandbox because
 that isolation environment denies local port binding.
 

@@ -11,11 +11,11 @@ Goal 06 is complete when:
 | ID | Criterion | Status |
 |----|-----------|--------|
 | G06-NETWORKING | Two local instances can play a minimal match over LAN/direct connect | ✅ Verified 2026-09-12: two local simulations load the same skirmish, exchange an authoritative tick-1 command through TCP loopback, and assert identical state/checksum after execution. |
-| G06-REPLAY | Replay reproduces that match for the established simulation model | ⏸️ TODO |
+| G06-REPLAY | Replay reproduces that match for the established simulation model | ✅ Verified 2026-09-12: the TCP loopback match records its exchanged command, runs to a terminal result, saves a replay, and asserts checksum-identical replay execution. |
 | G06-STATS | Historical stats persist (schema + storage) | ✅ Verified 2026-09-12: `stats_persist_and_summarize_match_history` writes, reloads, and aggregates two matches. |
-| G06-AI | Basic offline AI opponent can play | ⏸️ TODO |
-| G06-VERIFIED | Codex review evaluated; all tests pass | ⏸️ TODO |
-| G06-STATE | docs/state updated (OPENCODE_HANDOFF, CURRENT_STATE, NEXT_TASKS) | ⏸️ TODO |
+| G06-AI | Basic offline AI opponent can play | ✅ Verified 2026-09-12: `skirmish_validated_setup_and_repeatable_legal_terminal` runs two deterministic offline matches to a legal terminal result and asserts opponent production and completed research. |
+| G06-VERIFIED | Codex review evaluated; all tests pass | ✅ Verified 2026-09-12: focused review is `docs/GOAL_06_ARCHITECTURE_REVIEW.md`; Release build, CTest 3/3, `rts_tests` 20/20, and direct integration 171/171 pass. |
+| G06-STATE | docs/state updated (OPENCODE_HANDOFF, CURRENT_STATE, NEXT_TASKS) | ✅ Verified 2026-09-12: gate state, evidence, scope boundary, and next-goal routing are synchronized. |
 
 ## Work State
 

@@ -15,11 +15,11 @@
 
 ## Current State
 
-**Active goal:** Goal 06 multiplayer, replays, stats, and AI acceptance. Goals 07–11 are gated. Goal 05 is verified; its review is `docs/GOAL_05_ARCHITECTURE_REVIEW.md`.
+**Active goal:** Goal 07 deterministic AI foundation acceptance. Goals 08–11 are gated. Goals 05 and 06 are verified; their reviews are `docs/GOAL_05_ARCHITECTURE_REVIEW.md` and `docs/GOAL_06_ARCHITECTURE_REVIEW.md`.
 
 **Reconciliation:** `main` is `1846132`; the prior `9c295bf` baseline is absent. A substantial dirty-tree implementation package is preserved, and `stash@{0}` remains unapplied user work. The model-integration branch has no commits absent from `main`, while its registered external worktree is unavailable. See `docs/WORKTREE_RECONCILIATION.md`.
 
-**Current boundary:** Goal 04 is verified: the full behavior suite, focused review, Release build, CTest 3/3, direct integration 167/167, and logistics benchmark all passed. Goal 05 is active; begin with `05_MODDING_ASSET_PIPELINE_MAP_EDITOR.md` and do not advance until its end-to-end mod/map acceptance proof and review are complete.
+**Current boundary:** Goal 06 is verified: two local matches exchange a TCP loopback command, record and replay it checksum-identically to a legal terminal state, persisted stats aggregate correctly, and the offline AI produces, researches, and reaches a legal terminal state. Release build, CTest 3/3, `rts_tests` 20/20, and direct integration 171/171 pass. Begin Goal 07 with `07_DETERMINISTIC_AI_FOUNDATION.md`; do not use historical candidate claims as acceptance evidence.
 
 **Goal 05 progress:** The generated-unit development path is now proven: `generate.py` emits linked unit/mesh metadata without nulling defaults; `ModManager` validates a manifest-declared generated unit; and the integration suite spawns it with authored data. Dependency ordering/version constraints and map save/load are the next unverified acceptance slices.
 

@@ -204,11 +204,22 @@ TEST(network_loopback_batch_drives_identical_local_match_tick) {
     FrameCommandBatch remote{};
     if (!server.receive_frame_command_batch(remote) || !server_simulation.command_manager().inject_local_command(remote.commands[0])) throw std::runtime_error("Server could not receive command");
     client_match.update(50); server_match.update(50);
+    if (client_simulation.command_log().size() != 1 || server_simulation.command_log().size() != 1 ||
+        client_simulation.command_log().front().entity_id != batch.commands[0].entity_id ||
+        server_simulation.command_log().front().entity_id != batch.commands[0].entity_id) {
+        throw std::runtime_error("Networked command was not recorded by both local matches");
+    }
     const auto a = client_simulation.get_state(), b = server_simulation.get_state();
     if (a.entity_ids != b.entity_ids || a.positions_x != b.positions_x || a.positions_y != b.positions_y ||
         a.health_current != b.health_current || client_match.checksums() != server_match.checksums()) {
         throw std::runtime_error("Networked local matches diverged after the exchanged command");
     }
+    while (client_match.result() == -1) client_match.update(50);
+    const auto replay_path = (std::filesystem::temp_directory_path() / "g06-networked-match.replay").string();
+    if (!client_match.save_replay(replay_path) || !client_match.replay(replay_path)) {
+        throw std::runtime_error("Replay did not reproduce the networked local match: " + client_match.error());
+    }
+    std::filesystem::remove(replay_path);
 }
 
 TEST(snapshot_deserialization_rejects_oversized_counts) {
