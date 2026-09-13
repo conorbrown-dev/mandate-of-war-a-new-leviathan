@@ -158,6 +158,7 @@ add_executable(rts_integration_tests
     tests/test_economy.cpp
     tests/test_terrain.cpp
     tests/test_territorial_control.cpp
+    tests/test_stats.cpp
     tests/test_framework.hpp
 )
 target_link_libraries(rts_integration_tests rts_simulation)

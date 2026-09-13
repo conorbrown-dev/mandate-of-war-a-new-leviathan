@@ -4,7 +4,7 @@
 
 ## Active: Goal 06 — multiplayer, replays, stats, AI
 
-1. Read the canonical Goal 06 specification and reconcile its acceptance criteria with current code.
+1. Historical stats persistence is verified; next prove a two-instance local lockstep match and replay it.
 2. Verified slice: load a test mod, validate its generated unit and placeholder mesh, and spawn it through the development simulation bridge.
 3. Verified slice: native map save/load round-trips terrain, resources, spawn points, and initial entities.
 4. Verified slice: manifest loading enforces already-loaded dependency presence and compatible `>=` versions.

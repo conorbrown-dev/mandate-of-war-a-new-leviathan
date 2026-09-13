@@ -17,6 +17,12 @@ The previously cited `9c295bf` baseline is absent. Existing text below records i
 
 ## Goal 05 progress — generated unit vertical slice
 
+## Goal 06 progress — historical stats
+
+`StatsManager` now has current behavior evidence: two persisted match records
+reload into correct global and per-map summary statistics. Networking, replay
+of a live local match, and offline AI match proof remain active Goal 06 gates.
+
 `generate.py` no longer writes `null` over default fields when optional CLI
 arguments are omitted. A manifest-declared generated unit and its procedural
 placeholder mesh are schema-validated by `ModManager`, receive a stable
