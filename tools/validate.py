@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import datetime as dt
 import json
+import math
 import os
 from pathlib import Path
 import re
@@ -23,9 +24,87 @@ BASELINE_ROOT = ROOT / "validation" / "baselines"
 GAMEPLAY_SCENARIOS = {
     "basic_selection_move",
     "strategic_zoom_transition",
+    "oak_grove_showcase",
     "airfield_fighter_ferry",
+    "road_construction",
 }
-PERFORMANCE_SCENARIOS = {"simulation_scale_1000"}
+PERFORMANCE_SCENARIOS = {"simulation_scale_1000", "combat_benchmark_2000"}
+CONTRACT_SCENARIOS = {
+    "native_extension_smoke": ("test.gd", "RtsExtension smoke test passed"),
+    "skirmish_presentation": ("test_skirmish.gd", "GODOT_SKIRMISH_PRESENTATION"),
+    "native_skirmish_match_to_result": ("test_native_skirmish.gd", "GODOT_NATIVE_SKIRMISH"),
+    "terrain_contract": ("test_goal10_terrain.gd", "GODOT_GOAL10_TERRAIN"),
+    "visual_registry": ("test_visual_registry.gd", "VISUAL_REGISTRY"),
+    "visual_spawn_bridge": ("test_visual_spawn_bridge.gd", "VISUAL_SPAWN_BRIDGE"),
+    "visual_presentation_policy": ("test_visual_presentation_policy.gd", "VISUAL_PRESENTATION_POLICY"),
+    "visual_pack_compatibility": ("test_visual_pack_compatibility.gd", "VISUAL_PACK_COMPATIBILITY"),
+    "visual_asset_validator": ("test_visual_asset_validator.gd", "VISUAL_ASSET_VALIDATOR checks="),
+    "native_visual_ids": ("test_native_visual_ids.gd", "NATIVE_VISUAL_IDS"),
+    "unit_visual_root": ("test_unit_visual_root.gd", "UNIT_VISUAL_ROOT"),
+    "reference_model_load": ("test_reference_model_load.gd", "REFERENCE_MODEL_LOAD checks="),
+    "map_editor_model": ("test_map_editor_model.gd", "Map editor model assertions passed"),
+    "map_editor_export": ("test_map_editor_export.gd", "Map editor native export assertions passed"),
+    "map_editor_ui": ("test_map_editor_ui.gd", "MAP_EDITOR_UI"),
+}
+
+
+def execution_errors(output: str, returncode: int, sentinel: str | None = None) -> list[str]:
+    errors = [line.strip() for line in output.splitlines()
+              if "SCRIPT ERROR:" in line or "VALIDATION FAIL" in line
+              or line.startswith("ERROR:")]
+    if returncode != 0:
+        errors.append(f"process exited {returncode}")
+    if sentinel and not any(line.startswith(sentinel) for line in output.splitlines()):
+        errors.append(f"missing completion sentinel: {sentinel}")
+    if any(int(count) > 0 for count in re.findall(r"\bfailures=(\d+)", output)):
+        errors.append("harness reported failed checks")
+    return errors
+
+
+def isolated_environment(artifact_dir: Path) -> dict[str, str]:
+    env = os.environ.copy()
+    for name in ("UNIT_COUNT", "RTS_PROFILE_FRAMES", "RTS_PROTOTYPE_VISUALS", "RTS_PROTOTYPE_VISUAL_LIMIT",
+                 "RTS_AUTO_START_SKIRMISH", "RTS_AUTO_START_NATIVE_SKIRMISH",
+                 "RTS_NATIVE_FAST_FORWARD_RESULT", "RTS_CAPTURE_NATIVE_SCREENSHOT"):
+        env.pop(name, None)
+    # Godot user:// must not overwrite the player's latest replay or stats.
+    if sys.platform.startswith("linux"):
+        env["XDG_DATA_HOME"] = str(artifact_dir / "user-data")
+        env["XDG_CONFIG_HOME"] = str(artifact_dir / "user-config")
+        env["XDG_CACHE_HOME"] = str(artifact_dir / "user-cache")
+    return env
+
+
+def run_contract(args: argparse.Namespace, artifact_dir: Path, started_at: str) -> int:
+    script, sentinel = CONTRACT_SCENARIOS[args.scenario]
+    started = time.monotonic()
+    command = [str(godot_executable()), "--headless", "--path", str(GODOT_PROJECT),
+               "--script", f"res://{script}", "--log-file", str(artifact_dir / "engine-godot.log")]
+    try:
+        completed = subprocess.run(command, cwd=ROOT, env=isolated_environment(artifact_dir),
+                                   text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                                   timeout=args.timeout)
+        output = completed.stdout
+        errors = execution_errors(output, completed.returncode, sentinel)
+    except subprocess.TimeoutExpired as exc:
+        output = exc.stdout or b""
+        if isinstance(output, bytes):
+            output = output.decode("utf-8", errors="replace")
+        errors = [f"harness exceeded {args.timeout:g} second deadline", *execution_errors(output, 1, sentinel)]
+    (artifact_dir / "engine.log").write_text(output, encoding="utf-8")
+    sys.stdout.write(output)
+    if args.force_failure:
+        errors.append("intentional failure requested")
+    report = failure_report(args, artifact_dir, started_at, "")
+    report.update(status="FAIL" if errors else "PASS", errors=errors,
+                  durationMs=int((time.monotonic() - started) * 1000),
+                  assertions=[{"id": "harness.completed", "status": "FAIL" if errors else "PASS",
+                               "message": f"{script}: assertions completed without engine errors"}],
+                  metrics={"harness": script, "evidenceTier": "contract"},
+                  artifacts=[{"kind": "log", "path": "engine.log"}],
+                  warnings=["Contract harness; individual checks are in engine.log. No rendered evidence captured."])
+    write_report(artifact_dir / "report.json", report)
+    return 1 if errors else 0
 
 
 def godot_executable() -> Path:
@@ -53,7 +132,7 @@ def write_report(path: Path, report: dict) -> None:
 
 def run_gameplay(args: argparse.Namespace, artifact_dir: Path, started_at: str) -> int:
     godot = godot_executable()
-    env = os.environ.copy()
+    env = isolated_environment(artifact_dir)
     env.update(
         {
             "MANDATE_VALIDATION_SCENARIO": args.scenario,
@@ -91,7 +170,17 @@ def run_gameplay(args: argparse.Namespace, artifact_dir: Path, started_at: str) 
     elif not rendered_run:
         command.insert(1, "--headless")
 
-    completed = subprocess.run(command, cwd=ROOT, env=env, text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+    try:
+        completed = subprocess.run(command, cwd=ROOT, env=env, text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, timeout=args.timeout)
+    except subprocess.TimeoutExpired as exc:
+        output = exc.stdout or b""
+        if isinstance(output, bytes):
+            output = output.decode("utf-8", errors="replace")
+        (artifact_dir / "engine.log").write_text(output, encoding="utf-8")
+        report = failure_report(args, artifact_dir, started_at, f"scenario exceeded {args.timeout:g} second deadline")
+        report["artifacts"] = [{"kind": "log", "path": "engine.log"}]
+        write_report(artifact_dir / "report.json", report)
+        return 124
     (artifact_dir / "engine.log").write_text(completed.stdout, encoding="utf-8")
     sys.stdout.write(completed.stdout)
     report_path = artifact_dir / "report.json"
@@ -106,6 +195,12 @@ def run_gameplay(args: argparse.Namespace, artifact_dir: Path, started_at: str) 
         report = failure_report(args, artifact_dir, started_at, f"invalid report.json: {exc}")
         write_report(report_path, report)
         return 4
+    schema_errors = validate_report(report, args.scenario, artifact_dir.name)
+    if schema_errors:
+        invalid_report = failure_report(args, artifact_dir, started_at, "; ".join(schema_errors))
+        write_report(artifact_dir / "invalid-report.json", report)
+        write_report(report_path, invalid_report)
+        return 5
     report.setdefault("artifacts", []).extend(
         [
             {"kind": "log", "path": "engine.log"},
@@ -118,7 +213,13 @@ def run_gameplay(args: argparse.Namespace, artifact_dir: Path, started_at: str) 
         report.setdefault("errors", []).extend(schema_errors)
         write_report(report_path, report)
         return 5
-    engine_errors = [line.strip() for line in completed.stdout.splitlines() if "SCRIPT ERROR:" in line or "VALIDATION FAIL" in line]
+    engine_errors = execution_errors(completed.stdout, completed.returncode)
+    for artifact in report["artifacts"]:
+        path = artifact_dir / artifact["path"]
+        if not path.is_file() or path.stat().st_size == 0:
+            engine_errors.append(f"missing or empty artifact: {artifact['path']}")
+    if args.require_screenshots and not any(a["kind"] == "screenshot" for a in report["artifacts"]):
+        engine_errors.append("requested screenshots are absent")
     if engine_errors:
         report["status"] = "FAIL"
         report.setdefault("errors", []).extend(engine_errors)
@@ -132,6 +233,11 @@ def run_gameplay(args: argparse.Namespace, artifact_dir: Path, started_at: str) 
             write_report(report_path, report)
             return 6
         metadata = probe_video(video_path)
+        if metadata.get("resolution") != "1280x720" or metadata.get("fps") != 30.0 or not (metadata.get("frames") or metadata.get("durationSeconds")):
+            report["status"] = "FAIL"
+            report["errors"].append("requested video has no verifiable 1280x720/30 FPS frame or duration metadata")
+            write_report(report_path, report)
+            return 6
         report.setdefault("artifacts", []).append(
             {
                 "kind": "video",
@@ -152,16 +258,58 @@ def run_gameplay(args: argparse.Namespace, artifact_dir: Path, started_at: str) 
 
 
 def validate_report(report: dict, scenario: str, expected_run_id: str) -> list[str]:
+    if not isinstance(report, dict):
+        return ["report must be an object"]
     required = {"schemaVersion", "scenarioId", "runId", "status", "seed", "startedAt", "durationMs", "assertions", "metrics", "artifacts", "errors"}
     errors = [f"report missing required field: {name}" for name in sorted(required - report.keys())]
     if report.get("scenarioId") != scenario:
         errors.append("report scenarioId does not match invocation")
     if report.get("runId") != expected_run_id:
         errors.append("report runId does not match artifact directory")
-    if report.get("status") not in {"PASS", "FAIL"}:
+    if report.get("status") not in ("PASS", "FAIL"):
         errors.append("report status must be PASS or FAIL")
     if not isinstance(report.get("assertions"), list) or not report.get("assertions"):
         errors.append("report must contain at least one assertion")
+    else:
+        seen = set()
+        for assertion in report["assertions"]:
+            if not isinstance(assertion, dict):
+                errors.append("assertion must be an object")
+                continue
+            identifier = assertion.get("id")
+            if not isinstance(identifier, str) or not identifier or identifier in seen:
+                errors.append("assertion IDs must be non-empty unique strings")
+            else:
+                seen.add(identifier)
+            if assertion.get("status") not in ("PASS", "FAIL") or not isinstance(assertion.get("message"), str):
+                errors.append("assertion requires PASS/FAIL status and message")
+            if report.get("status") == "PASS" and assertion.get("status") != "PASS":
+                errors.append("PASS report contains an unsuccessful assertion")
+    if type(report.get("schemaVersion")) is not int or report.get("schemaVersion") != 1:
+        errors.append("unsupported schemaVersion")
+    if type(report.get("seed")) is not int:
+        errors.append("seed must be an integer")
+    duration = report.get("durationMs")
+    if type(duration) not in (int, float) or not math.isfinite(duration) or duration < 0:
+        errors.append("durationMs must be finite and non-negative")
+    if not isinstance(report.get("startedAt"), str) or not report.get("startedAt"):
+        errors.append("startedAt must be a non-empty string")
+    if not isinstance(report.get("metrics"), dict):
+        errors.append("metrics must be an object")
+    if not isinstance(report.get("errors"), list) or any(not isinstance(e, str) for e in report.get("errors", [])):
+        errors.append("errors must be an array of strings")
+    elif report.get("status") == "PASS" and report["errors"]:
+        errors.append("PASS report contains errors")
+    if not isinstance(report.get("artifacts"), list):
+        errors.append("artifacts must be an array")
+    else:
+        for artifact in report["artifacts"]:
+            if not isinstance(artifact, dict):
+                errors.append("artifact must be an object")
+                continue
+            path = artifact.get("path")
+            if not isinstance(artifact.get("kind"), str) or not isinstance(path, str) or not path or "\\" in path or ":" in path or Path(path).is_absolute() or ".." in Path(path).parts:
+                errors.append("artifact requires a kind and a relative path within the run directory")
     return errors
 
 
@@ -205,6 +353,8 @@ def failure_report(args: argparse.Namespace, artifact_dir: Path, started_at: str
 
 
 def run_performance(args: argparse.Namespace, artifact_dir: Path, started_at: str) -> int:
+    if args.scenario == "combat_benchmark_2000":
+        return run_combat_performance(args, artifact_dir, started_at)
     executable = ROOT / "build" / "rts_scale_benchmark"
     if not executable.is_file():
         report = failure_report(args, artifact_dir, started_at, f"benchmark executable not found: {executable}; run the Release build first")
@@ -216,7 +366,7 @@ def run_performance(args: argparse.Namespace, artifact_dir: Path, started_at: st
     started = time.monotonic()
     log_parts = []
     for index in range(3):
-        completed = subprocess.run([str(executable), "1000", "100", "100"], cwd=ROOT, text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+        completed = subprocess.run([str(executable), "1000", "100", "100"], cwd=ROOT, text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, timeout=args.timeout)
         log_parts.append(f"RUN {index + 1}\n{completed.stdout}")
         csv_rows = [line for line in completed.stdout.splitlines() if re.match(r"^\d+,\d+,\d+,", line)]
         values = csv_rows[-1].split(",") if csv_rows else []
@@ -274,6 +424,59 @@ def run_performance(args: argparse.Namespace, artifact_dir: Path, started_at: st
     }
     write_report(artifact_dir / "report.json", report)
     return 0 if status == "PASS" else 1
+
+
+def run_combat_performance(args: argparse.Namespace, artifact_dir: Path, started_at: str) -> int:
+    executable = ROOT / "build" / "rts_combat_benchmark"
+    if not executable.is_file():
+        report = failure_report(args, artifact_dir, started_at, f"benchmark executable not found: {executable}; run the Release build first")
+        write_report(artifact_dir / "report.json", report)
+        return 2
+    started = time.monotonic()
+    completed = subprocess.run([str(executable), "2000", "100"], cwd=ROOT, text=True,
+                               stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                               timeout=args.timeout)
+    output = completed.stdout
+    (artifact_dir / "engine.log").write_text(output, encoding="utf-8")
+    sys.stdout.write(output)
+    values = {
+        key: int(match.group(1)) for key, match in {
+            "initialUnits": re.search(r"total initial units: (\\d+)", output),
+            "finalUnits": re.search(r"total final units: (\\d+)", output),
+            "unitsDestroyed": re.search(r"units destroyed: (\\d+)", output),
+            "projectilesFired": re.search(r"projectiles fired: (\\d+)", output),
+        }.items() if match
+    }
+    latency = re.search(r"cache-hit tick avg/p50/p95/max: ([0-9.]+) / ([0-9.]+) / ([0-9.]+) / ([0-9.]+)", output)
+    if latency:
+        values.update(cacheHitAverageMs=float(latency.group(1)), cacheHitP50Ms=float(latency.group(2)),
+                      cacheHitP95Ms=float(latency.group(3)), cacheHitMaxMs=float(latency.group(4)))
+    state = re.search(r"initial/final state hash: (\\d+) / (\\d+)", output)
+    if state:
+        values.update(initialStateHash=state.group(1), finalStateHash=state.group(2))
+    required = (values.get("initialUnits") == 4000 and values.get("unitsDestroyed", 0) > 0
+                and values.get("projectilesFired", 0) > 0
+                and values.get("finalUnits", 4000) < values.get("initialUnits", 0)
+                and values.get("initialStateHash") != values.get("finalStateHash"))
+    passed = completed.returncode == 0 and required and not args.force_failure
+    errors = []
+    if completed.returncode:
+        errors.append(f"combat benchmark exited {completed.returncode}")
+    if not required:
+        errors.append("combat workload lacks required active-combat state evolution")
+    if args.force_failure:
+        errors.append("intentional failure requested")
+    report = {
+        "schemaVersion": 1, "scenarioId": args.scenario, "runId": artifact_dir.name,
+        "status": "PASS" if passed else "FAIL", "seed": args.seed, "startedAt": started_at,
+        "durationMs": int((time.monotonic() - started) * 1000),
+        "assertions": [{"id": "combat.active-workload", "status": "PASS" if passed else "FAIL",
+                        "message": "2,000-vs-2,000 workload has combat, destruction, and state evolution within its benchmark gate"}],
+        "metrics": values, "artifacts": [{"kind": "log", "path": "engine.log"}],
+        "warnings": ["simulation benchmark only; this is not rendering FPS evidence"], "errors": errors,
+    }
+    write_report(artifact_dir / "report.json", report)
+    return 0 if passed else 1
 
 
 def apply_visual_baselines(args: argparse.Namespace, artifact_dir: Path, report: dict) -> int:
@@ -375,17 +578,20 @@ def main() -> int:
     parser.add_argument("--update-baseline", action="store_true", help="explicitly replace visual baselines from this successful run")
     parser.add_argument("--visual-threshold", type=float, help="explicit normalized-similarity threshold; required when accepting a baseline")
     parser.add_argument("--force-failure", action="store_true", help=argparse.SUPPRESS)
+    parser.add_argument("--timeout", type=float, default=120.0, help="per-process deadline in seconds")
     args = parser.parse_args()
-    scenarios = sorted(GAMEPLAY_SCENARIOS | PERFORMANCE_SCENARIOS)
+    scenarios = sorted(GAMEPLAY_SCENARIOS | PERFORMANCE_SCENARIOS | CONTRACT_SCENARIOS.keys())
+    if not math.isfinite(args.timeout) or args.timeout <= 0:
+        parser.error("--timeout must be positive and finite")
     if args.list:
         print("\n".join(scenarios))
         return 0
-    if args.scenario == "all":
+    if args.scenario in {"all", "contracts"}:
         if args.record or args.rendered or args.update_baseline:
             parser.error("run rendered, recording, and baseline workflows one scenario at a time")
         result = 0
-        for scenario in scenarios:
-            command = [sys.executable, str(Path(__file__).resolve()), scenario, "--seed", str(args.seed)]
+        for scenario in sorted(CONTRACT_SCENARIOS) if args.scenario == "contracts" else scenarios:
+            command = [sys.executable, str(Path(__file__).resolve()), scenario, "--seed", str(args.seed), "--timeout", str(args.timeout)]
             if args.require_screenshots:
                 command.append("--require-screenshots")
             if args.force_failure:
@@ -396,6 +602,8 @@ def main() -> int:
         return result
     if args.scenario not in scenarios:
         parser.error(f"unknown scenario {args.scenario!r}; use --list or 'all'")
+    if args.scenario in CONTRACT_SCENARIOS.keys() | PERFORMANCE_SCENARIOS and (args.record or args.rendered or args.require_screenshots or args.update_baseline):
+        parser.error("rendered evidence requires a gameplay scenario with capture checkpoints")
     if args.visual_threshold is not None and not 0.0 <= args.visual_threshold <= 1.0:
         parser.error("--visual-threshold must be between 0 and 1")
     current_run = run_id()
@@ -403,7 +611,9 @@ def main() -> int:
     artifact_dir.mkdir(parents=True)
     started_at = dt.datetime.now(dt.timezone.utc).isoformat()
     try:
-        if args.scenario in PERFORMANCE_SCENARIOS:
+        if args.scenario in CONTRACT_SCENARIOS:
+            result = run_contract(args, artifact_dir, started_at)
+        elif args.scenario in PERFORMANCE_SCENARIOS:
             result = run_performance(args, artifact_dir, started_at)
         else:
             result = run_gameplay(args, artifact_dir, started_at)

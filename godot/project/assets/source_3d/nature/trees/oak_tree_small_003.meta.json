@@ -1,0 +1,15 @@
+{
+  "category": "nature",
+  "godot_forward": "-Z",
+  "godot_up": "+Y",
+  "bounds_m": {
+    "x": 3.5926146507263184,
+    "y": 3.4557337760925293,
+    "z": 5.355591297149658
+  },
+  "triangles_all_exported_meshes": 797,
+  "usage": "active tactical forest variant; shares tactical oak materials at runtime",
+  "source_asset": "downloaded_assets/trees/oak-trees-pack-17var-lods-seasons-gameready/source/Oak pack.fbx",
+  "source_object": "Small_oak_tree__003_LOD1",
+  "source_pipeline": "User-provided tree conversion; Blender 5; embedded-texture GLB"
+}

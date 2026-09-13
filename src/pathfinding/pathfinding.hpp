@@ -21,7 +21,7 @@ public:
         float origin_y = 0.0f
     );
     
-    std::vector<std::pair<float, float>> find_path(float sx, float sy, float dx, float dy);
+    std::vector<std::pair<float, float>> find_path(float sx, float sy, float dx, float dy) const;
     std::vector<std::pair<float, float>> generate_flow_field(float dx, float dy) const;
     bool prewarm_flow_field(float dx, float dy) const;
     std::pair<float, float> flow_direction(float x, float y, float dx, float dy) const;

@@ -1,5 +1,6 @@
 #include "test_framework.hpp"
 #include "simulation/terrain.hpp"
+#include "simulation/simulation.hpp"
 #include <fstream>
 
 using namespace rts;
@@ -48,10 +49,10 @@ TEST(terrain_height_at_coordinates) {
     Terrain terrain;
     terrain.load_from_binary(path);
     
-    // grid coordinates at world (0,0): gx=160, gy=160, so value = 160*320+160 = 51360
+    // The 320 samples include both world edges, matching Godot's terrain mesh.
     verify(std::abs(terrain.height_at(-160.0f, -160.0f) - 0.0f) < 0.001f, "height at corner (-160,-160)");
-    verify(std::abs(terrain.height_at(0.0f, 0.0f) - 51360.0f) < 0.001f, "height at center (0,0)");
-    verify(std::abs(terrain.height_at(159.0f, 159.0f) - 102399.0f) < 0.001f, "height at corner (159,159)");
+    verify(std::abs(terrain.height_at(0.0f, 0.0f) - 51199.5f) < 0.001f, "height at center interpolates the rendered triangle");
+    verify(std::abs(terrain.height_at(160.0f, 160.0f) - 102399.0f) < 0.001f, "height at corner (160,160)");
     std::cout << "terrain_height_at_coordinates checks=" << checks << '\n';
 }
 
@@ -70,4 +71,26 @@ TEST(terrain_out_of_bounds_returns_zero) {
     verify(std::abs(terrain.height_at(0.0f, -200.0f)) < 0.001f, "out-of-bounds north");
     verify(std::abs(terrain.height_at(0.0f, 200.0f)) < 0.001f, "out-of-bounds south");
     std::cout << "terrain_out_of_bounds_returns_zero checks=" << checks << '\n';
+}
+
+TEST(terrain_ground_units_follow_heightfield) {
+    std::vector<float> test_data(320 * 320, 12.0f);
+    const std::string path = "/tmp/test_heightmap_ground_units.bin";
+    std::ofstream output(path, std::ios::binary);
+    output.write(reinterpret_cast<const char*>(test_data.data()), test_data.size() * sizeof(float));
+    output.close();
+
+    Simulation simulation;
+    simulation.start();
+    simulation.terrain().load_from_binary(path);
+    simulation.terrain().set_world_bounds(320.0f, 320.0f);
+    const auto entity = simulation.create_unit_with_type(-100.0f, -100.0f,
+        UnitType::ELITE_MAIN_BATTLE_TANK, FactionId::ELITE_PRECISION);
+    verify(entity > 0, "ground unit created for heightfield collision test");
+    auto* position = simulation.component_manager().get_component<Position>(static_cast<EntityId>(entity));
+    verify(position && std::abs(position->z - 12.0f) < 0.001f, "ground unit spawns at terrain height");
+    simulation.move_unit(static_cast<EntityId>(entity), -90.0f, -90.0f);
+    simulation.update(50.0f);
+    position = simulation.component_manager().get_component<Position>(static_cast<EntityId>(entity));
+    verify(position && std::abs(position->z - 12.0f) < 0.001f, "ground unit retains terrain height after movement");
 }

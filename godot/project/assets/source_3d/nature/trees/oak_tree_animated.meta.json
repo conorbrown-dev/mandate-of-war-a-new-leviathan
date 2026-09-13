@@ -1,0 +1,15 @@
+{
+  "category": "nature",
+  "godot_forward": "-Z",
+  "godot_up": "+Y",
+  "bounds_m": {
+    "x": 216.42888641357422,
+    "y": 87.51426583528519,
+    "z": 75.3459358215332
+  },
+  "triangles_all_exported_meshes": 18671,
+  "usage": "optional animated-tree source conversion",
+  "source_asset": "downloaded_assets/trees/tree-animate/source/Sketchfab_2022_09_21_06_15_37.blend",
+  "source_object": null,
+  "source_pipeline": "User-provided tree conversion; Blender 5; embedded-texture GLB"
+}

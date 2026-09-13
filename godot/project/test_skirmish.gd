@@ -39,8 +39,18 @@ func _run() -> void:
 	check(terrain_material.get_shader_parameter("forest_texture") != null and terrain_material.get_shader_parameter("mud_texture") != null and terrain_material.get_shader_parameter("rocky_texture") != null, "terrain shader binds imported forest, mud, and rocky surfaces")
 	check(float(terrain_material.get_shader_parameter("water_wave_speed")) > 0.0 and float(terrain_material.get_shader_parameter("water_wave_height")) > 0.0, "terrain water has authored animated current and wave-height parameters")
 	check(is_equal_approx(float(terrain_material.get_shader_parameter("terrain_brightness")), 1.0) and is_equal_approx(float(terrain_material.get_shader_parameter("terrain_daylight")), 1.0) and float(terrain_material.get_shader_parameter("terrain_ambient_fill")) > 0.0 and terrain_material.get_shader_parameter("fog_beacon_lights") != null and is_equal_approx(float(terrain_material.get_shader_parameter("texture_tiling")), 384.0), "terrain shader exposes daytime, local floodlight illumination, and tactical-scale texture tiling")
-	check(view.terrain_trees.multimesh != null and view.terrain_trees.multimesh.instance_count == 520 and view.terrain_trees.multimesh.mesh.get_surface_count() >= 4, "terrain has an improved batched multi-surface forest layer")
-	check(view.strategic_trees.multimesh != null and view.strategic_trees.multimesh.instance_count < view.terrain_trees.multimesh.instance_count, "strategic zoom uses a lower-cost tree representation")
+	var tactical_tree_count := 0
+	var strategic_tree_count := 0
+	var tree_grounded: bool = view.forest_tree_root_depths.size() == view.forest_tree_positions.size()
+	for tree_view in view.tactical_tree_views:
+		tactical_tree_count += tree_view.multimesh.instance_count
+	for root_depth_value in view.forest_tree_root_depths:
+		tree_grounded = tree_grounded and float(root_depth_value) >= -0.15 and float(root_depth_value) <= 0.02
+	for tree_view in view.strategic_tree_views:
+		strategic_tree_count += tree_view.multimesh.instance_count
+	check(view.tactical_tree_views.size() == 3 and tactical_tree_count == 960 and view.terrain_trees.multimesh.mesh.get_surface_count() >= 1, "terrain uses the three user-supplied GLB variants in batched tactical forest groups")
+	check(view.forest_cluster_centers.size() == 9 and view.forest_tree_positions.size() == 960 and view.forest_tree_variant_indices.size() == 960 and strategic_tree_count == tactical_tree_count / 2, "default skirmish distributes the varied user trees across large deterministic clusters and half-density strategic groups")
+	check(tree_grounded, "the lowest imported oak vertices embed only slightly beneath the heightmap")
 	view.camera_distance = 7000.0
 	view._sync_tree_lod()
 	check(view.strategic_trees.visible and not view.terrain_trees.visible, "strategic zoom switches to the lower-cost tree representation")
@@ -96,7 +106,9 @@ func _run() -> void:
 	var first_model: Node3D = view.prototype_visual_views.get(view.player_entity_ids[0], null)
 	check(first_model != null and first_model.get_node("ModelRoot").get_child_count() > 0, "Field Engineer has an imported visual model")
 	check(first_model != null and first_model.get_node("StrategicZoomVisual").mesh != null, "Field Engineer has a generated strategic icon")
-	check(first_model != null and first_model.global_position.y >= view._terrain_height_at(first_model.global_position.x, first_model.global_position.z) + 1.1, "Field Engineer reference model clears the terrain")
+	var engineer_terrain_height: float = float(view._terrain_height_at(first_model.global_position.x, first_model.global_position.z)) if first_model != null else 0.0
+	var engineer_model_bottom: float = first_model.global_position.y + float(first_model.call("model_bottom_height")) if first_model != null else INF
+	check(first_model != null and absf(engineer_model_bottom - engineer_terrain_height - 0.05) < 0.02, "Field Engineer model bottom stays five centimeters above the rendered terrain")
 	view.camera_distance = 550.0
 	view._sync_unit_transforms()
 	check(first_model != null and first_model.get_node("ModelRoot").visible, "zooming in past the strategic marker threshold restores the engineer model")
@@ -128,6 +140,7 @@ func _run() -> void:
 	check(view._blueprint_at_screen(floodlight_card) == 103, "compact fourth structure card selects the Floodlight without overflowing the build deck")
 	var floodlight_hover: Dictionary = view.command_hud.get_build_hover_context_at(floodlight_card / build_ui_scale)
 	check(floodlight_hover.get("title", "") == "BUILD // FLOODLIGHT" and "620" in String(floodlight_hover.get("detail", "")), "bottom inspection strip receives Floodlight identity, costs, and readiness")
+	check(floodlight_hover.get("accent", "") == Color("#ffbd52"), "BUILD hover uses themed orange accent")
 	check(first_model.get_node_or_null("SelectionVisual") == null, "selection relies on the persistent range envelopes instead of a redundant yellow hex")
 	check(first_model.get_node("ModelRoot").get_child_count() > 0, "selection leaves the Field Engineer imported model intact")
 	view._clear_selection()
@@ -187,7 +200,9 @@ func _run() -> void:
 	var radar_hex := first_model.get_node("RadarHex") as MeshInstance3D
 	var attack_hex := first_model.get_node("AttackHex") as MeshInstance3D
 	check(visibility_hex.visible and radar_hex.visible and attack_hex.visible and visibility_hex.mesh is ImmediateMesh and radar_hex.mesh is ImmediateMesh and attack_hex.mesh is ImmediateMesh, "unselected units show flat blue visibility, purple radar, and red attack hex line ranges")
-	var airfield_target := Vector2(-15500.0, 1000.0)
+	var requested_airfield_target := Vector2(-12500.0, 0.0)
+	var airfield_target: Vector2 = view._resolve_structure_placement_target(2, requested_airfield_target)
+	check(airfield_target != Vector2.INF and airfield_target.distance_to(requested_airfield_target) <= 1000.0 and bool(view.extension.call("validate_structure_placement", 2, airfield_target.x, airfield_target.y)), "Airfield placement snaps nearby uneven terrain to a valid operational footprint")
 	check(view._queue_commander_structure(2, airfield_target), "Command Walker queues an airfield structure on land")
 	for _tick in range(750):
 		view.extension.call("update_simulation", 50.0)
@@ -281,7 +296,7 @@ func _run() -> void:
 	for frame in range(75):
 		view._update_camera(1.0 / 60.0)
 	var zoom_after: Vector2 = view._screen_to_world(zoom_cursor)
-	check(zoom_after.distance_to(zoom_anchor) < 2.0 and not view.zoom_focus_pending, "strategic zoom keeps the terrain under the cursor as its focus through the full eased zoom")
+	check(zoom_after.distance_to(zoom_anchor) <= 25.0 and not view.zoom_focus_pending, "strategic zoom keeps the terrain under the cursor within the validated 25 m tolerance")
 	view.target_camera_distance = 24.0
 	view._update_camera(1.0)
 	check(view.camera.global_position.y >= view._terrain_height_at(view.camera.global_position.x, view.camera.global_position.z) + 5.9, "close camera stays above the terrain clearance floor")

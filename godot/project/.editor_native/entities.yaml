@@ -1,0 +1,8 @@
+entities:
+  - id: "unit"
+    type: "unit"
+    content_id: "unit|test_mod|heavy"
+    position: [48.0, 48.0]
+    heading: 0.0
+    velocity: [0.0, 0.0]
+    hp: 1.0

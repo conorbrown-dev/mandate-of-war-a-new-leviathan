@@ -1,16 +1,26 @@
 # Next Tasks — Reconciled Sequential Recovery
 
-**Updated:** 2026-09-12. Goals 05–07 are verified; Goal 08 is active. Goals 09–11 are gated. See `docs/WORKTREE_RECONCILIATION.md`.
+**Updated:** 2026-09-13. Goals 05–11 are verified; no canonical Goal 12 specification exists. See `docs/WORKTREE_RECONCILIATION.md`.
 
-## Active: Goal 08 — playable skirmish vertical slice
+## Completed: Goal 09 — logistics improvements
 
-1. Read `08_PLAYABLE_SKIRMISH_VERTICAL_SLICE.md` and reconcile its explicit TODO/in-progress rows against current code and presentation evidence.
-2. Work only the first unverified Goal 08 acceptance criterion; add a representative scenario rather than relying on historical smoke or benchmark claims.
+All acceptance rows in `09_LOGISTICS_IMPROVEMENTS.md` are verified, including path-aware return planning, finite-stock resupply, telemetry, benchmark, failure-probe, and Codex review evidence.
+
+## Completed: Goal 10 — terrain system
+
+The canonical `10_TERRAIN_SYSTEM.md` criteria are verified, including heightmap
+loading, biome/material rendering, road traversal costs, terrain-following
+ground collision, tests, benchmark, and Codex review.
+
+## Completed: Goal 11 — Forward Seizure and Base Establishment
+
+The canonical `11_FORWARD_SEIZURE.md` criteria are verified, including
+capability-gated INSTALL, deterministic zone progression, fixed-tick FOB
+construction, authoritative telemetry, tests, and Codex review.
 
 ## Gated work
 
-- **Goals 05–08:** their own specifications retain unproven or TODO requirements.
-- **Goals 09 and 11:** lack canonical numbered root specifications.
+- **No active numbered goal:** Goal 12 has no canonical specification yet.
 - Do not apply `stash@{0}` or repair/remove the unavailable model-integration worktree without explicit user authorization.
 
 ## Validation workflow
@@ -20,6 +30,14 @@ Use `tools/validate <scenario-id>` during gameplay iteration and `tools/validate
 The next numbered gameplay goal still requires a canonical goal document. When one is supplied, add or extend the narrow scenario that proves its real player workflow instead of creating a test-only substitute.
 
 ## Latest Gameplay Integration
+
+Terrain grounding and structure placement were corrected on 2026-09-13. Keep
+Godot and native terrain sampling aligned to the rendered 320 x 320 triangle
+mesh, preserve the Field Engineer's mesh-bottom grounding assertion, and route
+interactive structure placement through the bounded nearby-site resolver.
+Airfield validation now uses a 250 x 750 m operational footprint and accepts
+manageable broad slopes while continuing to reject water, map edges, blocked
+cells, and cliffs.
 
 The tactical presentation now keeps unit range envelopes visible when units
 are not selected: blue visibility, purple radar, and red attack hexes. A
@@ -120,12 +138,17 @@ integration runner 162/162, and Godot presentation 82/82 pass. Destruction,
 occupation, and civilian simulation remain deferred.
 
 FEATURE-001 is complete for the current terrain presentation scope. Forest
-instances now use a shared multi-surface trunk/canopy mesh in tactical view
-and a reduced cone representation in strategic view, both batched through
-MultiMesh. Release build, CTest 3/3, direct integration runner 162/162, and
-Godot presentation 85/85 pass. External production tree assets and
-biome-specific art remain future polish. FEATURE-007 resource icon polish is
-now verified.
+instances now use the three user-supplied GLB forms in tactical view and an
+imported oak LOD2 mesh in strategic view, all batched through MultiMesh. The
+default map contains 960 heightmap-grounded trees in nine deterministic large
+groves; the classic and animated donor conversions remain optional Godot assets.
+Biome-specific placement and art direction remain future polish.
+The focused rendered oak-grove scenario now covers tree count, configured size
+variation, terrain grounding, grove density, LOD population, screenshots, and
+video; future foliage work should retain this scenario.
+The optional English-oak USD conversions are available for future asset work,
+but need simplification and authored materials before tactical activation.
+FEATURE-007 resource icon polish is now verified.
 
 FEATURE-007 is complete for the current resource-HUD scope. The economy strip
 and build cards share scalable vector-drawn Material/wrench and Energy/bolt

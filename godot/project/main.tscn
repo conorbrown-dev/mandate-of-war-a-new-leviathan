@@ -247,6 +247,11 @@ autowrap_mode = 2
 [node name="StartButton" type="Button" parent="HUD/StartupOverlay/Panel/VBox"]
 custom_minimum_size = Vector2(0, 52)
 layout_mode = 2
+text = "OPEN PRESENTATION LAB"
+
+[node name="NativeSkirmishButton" type="Button" parent="HUD/StartupOverlay/Panel/VBox"]
+custom_minimum_size = Vector2(0, 52)
+layout_mode = 2
 text = "START SKIRMISH"
 
 [node name="TerritoryDebugLabel" type="Label" parent="HUD"]

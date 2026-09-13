@@ -8,12 +8,19 @@ const UNIT_SELECTED_COLOR := Color(1.0, 0.72, 0.08, 1.0)
 const PLAYER_FACTION_COLOR := Color(0.12, 0.62, 1.0, 1.0)
 const AI_FACTION_COLOR := Color(0.92, 0.20, 0.18, 1.0)
 const HUMAN_PLAYER_ID := 0
+const FACTION_UNIT_VISUAL_OVERRIDES := {
+	# The default Broken Strait player starts as faction 0 (Industrial). Its
+	# runway fighter retains the stable native type 9 while using its own F-15C
+	# presentation definition rather than the Elite donor visual.
+	0: {9: "visual.industrial.fighter.f15c.prototype"}
+}
 const BUILD_UNIT_SHORTCUTS := ["1", "4", "5", "9", "0", "P"]
 const CAMERA_MIN_DISTANCE := 24.0
 const CAMERA_MAX_DISTANCE := 26000.0
 const CAMERA_MIN_FAR_DISTANCE := 120000.0
 const CAMERA_TERRAIN_CLEARANCE := 6.0
 const UNIT_MODEL_GROUND_CLEARANCE := 1.2
+const ENGINEER_MODEL_GROUND_CLEARANCE := 0.05
 const FREE_CAMERA_MIN_PITCH := 12.0
 const FREE_CAMERA_MAX_PITCH := 82.0
 const FREE_CAMERA_ROTATION_SPEED := 0.004
@@ -30,7 +37,8 @@ const MESH_BASE_PATH := "res://scenarios/meshes/"
 const TERRAIN_SAMPLE_WIDTH := 320
 const TERRAIN_SAMPLE_HEIGHT := 320
 const CIVILIAN_DRESSING_PATH := "res://scenarios/civilian_dressing.json"
-const TREE_INSTANCE_TARGET := 520
+const TREE_INSTANCE_TARGET := 960
+const TREE_CLUSTER_COUNT := 9
 const SkirmishConfigLoader := preload("res://skirmish_config.gd")
 const ArmorTexture := preload("res://assets/units/near_future_armor_tile_v1.png")
 const MATERIAL_SITES := [
@@ -63,6 +71,7 @@ const MATERIAL_SITES := [
 @onready var scenario_description: Label = $HUD/StartupOverlay/Panel/VBox/ScenarioDescription
 @onready var scenario_status: Label = $HUD/StartupOverlay/Panel/VBox/ScenarioStatus
 @onready var start_button: Button = $HUD/StartupOverlay/Panel/VBox/StartButton
+@onready var native_skirmish_button: Button = $HUD/StartupOverlay/Panel/VBox/NativeSkirmishButton
 @onready var territory_debug_label: Label = $HUD/TerritoryDebugLabel
 @onready var territory_material: ShaderMaterial = $Ocean.material_override
 @onready var battlefield_environment: WorldEnvironment = $WorldEnvironment
@@ -198,6 +207,13 @@ var selected_structure_view: Node3D
 var civilian_building_instance_count := 0
 var civilian_building_positions: Array[Vector2] = []
 var tree_lod_distance := 5000.0
+var tactical_tree_views: Array[MultiMeshInstance3D] = []
+var strategic_tree_views: Array[MultiMeshInstance3D] = []
+var forest_cluster_centers: Array[Vector2] = []
+var forest_tree_positions: Array[Vector2] = []
+var forest_tree_scales: Array[Vector2] = []
+var forest_tree_variant_indices: Array[int] = []
+var forest_tree_root_depths: Array[float] = []
 var pending_build_order: Dictionary = {}
 var material_site_state: Dictionary = {}
 var material_order_mode := 0 # 0 normal, 1 claim/capture, 2 demolish
@@ -335,6 +351,7 @@ func _ready() -> void:
 		return
 
 	start_button.pressed.connect(_on_start_skirmish_pressed)
+	native_skirmish_button.pressed.connect(_on_native_skirmish_pressed)
 
 	# The native map loader deliberately exposes map metadata, not the starting
 	# rosters.  The validated scenario definition is therefore the authority for
@@ -352,6 +369,12 @@ func _ready() -> void:
 	scenario_status.text = "Elite Precision vs Mass Warfare\n%s" % scenario_definition.victory.description
 	if OS.get_environment("RTS_AUTO_START_SKIRMISH") == "1":
 		_on_start_skirmish_pressed.call_deferred()
+	if OS.get_environment("RTS_AUTO_START_NATIVE_SKIRMISH") == "1":
+		_on_native_skirmish_pressed.call_deferred()
+
+
+func _on_native_skirmish_pressed() -> void:
+	get_tree().change_scene_to_file("res://native_skirmish.tscn")
 
 
 func _setup_environment_debug_panel() -> void:
@@ -739,7 +762,10 @@ func _process(delta: float) -> void:
 			add_child(build_ghost)
 		var ghost_valid := true
 		if build_mode_type >= 100 and extension != null:
-			ghost_valid = bool(extension.call("validate_structure_placement", build_mode_type - 100, ghost_target.x, ghost_target.y))
+			var snapped_target := _resolve_structure_placement_target(build_mode_type - 100, ghost_target)
+			ghost_valid = snapped_target != Vector2.INF
+			if ghost_valid:
+				ghost_target = snapped_target
 		_set_build_ghost_valid(ghost_valid)
 		build_ghost.position = Vector3(ghost_target.x, _terrain_height_at(ghost_target.x, ghost_target.y) + 0.8, ghost_target.y)
 	if extension == null or not match_started:
@@ -1256,6 +1282,17 @@ func _issue_material_site_order(screen_position: Vector2) -> void:
 	_update_hud()
 
 
+func _visual_id_for_unit_faction(unit_type: int, faction_id: int) -> String:
+	var faction_overrides: Dictionary = FACTION_UNIT_VISUAL_OVERRIDES.get(faction_id, {})
+	if faction_overrides.has(unit_type):
+		return String(faction_overrides[unit_type])
+	return String(extension.call("get_unit_visual_id", unit_type))
+
+
+func _unit_model_ground_clearance(unit_type: int) -> float:
+	return ENGINEER_MODEL_GROUND_CLEARANCE if unit_type == 8 else UNIT_MODEL_GROUND_CLEARANCE
+
+
 func _register_presented_unit(entity_id: int, unit_type: int, faction_id: int, world: Vector2) -> void:
 	if entity_to_instance.has(entity_id):
 		return
@@ -1271,8 +1308,8 @@ func _register_presented_unit(entity_id: int, unit_type: int, faction_id: int, w
 	unit_multimesh.instance_count = entity_ids.size()
 	unit_multimesh.visible_instance_count = entity_ids.size()
 	if prototype_visuals_enabled and unit_type != 12:
-		var visual_id := String(extension.call("get_unit_visual_id", unit_type))
-		var wrapper = visual_spawn_bridge.spawn(self, visual_registry, visual_id, Transform3D(Basis.IDENTITY, Vector3(world.x, _terrain_height_at(world.x, world.y) + UNIT_MODEL_GROUND_CLEARANCE, world.y)), color)
+		var visual_id := _visual_id_for_unit_faction(unit_type, faction_id)
+		var wrapper = visual_spawn_bridge.spawn(self, visual_registry, visual_id, Transform3D(Basis.IDENTITY, Vector3(world.x, _terrain_height_at(world.x, world.y) + _unit_model_ground_clearance(unit_type), world.y)), color)
 		wrapper.set_strategic_icon(unit_type, color)
 		wrapper.set_range_terrain_height_sampler(func(world_x: float, world_z: float): return _terrain_height_at(world_x, world_z))
 		prototype_visual_views[entity_id] = wrapper
@@ -1330,7 +1367,7 @@ func _spawn_faction_units(side: Dictionary, color: Color, player_controlled: boo
 			unit_multimesh.set_instance_transform(instance_index, Transform3D(Basis.IDENTITY, Vector3(world_x, 0.4, world_y)))
 			unit_multimesh.set_instance_color(instance_index, color)
 			if prototype_visuals_enabled:
-				var visual_id := String(extension.call("get_unit_visual_id", unit_type))
+				var visual_id := _visual_id_for_unit_faction(unit_type, faction_id)
 				var wrapper = visual_spawn_bridge.spawn(self, visual_registry, visual_id, Transform3D(Basis.IDENTITY, Vector3(world_x, 0.4, world_y)), color)
 				wrapper.set_strategic_icon(unit_type, color)
 				wrapper.set_range_terrain_height_sampler(func(world_x: float, world_z: float): return _terrain_height_at(world_x, world_z))
@@ -1369,7 +1406,7 @@ func _sync_unit_transforms() -> Vector2:
 		var basis := Basis(Vector3.UP, heading)
 		if prototype_visuals_enabled and prototype_visual_views.has(entity_ids[index]):
 			var wrapper = prototype_visual_views[entity_ids[index]]
-			wrapper.apply_simulation_transform(Transform3D(basis, Vector3(x, _terrain_height_at(x, z) + UNIT_MODEL_GROUND_CLEARANCE, z)))
+			wrapper.apply_simulation_transform(Transform3D(basis, Vector3(x, _terrain_height_at(x, z) + _unit_model_ground_clearance(int(entity_unit_types.get(entity_ids[index], 0))), z)))
 			wrapper.update_lod(camera_distance)
 		else:
 			unit_multimesh.set_instance_transform(index, Transform3D(basis, Vector3(x, 0.4, z)))
@@ -1684,14 +1721,40 @@ func _set_instance_color(entity_id: int, color: Color) -> void:
 func _terrain_height_at(world_x: float, world_z: float) -> float:
 	if terrain_heights.is_empty():
 		return 0.4
-	var x := clampi(roundi((world_x / terrain_world_width + 0.5) * float(TERRAIN_SAMPLE_WIDTH - 1)), 0, TERRAIN_SAMPLE_WIDTH - 1)
-	var z := clampi(roundi((world_z / terrain_world_height + 0.5) * float(TERRAIN_SAMPLE_HEIGHT - 1)), 0, TERRAIN_SAMPLE_HEIGHT - 1)
-	return HeightMap.presentation_height(terrain_heights[z * TERRAIN_SAMPLE_WIDTH + x], world_x, terrain_world_width) + 0.8
+	var grid_x := clampf((world_x / terrain_world_width + 0.5) * float(TERRAIN_SAMPLE_WIDTH - 1), 0.0, float(TERRAIN_SAMPLE_WIDTH - 1))
+	var grid_z := clampf((world_z / terrain_world_height + 0.5) * float(TERRAIN_SAMPLE_HEIGHT - 1), 0.0, float(TERRAIN_SAMPLE_HEIGHT - 1))
+	var x0 := mini(floori(grid_x), TERRAIN_SAMPLE_WIDTH - 2)
+	var z0 := mini(floori(grid_z), TERRAIN_SAMPLE_HEIGHT - 2)
+	var tx := grid_x - float(x0)
+	var tz := grid_z - float(z0)
+	var h00 := _terrain_vertex_height(x0, z0)
+	var h10 := _terrain_vertex_height(x0 + 1, z0)
+	var h01 := _terrain_vertex_height(x0, z0 + 1)
+	var h11 := _terrain_vertex_height(x0 + 1, z0 + 1)
+	# Match generate_terrain_mesh()'s two triangles, rather than bilinearly
+	# smoothing across their diagonal and drifting away from the rendered mesh.
+	if tx + tz <= 1.0:
+		return h00 + tx * (h10 - h00) + tz * (h01 - h00)
+	return h11 + (1.0 - tz) * (h10 - h11) + (1.0 - tx) * (h01 - h11)
+
+
+func _terrain_vertex_height(sample_x: int, sample_z: int) -> float:
+	var vertex_world_x := (float(sample_x) / float(TERRAIN_SAMPLE_WIDTH - 1) - 0.5) * terrain_world_width
+	return HeightMap.presentation_height(terrain_heights[sample_z * TERRAIN_SAMPLE_WIDTH + sample_x], vertex_world_x, terrain_world_width)
 
 
 func _rebuild_terrain_trees() -> void:
 	for tree in forest_landmarks.get_children():
 		tree.queue_free()
+	_clear_tree_variant_views()
+
+	if prototype_visuals_enabled:
+		_rebuild_terrain_trees_prototype()
+	else:
+		_rebuild_terrain_trees_procedural()
+
+
+func _rebuild_terrain_trees_procedural() -> void:
 	var tree_mesh := _make_low_poly_tree_mesh()
 	var strategic_mesh := CylinderMesh.new()
 	strategic_mesh.top_radius = 0.0
@@ -1724,6 +1787,7 @@ func _rebuild_terrain_trees() -> void:
 
 	# All instances are populated before assignment, so this stays one batched draw.
 	terrain_trees.multimesh = multimesh
+	tactical_tree_views.append(terrain_trees)
 	terrain_trees.custom_aabb = AABB(Vector3(-terrain_world_width * 0.5, -4.0, -terrain_world_height * 0.5), Vector3(terrain_world_width, 36.0, terrain_world_height))
 	terrain_trees.visible = placed == TREE_INSTANCE_TARGET
 	var strategic_multimesh := MultiMesh.new()
@@ -1740,6 +1804,7 @@ func _rebuild_terrain_trees() -> void:
 	for index in range(strategic_transforms.size()):
 		strategic_multimesh.set_instance_transform(index, strategic_transforms[index])
 	strategic_trees.multimesh = strategic_multimesh
+	strategic_tree_views.append(strategic_trees)
 	strategic_trees.custom_aabb = terrain_trees.custom_aabb
 	strategic_trees.visible = false
 
@@ -1758,6 +1823,196 @@ func _rebuild_terrain_trees() -> void:
 				landmark.scale = Vector3(1.1, 1.1, 1.1)
 				forest_landmarks.add_child(landmark)
 	_sync_tree_lod()
+
+
+func _rebuild_terrain_trees_prototype() -> void:
+	var registry := VisualDefinitionRegistry.new()
+	if not registry.load_definitions():
+		_rebuild_terrain_trees_procedural()
+		return
+
+	var visual_id := "visual.nature.tree.prototype"
+	var definition := registry.resolve(visual_id)
+	if definition.is_empty() or bool(definition.get("fallback", false)):
+		_rebuild_terrain_trees_procedural()
+		return
+
+	var tactical_mesh := _tree_mesh_from_resource(registry.load_model(visual_id))
+	var strategic_path := String(definition.get("strategic_model_path", ""))
+	var strategic_mesh := _tree_mesh_from_resource(load(strategic_path)) if not strategic_path.is_empty() else tactical_mesh
+	if tactical_mesh == null or strategic_mesh == null:
+		push_warning("Imported tree visual failed to load; retaining procedural forest")
+		_rebuild_terrain_trees_procedural()
+		return
+
+	var tactical_paths: Array = definition.get("tactical_model_paths", [String(definition.get("model_path", ""))])
+	var share_primary_material := bool(definition.get("share_primary_tree_material", true))
+	var tactical_meshes: Array[Mesh] = []
+	for path_value in tactical_paths:
+		var path := String(path_value)
+		var loaded_mesh := tactical_mesh if path == String(definition.get("model_path", "")) else _tree_mesh_from_resource(load(path))
+		if loaded_mesh == null:
+			push_warning("Imported tree variant failed to load: %s" % path)
+			_rebuild_terrain_trees_procedural()
+			return
+		var variant_mesh := loaded_mesh.duplicate() as Mesh
+		if share_primary_material:
+			for surface in range(mini(variant_mesh.get_surface_count(), tactical_mesh.get_surface_count())):
+				variant_mesh.surface_set_material(surface, tactical_mesh.surface_get_material(surface))
+		tactical_meshes.append(variant_mesh)
+	if tactical_meshes.is_empty():
+		_rebuild_terrain_trees_procedural()
+		return
+
+	var transforms_by_variant: Array[Array] = []
+	for ignored in tactical_meshes:
+		transforms_by_variant.append([])
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 640640
+	forest_tree_positions = _clustered_forest_positions(rng)
+	forest_tree_scales.clear()
+	forest_tree_root_depths.clear()
+	var variant_counts: Array[int] = []
+	if tactical_meshes.size() == 3:
+		variant_counts.append_array([440, 440, 80])
+	else:
+		for variant_index in range(tactical_meshes.size()):
+			variant_counts.append(int(TREE_INSTANCE_TARGET / tactical_meshes.size()))
+		for remainder_index in range(TREE_INSTANCE_TARGET % tactical_meshes.size()):
+			variant_counts[remainder_index] += 1
+	forest_tree_variant_indices.clear()
+	for variant_index in range(variant_counts.size()):
+		for ignored in range(variant_counts[variant_index]):
+			forest_tree_variant_indices.append(variant_index)
+	# Keep the authored population ratio while distributing every oak form through
+	# every grove.  Sequential assignment made whole groves read as one species.
+	for index in range(forest_tree_variant_indices.size() - 1, 0, -1):
+		var swap_index := rng.randi_range(0, index)
+		var swapped_variant := forest_tree_variant_indices[index]
+		forest_tree_variant_indices[index] = forest_tree_variant_indices[swap_index]
+		forest_tree_variant_indices[swap_index] = swapped_variant
+	for index in range(forest_tree_positions.size()):
+		var variant_index := forest_tree_variant_indices[index]
+		var position := forest_tree_positions[index]
+		var scale_profiles: Array[Vector2] = [Vector2(0.75, 1.10), Vector2(0.70, 1.25), Vector2(0.80, 1.35)]
+		var scale_profile: Vector2 = scale_profiles[variant_index]
+		var scale_xy := rng.randf_range(scale_profile.x, scale_profile.y)
+		var scale_z := rng.randf_range(scale_profile.x, scale_profile.y)
+		forest_tree_scales.append(Vector2(scale_xy, scale_z))
+		# Ground the lowest actual mesh vertex, rather than assuming a GLB's
+		# origin is at its root.  A small 8 cm embed keeps roots visually seated.
+		var local_root_y := tactical_meshes[variant_index].get_aabb().position.y
+		var terrain_height := _terrain_height_at(position.x, position.y)
+		var root_y := terrain_height - 0.08 - local_root_y * scale_z
+		forest_tree_root_depths.append(root_y + local_root_y * scale_z - terrain_height)
+		var rotation := Basis(Vector3.UP, rng.randf_range(0.0, TAU))
+		var scale := Basis.from_scale(Vector3(scale_xy, scale_z, scale_xy))
+		var transform := Transform3D(rotation * scale, Vector3(position.x, root_y, position.y))
+		transforms_by_variant[variant_index].append(transform)
+
+	for variant_index in range(tactical_meshes.size()):
+		var tactical_view := terrain_trees if variant_index == 0 else _new_tree_variant_view("TerrainOakVariant%d" % variant_index)
+		var tactical_multimesh := _tree_multimesh(tactical_meshes[variant_index], transforms_by_variant[variant_index])
+		tactical_view.multimesh = tactical_multimesh
+		tactical_view.custom_aabb = _forest_tree_aabb()
+		tactical_view.visible = true
+		tactical_tree_views.append(tactical_view)
+
+		var strategic_view := strategic_trees if variant_index == 0 else _new_tree_variant_view("StrategicOakVariant%d" % variant_index)
+		var strategic_transforms: Array = []
+		for source_index in range(transforms_by_variant[variant_index].size()):
+			if source_index % 2 == 0:
+				var transform: Transform3D = transforms_by_variant[variant_index][source_index]
+				strategic_transforms.append(Transform3D(Basis(Vector3.UP, transform.basis.get_euler().y).scaled(transform.basis.get_scale() * 0.72), Vector3(transform.origin.x, transform.origin.y, transform.origin.z)))
+		strategic_view.multimesh = _tree_multimesh(strategic_mesh, strategic_transforms)
+		strategic_view.custom_aabb = _forest_tree_aabb()
+		strategic_view.visible = false
+		strategic_tree_views.append(strategic_view)
+
+	for side in [-1.0, 1.0]:
+		for row in range(4):
+			for column in range(3):
+				var landmark := Marker3D.new()
+				landmark.position = Vector3(
+					side * (terrain_world_width * 0.31 + float(column) * 12.0),
+					_terrain_height_at(side * (terrain_world_width * 0.31 + float(column) * 12.0), -120.0 + float(row) * 78.0) + 7.0,
+					-120.0 + float(row) * 78.0
+				)
+				forest_landmarks.add_child(landmark)
+	_sync_tree_lod()
+
+
+func _clustered_forest_positions(rng: RandomNumberGenerator) -> Array[Vector2]:
+	var positions: Array[Vector2] = []
+	forest_cluster_centers.clear()
+	for cluster_index in range(TREE_CLUSTER_COUNT):
+		var side := -1.0 if cluster_index % 2 == 0 else 1.0
+		var center := Vector2(side * rng.randf_range(terrain_world_width * 0.29, terrain_world_width * 0.43), rng.randf_range(-terrain_world_height * 0.37, terrain_world_height * 0.37))
+		forest_cluster_centers.append(center)
+		for tree_index in range(96):
+			# A grove should read as a forest from the tactical camera, rather than a
+			# collection of evenly scattered landmark trees.  The square-root term
+			# retains a natural falloff while the compact radius keeps the 96 trees
+			# visibly clustered.
+			var radius := sqrt(rng.randf()) * rng.randf_range(80.0, 360.0)
+			var position := center + Vector2(cos(rng.randf_range(0.0, TAU)), sin(rng.randf_range(0.0, TAU))) * radius
+			position.x = clampf(position.x, -terrain_world_width * 0.46, terrain_world_width * 0.46)
+			position.y = clampf(position.y, -terrain_world_height * 0.46, terrain_world_height * 0.46)
+			if absf(position.x) >= terrain_world_width * 0.24:
+				positions.append(position)
+	while positions.size() < TREE_INSTANCE_TARGET:
+		var position := Vector2(rng.randf_range(-terrain_world_width * 0.46, terrain_world_width * 0.46), rng.randf_range(-terrain_world_height * 0.46, terrain_world_height * 0.46))
+		if absf(position.x) >= terrain_world_width * 0.24:
+			positions.append(position)
+	return positions.slice(0, TREE_INSTANCE_TARGET)
+
+
+func _tree_multimesh(mesh: Mesh, transforms: Array) -> MultiMesh:
+	var multimesh := MultiMesh.new()
+	multimesh.transform_format = MultiMesh.TRANSFORM_3D
+	multimesh.mesh = mesh
+	multimesh.instance_count = transforms.size()
+	for index in range(transforms.size()):
+		multimesh.set_instance_transform(index, transforms[index])
+	return multimesh
+
+
+func _forest_tree_aabb() -> AABB:
+	return AABB(Vector3(-terrain_world_width * 0.5, -4.0, -terrain_world_height * 0.5), Vector3(terrain_world_width, 64.0, terrain_world_height))
+
+
+func _new_tree_variant_view(view_name: String) -> MultiMeshInstance3D:
+	var view := MultiMeshInstance3D.new()
+	view.name = view_name
+	add_child(view)
+	return view
+
+
+func _clear_tree_variant_views() -> void:
+	for view in tactical_tree_views:
+		if view != terrain_trees and is_instance_valid(view):
+			view.queue_free()
+	for view in strategic_tree_views:
+		if view != strategic_trees and is_instance_valid(view):
+			view.queue_free()
+	tactical_tree_views.clear()
+	strategic_tree_views.clear()
+
+
+func _tree_mesh_from_resource(resource: Resource) -> Mesh:
+	if resource is Mesh:
+		return resource as Mesh
+	if not resource is PackedScene:
+		return null
+	var instance := (resource as PackedScene).instantiate()
+	var mesh_nodes := instance.find_children("*", "MeshInstance3D", true, false)
+	for node in mesh_nodes:
+		var mesh_instance := node as MeshInstance3D
+		if mesh_instance != null and mesh_instance.mesh != null:
+			instance.queue_free()
+			return mesh_instance.mesh
+	instance.queue_free()
+	return null
 
 
 func _tree_material(color: Color, emission_strength: float) -> StandardMaterial3D:
@@ -1807,8 +2062,10 @@ func _sync_tree_lod() -> void:
 	if terrain_trees.multimesh == null or strategic_trees.multimesh == null:
 		return
 	var strategic := camera_distance > tree_lod_distance
-	terrain_trees.visible = not strategic
-	strategic_trees.visible = strategic
+	for view in tactical_tree_views:
+		view.visible = not strategic
+	for view in strategic_tree_views:
+		view.visible = strategic
 
 
 func _clear_demo_units() -> void:
@@ -2067,6 +2324,12 @@ func _order_commander_to_build(build_type: int, target: Vector2) -> void:
 	var commander_id := _player_engineer_id()
 	if commander_id < 0:
 		return
+	if build_type >= 100:
+		var snapped_target := _resolve_structure_placement_target(build_type - 100, target)
+		if snapped_target == Vector2.INF:
+			push_warning("No valid structure site was found near the requested location")
+			return
+		target = snapped_target
 	var commander_position := Vector2(float(extension.call("get_unit_x", commander_id)), float(extension.call("get_unit_y", commander_id)))
 	var direction := (target - commander_position).normalized()
 	if direction.length_squared() < 0.001:
@@ -2081,6 +2344,24 @@ func _order_commander_to_build(build_type: int, target: Vector2) -> void:
 		push_warning("Field Engineer could not reach the build location")
 		return
 	pending_build_order = {"type": build_type, "target": target, "approach": approach_target}
+
+
+func _resolve_structure_placement_target(structure_type: int, requested: Vector2) -> Vector2:
+	if extension == null:
+		return Vector2.INF
+	if bool(extension.call("validate_structure_placement", structure_type, requested.x, requested.y)):
+		return requested
+	# The native navigation grid is 125 m on the 40 km map. Search nearby cell
+	# centers in stable rings so slightly uneven cursor hits snap to the closest
+	# viable construction site while water and cliffs remain hard barriers.
+	for ring in range(1, 9):
+		var radius := float(ring) * 125.0
+		for index in range(16):
+			var angle := TAU * float(index) / 16.0
+			var candidate := requested + Vector2(cos(angle), sin(angle)) * radius
+			if bool(extension.call("validate_structure_placement", structure_type, candidate.x, candidate.y)):
+				return candidate
+	return Vector2.INF
 
 func _process_pending_build_order() -> void:
 	if pending_build_order.is_empty():
@@ -2259,17 +2540,25 @@ func _make_road_mesh(start: Vector2, finish: Vector2, width: float) -> ArrayMesh
 	if direction.length_squared() < 0.001:
 		direction = Vector2.RIGHT
 	var side := direction.normalized().orthogonal() * width * 0.5
-	var vertices := PackedVector3Array([
-		Vector3(start.x + side.x, _terrain_height_at(start.x, start.y) + 0.04, start.y + side.y),
-		Vector3(start.x - side.x, _terrain_height_at(start.x, start.y) + 0.04, start.y - side.y),
-		Vector3(finish.x + side.x, _terrain_height_at(finish.x, finish.y) + 0.04, finish.y + side.y),
-		Vector3(finish.x - side.x, _terrain_height_at(finish.x, finish.y) + 0.04, finish.y - side.y),
-	])
+	# Sample both edges along the road, not just its center endpoints. Long
+	# quads cut through hills even when native placement accepts the slope.
+	var steps := clampi(int(ceilf(start.distance_to(finish) / maxf(width, 1.0))), 1, 4096)
+	var vertices := PackedVector3Array()
+	var normals := PackedVector3Array()
+	var indices := PackedInt32Array()
+	for index in range(steps + 1):
+		var center := start.lerp(finish, float(index) / float(steps))
+		for edge in [center + side, center - side]:
+			vertices.append(Vector3(edge.x, _terrain_height_at(edge.x, edge.y) + 0.12, edge.y))
+			normals.append(Vector3.UP)
+		if index < steps:
+			var first := index * 2
+			indices.append_array(PackedInt32Array([first, first + 1, first + 2, first + 2, first + 1, first + 3]))
 	var arrays := []
 	arrays.resize(Mesh.ARRAY_MAX)
 	arrays[Mesh.ARRAY_VERTEX] = vertices
-	arrays[Mesh.ARRAY_INDEX] = PackedInt32Array([0, 1, 2, 2, 1, 3])
-	arrays[Mesh.ARRAY_NORMAL] = PackedVector3Array([Vector3.UP, Vector3.UP, Vector3.UP, Vector3.UP])
+	arrays[Mesh.ARRAY_INDEX] = indices
+	arrays[Mesh.ARRAY_NORMAL] = normals
 	var mesh := ArrayMesh.new()
 	mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
 	return mesh
@@ -2313,11 +2602,12 @@ func _spawn_completed_structure_view(structure_type: int, target: Vector2) -> vo
 	var root := Node3D.new()
 	root.name = "Built_%s" % ("Outpost" if structure_type == 0 else "RadarMast" if structure_type == 1 else "Airfield" if structure_type == 2 else "Floodlight")
 	root.set_meta("structure_type", structure_type)
-	root.position = Vector3(target.x, _terrain_height_at(target.x, target.y) + 0.8, target.y)
+	root.position = Vector3(target.x, _terrain_height_at(target.x, target.y) + 0.05, target.y)
 	var mesh := MeshInstance3D.new()
 	var box := BoxMesh.new()
 	box.size = Vector3(5.0, 1.6 if structure_type == 0 else 7.0 if structure_type == 1 else 0.5 if structure_type == 2 else 2.0, 5.0 if structure_type < 2 else 12.0 if structure_type == 2 else 5.0)
 	mesh.mesh = box
+	mesh.position.y = box.size.y * 0.5
 	mesh.material_override = _demo_material(Color("#d09a45") if structure_type == 0 else Color("#55b9c9"), 0.0)
 	root.add_child(mesh)
 	if structure_type == 2:
@@ -2325,7 +2615,7 @@ func _spawn_completed_structure_view(structure_type: int, target: Vector2) -> vo
 		var runway_mesh := BoxMesh.new()
 		runway_mesh.size = Vector3(4.0, 0.08, 18.0)
 		runway.mesh = runway_mesh
-		runway.position.y = 0.35
+		runway.position.y = 0.04
 		runway.material_override = _demo_material(Color("#8aa0a8"), 0.0)
 		root.add_child(runway)
 	if structure_type == 1:

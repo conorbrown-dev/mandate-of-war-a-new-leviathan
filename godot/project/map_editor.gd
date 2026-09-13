@@ -32,6 +32,12 @@ func _add_spawn() -> void: _message("Spawn added" if model.add_spawn("player", "
 func _add_resource() -> void: _message("Resource added" if model.add_resource("metal", "material", Vector2(32, 32), 100.0, 4.0) else "Resource already exists or is invalid")
 func _validate() -> void:
 	var errors := model.validate(); _message("Map valid" if errors.is_empty() else errors[0])
-func _save() -> void: _message("Native map bundle exported" if model.export_native_bundle("user://map_editor_export") else "Export failed")
+func _save() -> void:
+	# The editable draft is the input consumed by Load; keep native export as
+	# the game-facing bundle without losing the round-trip editor workflow.
+	if not model.save_to_file("user://map_editor_draft.json"):
+		_message("Save failed")
+		return
+	_message("Map saved and native bundle exported" if model.export_native_bundle("user://map_editor_export") else "Draft saved; native export failed")
 func _load() -> void: _message("Loaded" if model.load_from_file("user://map_editor_draft.json") else "Load failed")
 func _message(text: String) -> void: status.text = text

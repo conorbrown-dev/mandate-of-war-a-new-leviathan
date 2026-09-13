@@ -37,7 +37,7 @@ GlobalStats StatsManager::get_summary() const {
     std::vector<MatchStats> matches;
     load_all_matches(matches);
     
-    GlobalStats summary;
+    GlobalStats summary{};
     summary.total_matches = static_cast<uint64_t>(matches.size());
     
     std::unordered_map<std::string, uint32_t> faction_wins;
@@ -132,7 +132,7 @@ void StatsManager::load_all_matches(std::vector<MatchStats>& matches) const {
             entry.path().extension() == ".txt") {
             std::ifstream ifs(entry.path());
             
-            MatchStats m;
+            MatchStats m{};
             std::string line;
             while (std::getline(ifs, line)) {
                 size_t pos = line.find('=');

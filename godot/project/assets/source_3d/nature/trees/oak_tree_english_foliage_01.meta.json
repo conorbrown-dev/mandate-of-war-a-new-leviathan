@@ -1,0 +1,16 @@
+{
+  "category": "nature",
+  "godot_forward": "-Z",
+  "godot_up": "+Y",
+  "bounds_m": {
+    "x": 0.7755838632583618,
+    "y": 0.7678200723603368,
+    "z": 0.5273706912994385
+  },
+  "triangles_all_exported_meshes": 282670,
+  "usage": "optional English-oak USD geometry conversion; deferred from active forest due to source triangle count",
+  "source_asset": "downloaded_assets/trees/tree_english_oak_forest_01_usd/Tree_English_Oak_01_Foliage.usd",
+  "source_object": "all foliage stage meshes",
+  "source_pipeline": "User-provided USD conversion; usd-core 26.8; geometry-only GLB",
+  "material_status": "No USD material binding was present in the supplied stage; material authoring remains deferred."
+}

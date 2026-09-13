@@ -1,8 +1,18 @@
 # Performance Evidence
 
-**Last updated:** 2026-09-12
+**Last updated:** 2026-09-13
 
-**Current milestone:** Goal 05 active; Goal 04 is verified. Historical Goal 10/11 statements below are implementation history, not current sequential acceptance.
+**Current milestone:** Goal 10 active; Goals 02–09 are verified. Historical Goal 11 statements below are implementation history, not current sequential acceptance.
+
+## 2026-09-12 Goal 08 Active-Skirmish Benchmark
+
+Release command: `./build/rts_skirmish_benchmark` on the documented Linux x86_64 host.
+
+| Initial entities | Survivors | Fixed ticks | Moving ticks | Projectile ticks | Completed builds | Avg | p50 | p95 | Max |
+|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| 1,051 | 525 | 400 | 400 | 143 | 1 | 1.643 ms | 0.267 ms | 6.503 ms | 23.239 ms |
+
+The harness loads the authored two-landmass skirmish, submits an authoritative production order, creates 1,000 additional opposing ground units on valid land, and asserts sustained movement, projectiles, destruction, completed production, and a maximum simulation tick below the 50 ms Goal 08 budget. It advances the isolated simulation rather than the match controller so a valid command-center kill cannot truncate the measurement; terminal result behavior is separately asserted by `test_skirmish`.
 
 ## 2026-09-12 Reconciled Benchmark Evidence
 
@@ -10,6 +20,7 @@
 |---|---:|---|
 | 2,000 vs 2,000 combat / 100 ticks | 11.058 ms cache-hit average; 1,038 projectiles; 2,000 destroyed | PASS (`G03-COMBAT-BENCH`) |
 | 10,000 airborne aircraft / 30 moving carriers / 100 ticks | 0.951 ms cache-hit average, p95 1.488 ms, against 15 ms gate | PASS (`G04-BENCH`) |
+| 10,000 airborne aircraft / 30 moving carriers / 100 ticks after path-aware return optimization | 1.213 ms cache-hit average, p95 2.021 ms, max 12.789 ms | PASS (`G09-BENCH`) |
 
 The combat benchmark now measures cumulative successful projectile spawns and derives losses from the state live-count reduction because combat cleanup removes dead entities. It is not valid to treat this combat result as Godot rendering/FPS evidence. The logistics harness measures logistics only: endurance updates, safe-return estimation, facility lookup, carrier recovery-point movement, and intelligence staleness. It deliberately excludes prediction, combat, economy, and snapshot time.
 

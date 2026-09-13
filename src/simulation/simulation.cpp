@@ -402,9 +402,12 @@ void Simulation::return_unit(EntityId entity) {
         const float dy = vessel->y - facility->y;
         if (dx * dx + dy * dy > facility->max_recovery_distance * facility->max_recovery_distance) return;
         auto funds = production_manager_.storages().find(base);
-        const float needed = vessel->max_fuel - vessel->fuel;
-        if (funds != production_manager_.storages().end() && funds->second.energy_storage >= needed) {
+        const float needed = std::max(0.0f, vessel->max_fuel - vessel->fuel);
+        const float material_cost = needed * 0.1f;
+        if (funds != production_manager_.storages().end() && funds->second.energy_storage >= needed &&
+            funds->second.metal_storage >= material_cost) {
             funds->second.energy_storage -= needed;
+            funds->second.metal_storage -= material_cost;
             logistics_manager_.resupply_naval_vessel(entity, needed);
         }
         stop_unit(entity);
@@ -620,7 +623,10 @@ bool Simulation::validate_command(const InputCommand& cmd, uint32_t execution_ti
             const auto* facility=component_manager_.get_component<RecoveryFacility>(naval_base);
             const float dx=facility ? vessel->x-facility->x : std::numeric_limits<float>::infinity();
             const float dy=facility ? vessel->y-facility->y : std::numeric_limits<float>::infinity();
-            bool ok = facility && dx*dx+dy*dy<=facility->max_recovery_distance*facility->max_recovery_distance && funds->second.energy_storage>=vessel->max_fuel-vessel->fuel;
+            const float needed_fuel = std::max(0.0f, vessel->max_fuel - vessel->fuel);
+            const float material_cost = needed_fuel * 0.1f;
+            bool ok = facility && dx*dx+dy*dy<=facility->max_recovery_distance*facility->max_recovery_distance &&
+                funds->second.energy_storage>=needed_fuel && funds->second.metal_storage>=material_cost;
             if (!ok) fprintf(stderr, "VALIDATE_FAIL: RETURN naval position/fuel check failed (entity=%u dist=%.2f fuel=%.2f)\n", cmd.entity_id, sqrt(dx*dx+dy*dy), funds->second.energy_storage - vessel->max_fuel + vessel->fuel);
             return ok;
         }
@@ -666,7 +672,6 @@ bool Simulation::validate_command(const InputCommand& cmd, uint32_t execution_ti
         int gx = navigation.to_grid_x(x);
         int gy = navigation.to_grid_y(y);
         if (!navigation.is_walkable(gx, gy)) {
-            fprintf(stderr, "VALIDATE_FAIL: position not walkable (entity=%u x=%.2f y=%.2f grid=%d,%d)\n", cmd.entity_id, x, y, gx, gy);
             return false;
         }
     }
@@ -890,6 +895,11 @@ void Simulation::prediction_phase(float delta_ms) {
         pos->x += vel->x * dt;
         pos->y += vel->y * dt;
         pos->z += vel->z * dt;
+        // Ground units follow the authoritative heightfield; aircraft and
+        // vessels retain their own altitude/draft semantics.
+        if (!aircraft && !vessel) {
+            pos->z = terrain_.height_at(pos->x, pos->y);
+        }
         if (auto* off_road = component_manager_.get_component<OffRoadWear>(entity_id)) {
             const float distance_traveled = std::hypot(pos->x - previous_x, pos->y - previous_y);
             if (distance_traveled > 0.0f) {
@@ -1395,9 +1405,7 @@ extern "C" {
             default: return;
         }
         
-        std::cerr << "DEBUG: economy_add_resource_node called: node_id=" << node_id << " before_add_size=" << get_simulation()->production_manager().resource_nodes().size() << "\n";
         get_simulation()->production_manager().add_resource_node(static_cast<EntityId>(node_id), node);
-        std::cerr << "DEBUG: economy_add_resource_node after_add_size=" << get_simulation()->production_manager().resource_nodes().size() << "\n";
     }
 
     void economy_add_extractor(int extractor_id, float x, float y, int node_id, float extraction_rate) {
@@ -1792,10 +1800,13 @@ bool Simulation::validate_structure_placement(uint8_t structure_type, float x, f
             // Keep buildable ground visibly level at the tactical scale. The
             // old limits allowed structures to perch on relief that was
             // technically navigable but visually swallowed nearby units.
-            case 0: return PlacementProfile{250.0f, 250.0f, 0.20f, 80.0f}; // outpost
-            case 1: return PlacementProfile{180.0f, 180.0f, 0.18f, 70.0f}; // radar
-            case 2: return PlacementProfile{600.0f, 1800.0f, 0.18f, 220.0f}; // airfield
-            case 3: return PlacementProfile{180.0f, 180.0f, 0.20f, 80.0f}; // beacon
+            case 0: return PlacementProfile{125.0f, 125.0f, 0.32f, 55.0f}; // outpost
+            case 1: return PlacementProfile{125.0f, 125.0f, 0.32f, 55.0f}; // radar
+            // Reserve an operational runway corridor without treating the
+            // compact tactical model as a full 1.8 km civil runway. This spans
+            // several navigation cells but remains buildable on broad slopes.
+            case 2: return PlacementProfile{250.0f, 750.0f, 0.28f, 180.0f}; // airfield
+            case 3: return PlacementProfile{125.0f, 125.0f, 0.36f, 65.0f}; // beacon
             default: return PlacementProfile{0.0f, 0.0f, 0.0f, 0.0f};
         }
     }();
@@ -1847,14 +1858,10 @@ bool Simulation::validate_engineer_placement(float x, float y) const {
         return false;
     }
 
-    // Engineers are strategic construction units, not ordinary ground
-    // spawns. Require enough level, unblocked ground for a small structure
-    // footprint and a short traversable road lead in both directions so an
-    // engineer never starts stranded where its core jobs cannot begin.
-    if (!validate_structure_placement(0, x, y)) return false;
-    const float road_probe = pathfinding_.cell_size() * 2.0f;
-    return validate_road_placement(x - road_probe, y, x + road_probe, y) &&
-        validate_road_placement(x, y - road_probe, x, y + road_probe);
+    // A construction unit needs one usable local building footprint. Requiring
+    // valid road probes in both axes rejected otherwise healthy slopes and
+    // made engineer spawning much stricter than normal play.
+    return validate_structure_placement(0, x, y);
 }
 
 bool Simulation::validate_road_placement(float start_x, float start_y, float end_x, float end_y) const {
@@ -1873,7 +1880,7 @@ bool Simulation::validate_road_placement(float start_x, float start_y, float end
             !pathfinding_.is_walkable(pathfinding_.to_grid_x(x), pathfinding_.to_grid_y(y))) return false;
         const float height = terrain_.height_at(x, y);
         if (index > 0 && std::abs(height - previous_height) /
-            (length / static_cast<float>(samples)) > 0.25f) return false;
+            (length / static_cast<float>(samples)) > 1.0f) return false;
         previous_height = height;
     }
     return true;

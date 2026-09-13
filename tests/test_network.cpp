@@ -158,7 +158,7 @@ TEST(network_loopback_frame_batch_round_trip) {
     constexpr uint16_t port = 51234;
     NetworkManager server;
     NetworkManager client;
-    if (!server.listen(port)) { std::cout << "Loopback TCP unavailable in this environment; external transport proof required\n"; return; }
+    if (!server.listen(port)) throw std::runtime_error("Loopback TCP unavailable: transport proof was not executed");
     bool connected = false;
     std::thread connector([&] { connected = client.connect("127.0.0.1", port); });
     if (!server.accept()) {
@@ -191,7 +191,7 @@ TEST(network_loopback_batch_drives_identical_local_match_tick) {
     constexpr uint16_t port = 51235;
     auto& server = server_simulation.network_manager();
     auto& client = client_simulation.network_manager();
-    if (!server.listen(port)) { std::cout << "Loopback TCP unavailable in this environment; external match proof required\n"; return; }
+    if (!server.listen(port)) throw std::runtime_error("Loopback TCP unavailable: network match proof was not executed");
     bool connected = false;
     std::thread connector([&] { connected = client.connect("127.0.0.1", port); });
     if (!server.accept()) { connector.join(); throw std::runtime_error("Match server failed to accept"); }

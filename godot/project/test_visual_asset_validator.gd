@@ -10,7 +10,7 @@ func _init() -> void:
 			missing_visual_ids.append(String(entry.visual_id))
 	print("VISUAL_ASSET_VALIDATOR missing_glb=%s" % ", ".join(missing_visual_ids))
 	assert(bool(report.valid))
-	assert(report.entries.size() == 15)
+	assert(report.entries.size() == 17)
 	assert(missing_visual_ids.is_empty())
 	assert(report.entries.all(func(entry): return int(entry.triangle_count) >= 0 and not entry.bounds_m.is_empty()))
 	assert(report.entries.all(func(entry): return not entry.effective_bounds_m.is_empty()))

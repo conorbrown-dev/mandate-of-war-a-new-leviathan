@@ -15,11 +15,11 @@
 
 ## Current State
 
-**Active goal:** Goal 08 playable skirmish vertical-slice acceptance. Goals 09–11 are gated. Goals 05–07 are verified; reviews include `docs/GOAL_05_ARCHITECTURE_REVIEW.md`, `docs/GOAL_06_ARCHITECTURE_REVIEW.md`, and `docs/GOAL_07_ARCHITECTURE_REVIEW.md`.
+**Boundary:** Goals 08–11 are verified. Goal 11 is defined by `11_FORWARD_SEIZURE.md` and reviewed in `docs/GOAL_11_CODEX_REVIEW.md`. No canonical Goal 12 specification exists; prior reviews include `docs/GOAL_05_ARCHITECTURE_REVIEW.md`, `docs/GOAL_06_ARCHITECTURE_REVIEW.md`, `docs/GOAL_07_ARCHITECTURE_REVIEW.md`, `docs/GOAL_08_CODEX_REVIEW.md`, `docs/GOAL_09_CODEX_REVIEW.md`, and `docs/GOAL_10_CODEX_REVIEW.md`.
 
 **Reconciliation:** `main` is `1846132`; the prior `9c295bf` baseline is absent. A substantial dirty-tree implementation package is preserved, and `stash@{0}` remains unapplied user work. The model-integration branch has no commits absent from `main`, while its registered external worktree is unavailable. See `docs/WORKTREE_RECONCILIATION.md`.
 
-**Current boundary:** Goal 07 is verified: deterministic AI submits ordinary authoritative commands for tactical focus/retreat, operational grouping/front/staging, and strategic production/research/resource expansion. Equal worlds produce byte-identical plans, and 128-vs-128 decision latency remains within the fixed tick budget. Release build, CTest 3/3, `rts_tests` 20/20, and direct integration 176/176 pass. Begin Goal 08 with `08_PLAYABLE_SKIRMISH_VERTICAL_SLICE.md`; do not use historical candidate claims as acceptance evidence.
+**Current boundary:** Goals 08–11 are verified. Goal 11 territorial control, capability-gated INSTALL, deterministic progression, FOB construction, UI, tests, and review evidence are current. No canonical Goal 12 specification exists.
 
 **Goal 05 progress:** The generated-unit development path is now proven: `generate.py` emits linked unit/mesh metadata without nulling defaults; `ModManager` validates a manifest-declared generated unit; and the integration suite spawns it with authored data. Dependency ordering/version constraints and map save/load are the next unverified acceptance slices.
 
@@ -32,11 +32,19 @@ ordering/version constraints and the editor surface remain open.
 incompatible `>=` dependencies before content registration. The next modding
 slice is deterministic, transactional ordering for a batch of dependent mods.
 
-**Last verified:** 2026-09-12
+**Last verified:** 2026-09-13
 
-**Validation handoff:** Start with `docs/validation/VALIDATION_BASELINE.md`, `RUNNING_TESTS.md`, and `SCENARIO_CATALOG.md`. `tools/validate all` runs the four registered scenarios; `tools/test` runs the broader build/native/Godot/validation sweep. Generated evidence is under gitignored `validation/artifacts/`. Strategic-zoom baselines are committed under `validation/baselines/` at an empirically established 0.995 threshold. Do not update them implicitly.
+**Validation handoff:** Start with `docs/validation/VALIDATION_BASELINE.md`, `RUNNING_TESTS.md`, and `SCENARIO_CATALOG.md`. `tools/validate all` runs the four registered scenarios; `tools/test` runs the broader build/native/Godot/model/terrain/map-editor/validation sweep. Generated evidence is under gitignored `validation/artifacts/`. Strategic-zoom baselines are committed under `validation/baselines/` at an empirically established 0.995 threshold. Do not update them implicitly.
 
 **Key changes in this session:**
+- Corrected terrain authority for moving ground units and structure placement:
+  native and Godot sampling now interpolate the rendered heightfield triangles,
+  the Field Engineer is grounded from its lowest imported mesh point at 5 cm,
+  airfield clearance is 250 x 750 m with forgiving grade limits, and interactive
+  structure requests snap deterministically to a valid site within 1 km.
+  Release build, CTest 3/3, direct integration 178/178, and rendered
+  `basic_selection_move`/`airfield_fighter_ferry` validations pass with
+  screenshots and video on the NVIDIA GPU.
 - Implemented full territorial control domain model (`src/ecs/components/territorial_control.{hpp,cpp}`)
 - Integrated `TerritorialControlManager` into `Simulation` class (`src/simulation/simulation.hpp:225`)
 - Updated documentation: `CURRENT_STATE.md`, `NEXT_TASKS.md`, `EXECUTION_LEDGER.md`, `OPENCODE_HANDOFF.md`
@@ -155,12 +163,24 @@ slice is deterministic, transactional ordering for a batch of dependent mods.
   remain deferred.
 
   FEATURE-001 is complete for the current terrain presentation scope. The
-  forest now uses a shared low-poly trunk plus layered canopy mesh for
-  tactical view and a reduced cone mesh after the 5 km strategic threshold.
-  Both remain MultiMesh-batched and the presentation harness verifies the LOD
-  switch. Release build, CTest 3/3, direct integration runner 162/162, and
-  Godot presentation 85/85 pass. Production tree imports and biome-specific
-  art remain deferred polish; FEATURE-007 resource icon polish is now verified.
+  forest now uses three converted user-supplied GLB forms for tactical
+  MultiMesh variety and a 3,193-triangle LOD2 for strategic MultiMesh. The
+  default Broken Strait map has 960 heightmap-grounded trees across nine
+  deterministic large groves, with compact, medium, and tall form profiles.
+  The classic and animated donor trees are also converted and retained as
+optional Godot assets. Tree conversion/import, registry, and skirmish
+harnesses pass locally. Biome-specific art remains deferred polish;
+FEATURE-007 resource icon polish is now verified.
+
+  The rendered `oak_grove_showcase` scenario passes 13 tree-focused assertions
+  and records close, tactical, and strategic screenshots with a 1280x720,
+  30 FPS AVI. It verifies tactical/strategic population, scale variation,
+  heightmap grounding, and dense-grove placement.
+
+  Five English-oak USD stages have been converted and successfully Godot-
+  imported as optional geometry-only GLBs. Their high source triangle counts
+  and absent USD material bindings keep them out of the active forest pending
+  a dedicated optimization/material pass.
 
   FEATURE-007 is complete for the current resource-HUD scope. A shared
   vector-drawn icon layer now supplies the blue Material wrench, orange Energy

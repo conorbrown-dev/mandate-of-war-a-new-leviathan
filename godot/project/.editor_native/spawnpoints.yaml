@@ -1,0 +1,6 @@
+spawnpoints:
+  - id: "player"
+    faction: "faction_a"
+    position: [16.0, 16.0]
+    heading: 0.0
+    type: "land"

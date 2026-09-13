@@ -235,14 +235,10 @@ bool ProductionManager::verify_extraction_rate(EntityId extractor_id, float expe
 }
 
 bool ProductionManager::find_or_create_extractor(float x, float y, EntityId& extractor_id, EntityId& node_id) {
-    std::cerr << "DEBUG: find_or_create_extractor called at (" << x << ", " << y << ")\n";
-    std::cerr << "DEBUG: extractors size: " << extractors_.size() << ", resource_nodes size: " << resource_nodes_.size() << "\n";
-    
     constexpr float EXTRACTOR_TOLERANCE = 5.0f;
     for (const auto& [eid, ext] : extractors_) {
         float dx = ext.x - x;
         float dy = ext.y - y;
-        std::cerr << "DEBUG: checking existing extractor at (" << ext.x << ", " << ext.y << "), dist_sq = " << (dx*dx + dy*dy) << "\n";
         if (dx*dx + dy*dy <= EXTRACTOR_TOLERANCE*EXTRACTOR_TOLERANCE) {
             extractor_id = eid;
             node_id = ext.resource_node_id;
@@ -252,7 +248,6 @@ bool ProductionManager::find_or_create_extractor(float x, float y, EntityId& ext
     
     // Create new extractor
     if (resource_nodes_.empty()) {
-        std::cerr << "DEBUG: no resource nodes, returning false\n";
         return false;
     }
     

@@ -244,15 +244,40 @@ func _register_hardpoint(hardpoint_id: String, parent: Node3D, offset: Vector3) 
 
 
 func _apply_definition_transform() -> void:
+	_model_root.position = Vector3.ZERO
 	var scale_values: Array = _definition.get("scale", [1.0, 1.0, 1.0])
 	if scale_values.size() == 3:
 		_model_root.scale = Vector3(float(scale_values[0]), float(scale_values[1]), float(scale_values[2]))
 	var rotation_values: Array = _definition.get("rotation_degrees", [0.0, 0.0, 0.0])
 	if rotation_values.size() == 3:
 		_model_root.rotation_degrees = Vector3(float(rotation_values[0]), float(rotation_values[1]), float(rotation_values[2]))
-	_model_root.position.y = float(_definition.get("ground_offset", 0.0))
+	var ground_offset := float(_definition.get("ground_offset", 0.0))
+	if String(_definition.get("grounding", "origin")) == "mesh_bottom":
+		var minimum_y := _minimum_model_y(_model_root)
+		if is_finite(minimum_y):
+			_model_root.position.y = ground_offset - minimum_y
+	else:
+		_model_root.position.y = ground_offset
 	_lod_tier = -1
 	update_lod(0.0)
+
+
+func _minimum_model_y(node: Node) -> float:
+	var minimum_y := INF
+	if node is MeshInstance3D:
+		var mesh_instance := node as MeshInstance3D
+		if mesh_instance.mesh != null:
+			var relative_transform := global_transform.affine_inverse() * mesh_instance.global_transform
+			var bounds := mesh_instance.mesh.get_aabb()
+			for endpoint in range(8):
+				minimum_y = minf(minimum_y, (relative_transform * bounds.get_endpoint(endpoint)).y)
+	for child in node.get_children():
+		minimum_y = minf(minimum_y, _minimum_model_y(child))
+	return minimum_y
+
+
+func model_bottom_height() -> float:
+	return _minimum_model_y(_model_root)
 
 
 func _add_fallback_mesh(faction_color: Color) -> void:

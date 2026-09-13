@@ -1,12 +1,12 @@
 # Goal 08 — Playable Skirmish Vertical Slice
 
-**Status:** ACTIVE by explicit user direction; no acceptance criterion is yet verified  
-**Reference:** `00_PROJECT_CHARTER.md`, `docs/EXECUTION_LEDGER.md`, `docs/CURRENT_STATE.md`  
-**Last updated:** 2026-09-07
+**Status:** VERIFIED on 2026-09-12; all acceptance criteria have current evidence
+**Reference:** `00_PROJECT_CHARTER.md`, `docs/EXECUTION_LEDGER.md`, `docs/CURRENT_STATE.md`
+**Last updated:** 2026-09-12
 
 ## 2026-09-08 Continuation Review
 
-Goal 08 is **VERIFIED**. All acceptance criteria met:
+The following was a **historical candidate claim** and is not current acceptance evidence:
 - G08-COMMANDS: Ownership/tick validation verified (sim.cpp:447-492)
 - G08-ECONOMY: Full build/research cycle (137/137 tests pass)
 - G08-UX: HUD displays all state via `skirmish_state()` (gd_extension.cpp:261-346)

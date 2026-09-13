@@ -1,0 +1,7 @@
+resources:
+  - id: "metal"
+    type: "material"
+    position: [32.0, 32.0]
+    amount: 100.0
+    radius: 4.0
+    quality: 1.0

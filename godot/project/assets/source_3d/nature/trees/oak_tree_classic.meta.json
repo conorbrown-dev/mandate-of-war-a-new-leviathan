@@ -1,0 +1,15 @@
+{
+  "category": "nature",
+  "godot_forward": "-Z",
+  "godot_up": "+Y",
+  "bounds_m": {
+    "x": 7.516885757446289,
+    "y": 7.925339102745056,
+    "z": 7.79184627532959
+  },
+  "triangles_all_exported_meshes": 14475,
+  "usage": "optional classic-tree source conversion",
+  "source_asset": "downloaded_assets/trees/oak-trees/source/oaktrees.fbx",
+  "source_object": null,
+  "source_pipeline": "User-provided tree conversion; Blender 5; embedded-texture GLB"
+}

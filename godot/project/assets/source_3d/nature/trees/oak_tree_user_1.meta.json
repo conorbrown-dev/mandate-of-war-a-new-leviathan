@@ -1,0 +1,15 @@
+{
+  "category": "nature",
+  "godot_forward": "-Z",
+  "godot_up": "+Y",
+  "bounds_m": {
+    "x": 17.66928482055664,
+    "y": 17.99999575067568,
+    "z": 15.699153900146484
+  },
+  "triangles_all_exported_meshes": 3600,
+  "usage": "active user-supplied GLB forest form 1",
+  "source_asset": "downloaded_assets/trees/oak_tree1.glb",
+  "source_object": null,
+  "source_pipeline": "User-provided tree conversion; Blender 5; embedded-texture GLB"
+}

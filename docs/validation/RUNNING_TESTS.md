@@ -8,7 +8,7 @@ Set `GODOT_BIN` when the repository-local Godot binary is unavailable. The Pytho
 tools/test
 ```
 
-This builds the current CMake tree, runs CTest with failure output, runs the production Godot skirmish presentation harness, and executes every registered headless gameplay/benchmark validation scenario.
+This builds the current CMake tree, runs CTest with failure output, runs the legacy and native-controller Godot harnesses, runs the terrain/model/map-editor harnesses, and executes every registered headless gameplay/benchmark validation scenario.
 
 PowerShell:
 
@@ -25,6 +25,12 @@ tools/test validation
 tools/test basic_selection_move
 ```
 
+`tools/test godot` also runs the repository-owned Goal 10 terrain check and
+the model-integration/map-editor checks (`test_visual_pack_compatibility.gd`,
+`test_visual_asset_validator.gd`, `test_native_visual_ids.gd`,
+`test_unit_visual_root.gd`, `test_reference_model_load.gd`,
+`test_map_editor_model.gd`, and `test_map_editor_export.gd`).
+
 The last form delegates to the named validation scenario. All commands return non-zero on build, assertion, script, schema, or process failure.
 
 ## Scenario discovery and narrow runs
@@ -34,8 +40,10 @@ tools/validate --list
 tools/validate all
 tools/validate basic_selection_move
 tools/validate strategic_zoom_transition --seed 640640
+tools/validate oak_grove_showcase --rendered --require-screenshots --record
 tools/validate airfield_fighter_ferry
 tools/validate simulation_scale_1000
+tools/validate combat_benchmark_2000
 ```
 
 PowerShell uses `tools/validate.ps1` with the same arguments. Every run prints its `report.json` path under `validation/artifacts/`.

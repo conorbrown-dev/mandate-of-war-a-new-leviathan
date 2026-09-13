@@ -38,6 +38,17 @@ bool Skirmish::load(const std::string& path) {
         auto parsed = data::JsonParser::parse(bytes.str());
         if (!parsed) throw std::runtime_error("Malformed scenario JSON");
         const auto& root = *parsed;
+        // Godot's process working directory is the project directory, not
+        // the repository root. Configure content lookup before any prototype
+        // or research singleton is first read so the player route uses the
+        // exact data that is hashed into the replay.
+        // <repo>/godot/project/scenarios/<scenario>.json: four parents up is
+        // the repository root where authored data/ is stored.
+        const auto root_path=std::filesystem::path(path).parent_path().parent_path().parent_path().parent_path();
+        const auto scenario_data_root=root_path/"data";
+        if (std::getenv("RTS_DATA_ROOT") == nullptr) {
+            ::setenv("RTS_DATA_ROOT", scenario_data_root.c_str(), 1);
+        }
         if (number(field(root,"version")) != 1) throw std::runtime_error("Unsupported scenario version");
         const auto& theater = field(root,"theater");
         if (number(field(theater,"width")) != 320 || number(field(theater,"height")) != 320)
@@ -91,7 +102,6 @@ bool Skirmish::load(const std::string& path) {
         name_=field(root,"display_name").as_string();
         if (name_.empty() || x[0]>=x[1]) throw std::runtime_error("Invalid scenario identity or opposing spawns");
         scenario_path_=path;
-        const auto root_path=std::filesystem::path(path).parent_path().parent_path().parent_path().parent_path();
         const auto data_root=std::getenv("RTS_DATA_ROOT") ? std::filesystem::path(std::getenv("RTS_DATA_ROOT")) : root_path/"data";
         content_hash_=digest(bytes.str()+file_bytes((data_root/"unit_faction_stats.json").string())+file_bytes((data_root/"research_projects.json").string()));
         
@@ -122,6 +132,23 @@ bool Skirmish::load(const std::string& path) {
             simulation_.naval_pathfinding().set_cell(gx,gy,!ground);
         }
         simulation_.enable_theater_water_rules();
+        if (auto resources = root.get("resources"); resources && resources->type() == JsonValue::Type::Array) {
+            for (const auto& resource : resources->as_array()) {
+                const auto id = static_cast<EntityId>(number(field(resource, "id")));
+                const auto position = field(resource, "position").as_array();
+                if (position.size() != 2 || id == INVALID_ENTITY) throw std::runtime_error("Malformed resource node");
+                const auto type_name = field(resource, "type").as_string();
+                ResourceNode::Type type;
+                if (type_name == "METAL") type = ResourceNode::Type::METAL;
+                else if (type_name == "ENERGY") type = ResourceNode::Type::ENERGY;
+                else if (type_name == "RESEARCH") type = ResourceNode::Type::RESEARCH;
+                else throw std::runtime_error("Unsupported resource type");
+                const float amount = number(field(resource, "amount"));
+                if (amount <= 0) throw std::runtime_error("Resource amount must be positive");
+                simulation_.production_manager().add_resource_node(id, ResourceNode{
+                    number(position[0]), number(position[1]), amount, amount, type, false});
+            }
+        }
         for (int f=0;f<2;++f) {
             bases_[f]=simulation_.create_faction_base(static_cast<FactionId>(f),x[f],y[f]);
             for(size_t i=0;i<roster[f].size();++i) {
@@ -199,6 +226,8 @@ bool Skirmish::save_replay(const std::string& path) {
     body << result_ << ' ' << checksums_.size() << ' ' << simulation_.command_log().size() << '\n';
     for(auto hash:checksums_) body << hash << '\n';
     for(const auto& cmd:simulation_.command_log()) body << cmd.tick_id << ' ' << cmd.entity_id << ' ' << static_cast<int>(cmd.player_id) << ' ' << static_cast<int>(cmd.cmd_type) << ' ' << cmd.target_x << ' ' << cmd.target_y << ' ' << cmd.extra << '\n';
+    const auto parent = std::filesystem::path(path).parent_path();
+    if (!parent.empty()) std::filesystem::create_directories(parent);
     std::ofstream output(path,std::ios::binary|std::ios::trunc);
     const auto payload=body.str(); output << digest(payload) << '\n' << payload;
     if(!output) { error_="Replay write failed"; return false; } return true;

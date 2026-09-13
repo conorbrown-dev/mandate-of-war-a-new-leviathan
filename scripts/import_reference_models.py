@@ -11,7 +11,7 @@ import os
 import sys
 
 import bpy
-from mathutils import Vector
+from mathutils import Matrix, Vector
 
 
 MODELS = {
@@ -25,6 +25,7 @@ MODELS = {
     "industrial_missile_platform": "strike_fighters_radar_pack.glb",
     "industrial_engineering": "boxer_afv_engineering_hmg.glb",
     "elite_fighter": "Untitled.glb",
+    "industrial_fighter_f15c": "f-15c_eagle_usa.fbx",
     "elite_vtol": "z-10me_war_thunder_leviathans.glb",
     "mass_recon": "strike_fighters_apcifv_pack.glb",
     "industrial_logistics_truck": "ares_apc.glb",
@@ -36,7 +37,7 @@ CATEGORIES = {
     "elite_mbt": "ground", "elite_artillery": "ground", "elite_anti_air": "ground",
     "mass_swarm_tank": "ground", "mass_assault_vehicle": "ground", "mass_anti_air": "ground",
     "industrial_mbt": "ground", "industrial_missile_platform": "ground", "industrial_engineering": "ground",
-    "elite_fighter": "air", "elite_vtol": "air", "mass_recon": "ground",
+    "elite_fighter": "air", "industrial_fighter_f15c": "air", "elite_vtol": "air", "mass_recon": "ground",
     "industrial_logistics_truck": "logistics", "industrial_destroyer": "naval", "industrial_carrier": "naval",
 }
 PROTOTYPE_TRIANGLE_BUDGET = 20000
@@ -55,11 +56,16 @@ def clear_scene():
 def import_source(path):
     extension = os.path.splitext(path)[1].lower()
     if extension == ".fbx":
-        bpy.ops.import_scene.fbx(
-            filepath=path,
-            directory=os.path.dirname(path),
-            files=[{"name": os.path.basename(path)}],
-        )
+        # Blender 5 moved the FBX importer to wm.fbx_import. Keep the older
+        # operator for the project's older Blender installations.
+        if hasattr(bpy.ops.wm, "fbx_import"):
+            bpy.ops.wm.fbx_import(filepath=path)
+        else:
+            bpy.ops.import_scene.fbx(
+                filepath=path,
+                directory=os.path.dirname(path),
+                files=[{"name": os.path.basename(path)}],
+            )
     elif extension in (".glb", ".gltf"):
         bpy.ops.import_scene.gltf(filepath=path)
     else:
@@ -132,24 +138,27 @@ def normalize_scene_envelope():
     if maximum <= 0.0:
         raise RuntimeError("Imported scene has invalid bounds")
     factor = REFERENCE_ENVELOPE_METERS / maximum
-    root = bpy.data.objects.new("ReferenceModelRoot", None)
-    bpy.context.scene.collection.objects.link(root)
-    root.scale = (factor, factor, factor)
-    for obj in list(bpy.context.scene.objects):
-        if obj == root or obj.parent is not None:
-            continue
-        obj.parent = root
+    scale_matrix = Matrix.Diagonal((factor, factor, factor, 1.0))
+    # Apply the factor to each top-level object's world matrix. Parenting to a
+    # scaled empty retains each child's world transform and made the old
+    # metadata (and some exports) retain source-sized models.
+    for obj in mesh_objects:
+        if obj.parent is None:
+            obj.matrix_world = scale_matrix @ obj.matrix_world
+    bpy.context.view_layer.update()
 
 
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("source_root")
     parser.add_argument("output_root")
+    parser.add_argument("--only", choices=sorted(MODELS.keys()), help="Convert one asset instead of the complete reference pack")
     blender_args = sys.argv[sys.argv.index("--") + 1:] if "--" in sys.argv else sys.argv[1:]
     args = parser.parse_args(blender_args)
     source_root = os.path.abspath(args.source_root)
     output_root = os.path.abspath(args.output_root)
-    for asset_id, filename in MODELS.items():
+    selected_models = {args.only: MODELS[args.only]} if args.only else MODELS
+    for asset_id, filename in selected_models.items():
         matches = []
         for root, _, files in os.walk(source_root):
             if filename in files:

@@ -47,6 +47,7 @@ public:
     // Intelligence management
     void update_intelligence(EntityId entity_id, float x, float y, uint32_t tick);
     Intelligence* get_intelligence(EntityId entity_id);
+    std::vector<Intelligence> intelligence_snapshot() const;
     std::vector<EntityId> get_stale_intelligence(uint32_t current_tick, uint32_t stale_threshold);
     void archive_intelligence(EntityId entity_id);
     void clear_intelligence_memory(EntityId entity_id);

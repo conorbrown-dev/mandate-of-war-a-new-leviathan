@@ -41,6 +41,11 @@
     "aircraft_fuel": 12,
     "naval_spawn": [-45, 20]
   },
+  "resources": [
+    {"id": 900, "type": "METAL", "position": [-92, -24], "amount": 5000},
+    {"id": 901, "type": "ENERGY", "position": [-78, 24], "amount": 5000},
+    {"id": 902, "type": "RESEARCH", "position": [-64, 0], "amount": 5000}
+  ],
   "victory": {
     "type": "command_center",
     "description": "Destroy the opposing command center. Losing yours ends the match. If both survive 1,000 seconds, the match is a draw."

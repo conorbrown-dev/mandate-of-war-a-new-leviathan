@@ -288,6 +288,11 @@ extern "C" {
 
 ## Future Work
 
+### Goal 09 — Logistics Improvements (active)
+- Safe-return estimates use an in-grid A* detour when direct line-of-sight is blocked, with deterministic straight-line fallback for air-over-water or out-of-grid routes.
+- Naval RETURN resupply is finite-stock and costed in both Energy and Material; validation and execution deduct resources atomically.
+- Native skirmish telemetry exposes aircraft return resource/time estimates.
+
 ### Phase 2: Runway Queue System
 - Takeoff/landing queue with capacity limits
 - Priority-based runway assignment
@@ -312,8 +317,7 @@ extern "C" {
 
 1. **No VTOL implementation yet** - Architecture supports it, needs unit type definition
 2. **Airbase recovery queue implemented; carrier recovery remains open** - Airbase transfers are rate-limited and stock-backed, but carrier lifecycle/capacity is not yet accepted
-3. **No resupply mechanics** - Stranded vessels can't be resupplied yet
-4. **Safe-return calculation uses Manhattan distance** - Could use actual pathfinding result
+3. **No convoy/fuel-transport chain yet** - Goal 09 covers facility resupply, not transport logistics.
 
 ## Testing
 

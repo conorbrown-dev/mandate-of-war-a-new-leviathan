@@ -1,5 +1,7 @@
 # Goal 10 — Terrain System
 
+**Status:** VERIFIED on 2026-09-13
+
 ## Objective
 
 Implement a data-driven terrain system with heightmaps, biomes, materials, and terrain-aware gameplay mechanics. The terrain must be deterministic, scalable, and visually distinct.
@@ -9,20 +11,12 @@ Implement a data-driven terrain system with heightmaps, biomes, materials, and t
 | ID | State | Acceptance requirement | Current evidence / next proof |
 |---|---|---|---|
 | G10-HEIGHTMAP | `COMPLETE` | Heightmap in JSON scenarios (float32 grid) | JSON `two_landmass_skirmish.json` validates; `skirmish_config.gd` parses terrain section |
-| G10-ROADS | `PENDING` | Roads/craters modify terrain walkability | Missing: terrain modification system |
+| G10-ROADS | `COMPLETE` | Roads/craters modify terrain walkability | `RoadNetwork` completion applies traversal costs and structure/crater blockers to `Pathfinding`; road construction and traversal tests pass |
 | G10-BIOMES | `COMPLETE` | Biome per grid cell (ocean/coast/plains/hills/mountains) | HeightMap.gd `get_biome()` implements all biomes per thresholds |
-| G10-MATERIALS | `PARTIAL` | Per-biome materials (water, sand, grass, rock, snow) | Colors defined; Godot StandardMaterial3D attached to mesh |
-| G10-COLLISION | `PENDING` | Unit collision with terrain height | Missing: height query integration |
+| G10-MATERIALS | `COMPLETE` | Per-biome materials (water, sand, grass, rock, snow) | `terrain.gdshader` binds authored water/shore/grass/forest/mud/rock textures and deterministic elevation bands |
+| G10-COLLISION | `COMPLETE` | Unit collision with terrain height | `Terrain::height_at()` is authoritative and ground-unit Z follows the heightfield; regression test passes |
 | G10-RENDERING | `COMPLETE` | Vertex-height mesh (Godot mesh) | HeightMap.gd `generate_terrain_mesh()` produces ArrayMesh with vertices/normals/colors |
-| G10-TESTS | `COMPLETE` | Terrain load/validate/generate render tests | Scripts compile; GDExtension tests pass |
-
-## Terrain Heightmap Format
-| G10-ROADS | `PENDING` | Roads/craters modify terrain walkability | Missing: terrain modification system |
-| G10-BIOMES | `COMPLETE` | Biome per grid cell (ocean/coast/plains/hills/mountains) | HeightMap.gd `get_biome()` implements all biomes |
-| G10-MATERIALS | `PARTIAL` | Per-biome materials (water, sand, grass, rock, snow) | Colors set, Godot material integration pending |
-| G10-COLLISION | `PENDING` | Unit collision with terrain height | Missing: height query integration |
-| G10-RENDERING | `COMPLETE` | Vertex-height mesh (Godot mesh) | HeightMap.gd `generate_terrain_mesh()` produces ArrayMesh |
-| G10-TESTS | `COMPLETE` | Terrain load/validate/generate render tests | Scripts parse; GDExtension tests pass |
+| G10-TESTS | `COMPLETE` | Terrain load/validate/generate render and collision tests | CTest 3/3 and direct terrain/road assertions pass |
 
 ## Terrain Heightmap Format
 

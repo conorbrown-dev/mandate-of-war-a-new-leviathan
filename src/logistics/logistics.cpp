@@ -55,7 +55,6 @@ void LogisticsManager::apply_safe_return_diagnostics(
 SafeReturnEstimate LogisticsManager::estimate_safe_return(
     EntityId aircraft_id,
     const Pathfinding& pathfinding) {
-    (void)pathfinding;
     SafeReturnEstimate unavailable;
     if (!component_manager_) {
         return unavailable;
@@ -141,7 +140,30 @@ SafeReturnEstimate LogisticsManager::estimate_safe_return(
 
     const float dx = facility->x - aircraft->x;
     const float dy = facility->y - aircraft->y;
-    estimate.distance = std::sqrt(dx * dx + dy * dy) + SAFE_RETURN_DISTANCE_RESERVE;
+    const float straight_line_distance = std::sqrt(dx * dx + dy * dy);
+    // Use the authoritative route when the theater has a traversable path.
+    // Aircraft may legitimately cross water or leave the configured grid, so
+    // retain a deterministic straight-line fallback when A* has no route.
+    const int start_x = pathfinding.to_grid_x(aircraft->x);
+    const int start_y = pathfinding.to_grid_y(aircraft->y);
+    const int goal_x = pathfinding.to_grid_x(facility->x);
+    const int goal_y = pathfinding.to_grid_y(facility->y);
+    const bool route_query_valid = pathfinding.is_walkable(start_x, start_y) && pathfinding.is_walkable(goal_x, goal_y);
+    const bool direct_route_clear = route_query_valid && pathfinding.has_line_of_sight(
+        aircraft->x, aircraft->y, facility->x, facility->y);
+    const auto route = route_query_valid && !direct_route_clear
+        ? pathfinding.find_path(aircraft->x, aircraft->y, facility->x, facility->y)
+        : std::vector<std::pair<float, float>>{};
+    float route_distance = 0.0f;
+    if (route.size() > 1) {
+        for (size_t i = 1; i < route.size(); ++i) {
+            const float segment_x = route[i].first - route[i - 1].first;
+            const float segment_y = route[i].second - route[i - 1].second;
+            route_distance += std::sqrt(segment_x * segment_x + segment_y * segment_y);
+        }
+    }
+    const float travel_distance = route_distance > 0.0f ? route_distance : straight_line_distance;
+    estimate.distance = travel_distance + SAFE_RETURN_DISTANCE_RESERVE;
     const float flight_time_seconds = estimate.distance / aircraft->cruise_speed;
     estimate.flight_time_ms = flight_time_seconds * 1000.0f;
     estimate.energy_cost = flight_time_seconds * aircraft->fuel_consumption_rate;
@@ -392,7 +414,22 @@ void LogisticsManager::archive_intelligence(EntityId entity_id) {
         Intelligence remembered = *intel;
         remembered.currently_observed = false;
         intelligence_memory_[entity_id] = remembered;
+        component_manager_->remove_component<Intelligence>(entity_id);
     }
+}
+
+std::vector<Intelligence> LogisticsManager::intelligence_snapshot() const {
+    std::vector<Intelligence> snapshot;
+    snapshot.reserve(intelligence_memory_.size());
+    for (const auto& [entity_id, intel] : intelligence_memory_) snapshot.push_back(intel);
+    if (!component_manager_) return snapshot;
+    for (auto entity_id : component_manager_->entities_with<Intelligence>()) {
+        if (const auto* intel = component_manager_->get_component<Intelligence>(entity_id)) snapshot.push_back(*intel);
+    }
+    std::sort(snapshot.begin(), snapshot.end(), [](const Intelligence& a, const Intelligence& b) {
+        return a.entity_id < b.entity_id;
+    });
+    return snapshot;
 }
 
 void LogisticsManager::clear_intelligence_memory(EntityId entity_id) {

@@ -69,12 +69,11 @@ func get_build_hover_context_at(pointer: Vector2) -> Dictionary:
 func _build_hover_context_for(rect: Rect2, entry: Dictionary, pointer: Vector2) -> Dictionary:
 	if not rect.has_point(pointer):
 		return {}
-	var available := bool(entry.get("available", false))
 	return {
 		"key": "build:%s:%s" % [entry.get("type", ""), entry.get("is_structure", false)],
 		"title": "BUILD // %s" % String(entry.get("name", "UNIT")),
-		"detail": "WRENCH %.0f  //  BOLT %.0f  //  %.0f SEC  //  %s" % [float(entry.get("material", 0.0)), float(entry.get("energy", 0.0)), float(entry.get("build_seconds", 0.0)), "READY" if available else "LOCKED"],
-		"accent": GREEN if available else RED,
+		"detail": "WRENCH %.0f  //  BOLT %.0f  //  %.0f SEC  //  %s" % [float(entry.get("material", 0.0)), float(entry.get("energy", 0.0)), float(entry.get("build_seconds", 0.0)), "READY" if bool(entry.get("available", false)) else "LOCKED"],
+		"accent": AMBER,
 	}
 
 
@@ -89,38 +88,38 @@ func _panel(rect: Rect2, accent: Color) -> void:
 	draw_line(rect.position + Vector2(1, 1), Vector2(rect.end.x - 1, rect.position.y + 1), accent, 2.0)
 
 
-func _text(at: Vector2, value: String, font_size: int = 14, color: Color = INK) -> void:
-	draw_string(ui_font if ui_font != null else ThemeDB.fallback_font, at, value.to_upper(), HORIZONTAL_ALIGNMENT_LEFT, -1, font_size + DRAWN_FONT_SIZE_BUMP, color)
+func _text(at: Vector2, value: String, font_size: int = 14, color: Color = INK, ui_scale: float = 1.0) -> void:
+	draw_string(ui_font if ui_font != null else ThemeDB.fallback_font, at, value.to_upper(), HORIZONTAL_ALIGNMENT_LEFT, -1, floor(font_size * ui_scale) + DRAWN_FONT_SIZE_BUMP, color)
 
 
-func _metric(rect: Rect2, label: String, value: String, income: String, accent: Color, icon_kind: String) -> void:
+func _metric(rect: Rect2, label: String, value: String, income: String, accent: Color, icon_kind: String, ui_scale: float = 1.0) -> void:
 	draw_rect(rect, Color("#0b1c27", 0.96), true)
 	draw_rect(rect, PANEL_EDGE, false, 1.0)
 	draw_rect(Rect2(rect.position, Vector2(3, rect.size.y)), accent, true)
 	_draw_resource_icon(rect.position + Vector2(9, 7), icon_kind, 12.0, accent)
-	_text(rect.position + Vector2(28, 15), label, 9, MUTED)
-	_text(rect.position + Vector2(9, 34), value, 16, INK)
+	_text(rect.position + Vector2(28, 15), label, 9, MUTED, ui_scale)
+	_text(rect.position + Vector2(9, 34), value, 16, INK, ui_scale)
 	if not income.is_empty():
-		_text(rect.position + Vector2(9, 49), income, 9, accent)
+		_text(rect.position + Vector2(9, 49), income, 9, accent, ui_scale)
 	else:
-		_text(rect.position + Vector2(9, 49), "LIVE STORAGE", 8, MUTED)
+		_text(rect.position + Vector2(9, 49), "LIVE STORAGE", 8, MUTED, ui_scale)
 
 
-func _command_cell(rect: Rect2, key: String, title: String, detail: String, accent: Color) -> void:
+func _command_cell(rect: Rect2, key: String, title: String, detail: String, accent: Color, ui_scale: float = 1.0) -> void:
 	draw_rect(rect, Color("#0b1c27", 0.96), true)
 	draw_rect(rect, PANEL_EDGE, false, 1.0)
 	draw_rect(Rect2(rect.position + Vector2(5, 7), Vector2(21, 21)), accent, true)
-	_text(rect.position + Vector2(9, 22), key, 9, Color("#07131d"))
-	_text(rect.position + Vector2(32, 16), title, 9, INK)
-	_text(rect.position + Vector2(32, 30), detail, 8, MUTED)
+	_text(rect.position + Vector2(9, 22), key, 9, Color("#07131d"), ui_scale)
+	_text(rect.position + Vector2(32, 16), title, 9, INK, ui_scale)
+	_text(rect.position + Vector2(32, 30), detail, 8, MUTED, ui_scale)
 
-func _command_icon(rect: Rect2, icon: String, tooltip: String, accent: Color) -> void:
+func _command_icon(rect: Rect2, icon: String, tooltip: String, accent: Color, ui_scale: float = 1.0) -> void:
 	draw_rect(rect, Color("#0b1c27", 0.96), true)
 	draw_rect(rect, PANEL_EDGE, false, 1.0)
-	_text(rect.position + Vector2(rect.size.x * 0.5 - 5.0, rect.size.y * 0.5 + 6.0), icon, 18, accent)
+	_text(rect.position + Vector2(rect.size.x * 0.5 - 5.0, rect.size.y * 0.5 + 6.0), icon, 18, accent, ui_scale)
 
 
-func _build_cell(rect: Rect2, entry: Dictionary, key: String) -> void:
+func _build_cell(rect: Rect2, entry: Dictionary, key: String, ui_scale: float = 1.0) -> void:
 	var available := bool(entry.get("available", false))
 	var accent := GREEN if available else MUTED
 	draw_rect(rect, Color("#0b1c27", 0.96), true)
@@ -128,11 +127,11 @@ func _build_cell(rect: Rect2, entry: Dictionary, key: String) -> void:
 	var icon_rect := Rect2(rect.position + Vector2(6, 6), Vector2(25, 25))
 	_draw_build_icon(icon_rect, int(entry.get("type", -1)), bool(entry.get("is_structure", false)), accent)
 	draw_rect(Rect2(rect.position + Vector2(35, 5), Vector2(16, 14)), accent, true)
-	_text(rect.position + Vector2(39, 16), key, 8, PANEL)
+	_text(rect.position + Vector2(39, 16), key, 8, PANEL, ui_scale)
 	_draw_wrench(rect.position + Vector2(58, 11), 8.0, Color("#47b9ff") if available else MUTED)
-	_text(rect.position + Vector2(69, 17), "%.0f" % float(entry.get("material", 0.0)), 9, INK if available else MUTED)
+	_text(rect.position + Vector2(69, 17), "%.0f" % float(entry.get("material", 0.0)), 9, INK if available else MUTED, ui_scale)
 	_draw_bolt(rect.position + Vector2(58, 25), 9.0, Color("#ff9a3d") if available else MUTED)
-	_text(rect.position + Vector2(69, 31), "%.0f" % float(entry.get("energy", 0.0)), 9, INK if available else MUTED)
+	_text(rect.position + Vector2(69, 31), "%.0f" % float(entry.get("energy", 0.0)), 9, INK if available else MUTED, ui_scale)
 
 
 func _draw_wrench(at: Vector2, size: float, color: Color) -> void:
@@ -213,15 +212,15 @@ func _draw_build_icon(rect: Rect2, type: int, is_structure: bool, color: Color) 
 			draw_line(center + Vector2(0, -6), center + Vector2(0, 6), color, 1.8)
 
 
-func _draw_hover_strip(width: float, height: float) -> void:
+func _draw_hover_strip(width: float, height: float, ui_scale: float = 1.0) -> void:
 	var strip := Rect2(0.0, height - 28.0, width, 28.0)
 	draw_rect(strip, Color("#020609", 0.96), true)
 	draw_line(strip.position, Vector2(strip.end.x, strip.position.y), PANEL_EDGE, 1.0)
 	var title := String(snapshot.get("hover_title", "TACTICAL INSPECT"))
 	var detail := String(snapshot.get("hover_detail", "HOVER A UNIT OR STRUCTURE TO INSPECT"))
 	var accent := Color(snapshot.get("hover_accent", MUTED))
-	_text(strip.position + Vector2(14, 18), title, 10, accent)
-	_text(strip.position + Vector2(minf(280.0, width * 0.28), 18), detail, 10, INK)
+	_text(strip.position + Vector2(14, 18), title, 10, accent, ui_scale)
+	_text(strip.position + Vector2(minf(280.0, width * 0.28), 18), detail, 10, INK, ui_scale)
 
 
 func _draw() -> void:
@@ -238,55 +237,55 @@ func _draw() -> void:
 	# Top strategic identity and economy strip.
 	var identity := Rect2(14, 12, 260, 48)
 	_panel(identity, CYAN)
-	_text(identity.position + Vector2(11, 17), "NFR // TACTICAL COMMAND", 9, CYAN)
-	_text(identity.position + Vector2(11, 37), String(snapshot.get("scenario", "SKIRMISH")).to_upper(), 15)
+	_text(identity.position + Vector2(11, 17), "NFR // TACTICAL COMMAND", 9, CYAN, ui_scale)
+	_text(identity.position + Vector2(11, 37), String(snapshot.get("scenario", "SKIRMISH")).to_upper(), 15, INK, ui_scale)
 
 	var economy_width := 374.0
 	var economy := Rect2(w - economy_width - 14.0, 12, economy_width, 56)
 	_panel(economy, GREEN)
-	_metric(Rect2(economy.position + Vector2(6, 5), Vector2(114, 46)), "MATERIAL", str(snapshot.get("material", "--")), String(snapshot.get("material_income", "")), Color("#47b9ff"), "wrench")
-	_metric(Rect2(economy.position + Vector2(126, 5), Vector2(114, 46)), "ENERGY", str(snapshot.get("energy", "--")), String(snapshot.get("energy_income", "")), Color("#ff9a3d"), "bolt")
-	_metric(Rect2(economy.position + Vector2(246, 5), Vector2(122, 46)), "RESEARCH", str(snapshot.get("research", "--")), String(snapshot.get("research_income", "")), GREEN, "research")
+	_metric(Rect2(economy.position + Vector2(6, 5), Vector2(114, 46)), "MATERIAL", str(snapshot.get("material", "--")), String(snapshot.get("material_income", "")), Color("#47b9ff"), "wrench", ui_scale)
+	_metric(Rect2(economy.position + Vector2(126, 5), Vector2(114, 46)), "ENERGY", str(snapshot.get("energy", "--")), String(snapshot.get("energy_income", "")), Color("#ff9a3d"), "bolt", ui_scale)
+	_metric(Rect2(economy.position + Vector2(246, 5), Vector2(122, 46)), "RESEARCH", str(snapshot.get("research", "--")), String(snapshot.get("research_income", "")), GREEN, "research", ui_scale)
 
 	var selected_count := int(snapshot.get("selected", 0))
 	# Selection has no empty-state card; it appears only when it contains facts.
 	if selected_count > 0:
 		var selection := Rect2(14, h - 196.0, 270, 150)
 		_panel(selection, AMBER)
-		_text(selection.position + Vector2(11, 20), "SELECTION", 9, AMBER)
+		_text(selection.position + Vector2(11, 20), "SELECTION", 9, AMBER, ui_scale)
 		var selection_name := "%d UNITS SELECTED" % selected_count
 		if selected_count == 1:
 			selection_name = String(snapshot.get("unit_name", "COMBAT UNIT"))
-		_text(selection.position + Vector2(11, 45), selection_name, 15)
+		_text(selection.position + Vector2(11, 45), selection_name, 15, INK, ui_scale)
 		var selection_line := String(snapshot.get("selection_detail", ""))
 		if selected_count == 1:
 			selection_line = "UNIT %s  •  COMMAND LINKED" % snapshot.get("unit_id", "--")
-		_text(selection.position + Vector2(11, 65), selection_line, 9, MUTED)
+		_text(selection.position + Vector2(11, 65), selection_line, 9, MUTED, ui_scale)
 		if selected_count == 1 and float(snapshot.get("unit_max_health", -1.0)) > 0.0:
 			var health := float(snapshot.get("unit_health", 0.0))
 			var max_health := float(snapshot.get("unit_max_health", 1.0))
 			var health_ratio := clampf(health / max_health, 0.0, 1.0)
-			_text(selection.position + Vector2(11, 91), "INTEGRITY  %.0f / %.0f" % [health, max_health], 9, MUTED)
+			_text(selection.position + Vector2(11, 91), "INTEGRITY  %.0f / %.0f" % [health, max_health], 9, MUTED, ui_scale)
 			draw_rect(Rect2(selection.position + Vector2(11, 99), Vector2(248, 6)), Color("#132a35"), true)
 			draw_rect(Rect2(selection.position + Vector2(11, 99), Vector2(248 * health_ratio, 6)), GREEN if health_ratio > 0.45 else RED, true)
 			draw_rect(Rect2(selection.position + Vector2(11, 116), Vector2(248, 1)), PANEL_EDGE, true)
-			_text(selection.position + Vector2(11, 133), "FRIENDLY FORCE", 9, MUTED)
-			_text(selection.position + Vector2(11, 147), "%d  //  %s" % [snapshot.get("friendly", 0), snapshot.get("force_status", "READY")], 12, GREEN)
+			_text(selection.position + Vector2(11, 133), "FRIENDLY FORCE", 9, MUTED, ui_scale)
+			_text(selection.position + Vector2(11, 147), "%d  //  %s" % [snapshot.get("friendly", 0), snapshot.get("force_status", "READY")], 12, GREEN, ui_scale)
 		else:
 			draw_rect(Rect2(selection.position + Vector2(11, 86), Vector2(248, 1)), PANEL_EDGE, true)
-			_text(selection.position + Vector2(11, 111), "FRIENDLY FORCE", 9, MUTED)
-			_text(selection.position + Vector2(11, 136), "%d  //  %s" % [snapshot.get("friendly", 0), snapshot.get("force_status", "READY")], 15, GREEN)
+			_text(selection.position + Vector2(11, 111), "FRIENDLY FORCE", 9, MUTED, ui_scale)
+			_text(selection.position + Vector2(11, 136), "%d  //  %s" % [snapshot.get("friendly", 0), snapshot.get("force_status", "READY")], 15, GREEN, ui_scale)
 
 	# Compact orders card aligns to Tactical Command and is absent with no unit.
 	if selected_count > 0:
 		var commands := Rect2(14, 68, 260, 78)
 		_panel(commands, CYAN)
-		_text(commands.position + Vector2(10, 14), "ORDERS", 9, CYAN)
+		_text(commands.position + Vector2(10, 14), "ORDERS", 9, CYAN, ui_scale)
 		var icons := [["➜", "MOVE — right-click terrain", CYAN], ["✦", "ATTACK — Ctrl + right-click enemy", RED], ["■", "STOP — X", AMBER], ["⌑", "BUILD — blueprint / ROAD: R", GREEN], ["◇", "CLAIM — 2 then right-click facility", CYAN], ["×", "DEMOLISH — 3 then right-click facility", RED]]
 		for index in range(6):
 			var column := index % 3
 			var row := index / 3
-			_command_icon(Rect2(commands.position + Vector2(8 + column * 82, 20 + row * 27), Vector2(76, 23)), icons[index][0], icons[index][1], icons[index][2])
+			_command_icon(Rect2(commands.position + Vector2(8 + column * 82, 20 + row * 27), Vector2(76, 23)), icons[index][0], icons[index][1], icons[index][2], ui_scale)
 
 	# Production readout is sourced from the authoritative queue: the menu
 	# exposes exact reservation costs and the active frame exposes time remaining.
@@ -294,47 +293,47 @@ func _draw() -> void:
 	if not build_catalog.is_empty() and bool(snapshot.get("can_build", false)):
 		var build_menu := Rect2((w - 540.0) * 0.5, 12.0, 540.0, 158.0)
 		_panel(build_menu, GREEN)
-		_text(build_menu.position + Vector2(10, 15), "FIELD ENGINEER // BUILD MENU", 9, GREEN)
+		_text(build_menu.position + Vector2(10, 15), "FIELD ENGINEER // BUILD MENU", 9, GREEN, ui_scale)
 		var units: Array = build_catalog.filter(func(item): return not bool(item.get("is_structure", false)))
 		units.sort_custom(func(left, right): return int(left.get("type", -1)) < int(right.get("type", -1)))
 		var structures: Array = build_catalog.filter(func(item): return bool(item.get("is_structure", false)))
-		_text(build_menu.position + Vector2(10, 29), "UNITS", 8, MUTED)
+		_text(build_menu.position + Vector2(10, 29), "UNITS", 8, MUTED, ui_scale)
 		for index in range(mini(4, units.size())):
-			_build_cell(Rect2(build_menu.position + Vector2(8 + index * 132, 34), Vector2(128, 36)), units[index], BUILD_UNIT_SHORTCUTS[index])
+			_build_cell(Rect2(build_menu.position + Vector2(8 + index * 132, 34), Vector2(128, 36)), units[index], BUILD_UNIT_SHORTCUTS[index], ui_scale)
 		# The deck has six authored unit shortcuts. Never index beyond that
 		# contract if a mod or future catalog adds more unit definitions.
 		for index in range(4, mini(BUILD_UNIT_SHORTCUTS.size(), units.size())):
-			_build_cell(Rect2(build_menu.position + Vector2(8 + (index - 4) * 132, 72), Vector2(128, 36)), units[index], BUILD_UNIT_SHORTCUTS[index])
-		_text(build_menu.position + Vector2(10, 120), "STRUCTURES", 8, MUTED)
+			_build_cell(Rect2(build_menu.position + Vector2(8 + (index - 4) * 132, 72), Vector2(128, 36)), units[index], BUILD_UNIT_SHORTCUTS[index], ui_scale)
+		_text(build_menu.position + Vector2(10, 120), "STRUCTURES", 8, MUTED, ui_scale)
 		for index in range(mini(4, structures.size())):
-			_build_cell(Rect2(build_menu.position + Vector2(8 + index * 132, 124), Vector2(128, 28)), structures[index], ["6", "7", "A", "L"][index])
+			_build_cell(Rect2(build_menu.position + Vector2(8 + index * 132, 124), Vector2(128, 28)), structures[index], ["6", "7", "A", "L"][index], ui_scale)
 	var queue: Array = snapshot.get("queue", [])
 	if not queue.is_empty():
 		var active: Dictionary = queue[0]
 		var fabrication := Rect2((w - 540.0) * 0.5, h - 294.0, 540.0, 86.0)
 		_panel(fabrication, CYAN)
-		_text(fabrication.position + Vector2(10, 16), "ACTIVE FABRICATION // STRUCTURE FRAME + UNIT SKELETON", 9, CYAN)
+		_text(fabrication.position + Vector2(10, 16), "ACTIVE FABRICATION // STRUCTURE FRAME + UNIT SKELETON", 9, CYAN, ui_scale)
 		var progress := clampf(float(active.get("progress", 0.0)), 0.0, 1.0)
 		draw_rect(Rect2(fabrication.position + Vector2(10, 27), Vector2(520, 8)), Color("#132a35"), true)
 		draw_rect(Rect2(fabrication.position + Vector2(10, 27), Vector2(520 * progress, 8)), GREEN, true)
-		_text(fabrication.position + Vector2(10, 55), "%s  %.0f%%  //  %.1f SEC REMAINING" % [String(active.get("name", "UNIT")).to_upper(), progress * 100.0, float(active.get("remaining_seconds", 0.0))], 10, INK)
-		_text(fabrication.position + Vector2(10, 73), "RESERVED: M %.0f  E %.0f  R %.0f" % [float(active.get("reserved_material", 0.0)), float(active.get("reserved_energy", 0.0)), float(active.get("reserved_research", 0.0))], 9, AMBER)
+		_text(fabrication.position + Vector2(10, 55), "%s  %.0f%%  //  %.1f SEC REMAINING" % [String(active.get("name", "UNIT")).to_upper(), progress * 100.0, float(active.get("remaining_seconds", 0.0))], 10, INK, ui_scale)
+		_text(fabrication.position + Vector2(10, 73), "RESERVED: M %.0f  E %.0f  R %.0f" % [float(active.get("reserved_material", 0.0)), float(active.get("reserved_energy", 0.0)), float(active.get("reserved_research", 0.0))], 9, AMBER, ui_scale)
 
 	var fob_installation: Array = snapshot.get("fob_installation", [])
 	if fob_installation.size() >= 6:
 		var fob_card := Rect2((w - 540.0) * 0.5, h - 392.0, 540.0, 78.0)
 		var constructing := int(fob_installation[3]) == 1
-		var progress := clampf(float(fob_installation[4]), 0.0, 1.0)
+		var fob_progress := clampf(float(fob_installation[4]), 0.0, 1.0)
 		_panel(fob_card, AMBER if constructing else GREEN)
-		_text(fob_card.position + Vector2(10, 16), "FORWARD OPERATING BASE // %s" % ("ASSEMBLY" if constructing else "ACTIVE"), 9, AMBER if constructing else GREEN)
+		_text(fob_card.position + Vector2(10, 16), "FORWARD OPERATING BASE // %s" % ("ASSEMBLY" if constructing else "ACTIVE"), 9, AMBER if constructing else GREEN, ui_scale)
 		draw_rect(Rect2(fob_card.position + Vector2(10, 27), Vector2(520, 8)), Color("#132a35"), true)
-		draw_rect(Rect2(fob_card.position + Vector2(10, 27), Vector2(520 * progress, 8)), AMBER if constructing else GREEN, true)
-		_text(fob_card.position + Vector2(10, 55), "%.0f%%  //  M %.0f  //  %s" % [progress * 100.0, float(fob_installation[5]), "CONSTRUCTING" if constructing else "ONLINE"], 10, INK)
+		draw_rect(Rect2(fob_card.position + Vector2(10, 27), Vector2(520 * fob_progress, 8)), AMBER if constructing else GREEN, true)
+		_text(fob_card.position + Vector2(10, 55), "%.0f%%  //  M %.0f  //  %s" % [fob_progress * 100.0, float(fob_installation[5]), "CONSTRUCTING" if constructing else "ONLINE"], 10, INK, ui_scale)
 
 	var fob_notification := String(snapshot.get("fob_completion_notification", ""))
 	if not fob_notification.is_empty():
 		var notification_card := Rect2((w - 540.0) * 0.5, h - 450.0, 540.0, 42.0)
 		_panel(notification_card, GREEN)
-		_text(notification_card.position + Vector2(10, 26), fob_notification, 11, GREEN)
+		_text(notification_card.position + Vector2(10, 26), fob_notification, 11, GREEN, ui_scale)
 
-	_draw_hover_strip(w, h)
+	_draw_hover_strip(w, h, ui_scale)

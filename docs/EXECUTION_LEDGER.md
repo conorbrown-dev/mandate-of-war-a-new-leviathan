@@ -1,14 +1,26 @@
 # Execution Ledger
 
-**Last updated:** 2026-09-12
+**Last updated:** 2026-09-13
 
-**Sequence mode:** reconciliation complete; Goals 03–07 are verified and Goal 08 is ACTIVE. Goals 09–11 are GATED.
+**Sequence mode:** reconciliation complete; Goals 03–11 are verified. No canonical Goal 12 specification exists.
 
-**Milestone state:** Goals 02–07 have current local validation evidence. Goal 08 is now the active acceptance gate; candidate later-goal implementation cannot bypass it. See `docs/WORKTREE_RECONCILIATION.md`.
+**Milestone state:** Goals 03–11 have current local validation evidence. No canonical Goal 12 specification exists. See `docs/WORKTREE_RECONCILIATION.md`.
 
 This file is the durable milestone state used after a restart, compaction, or automatic continuation. It records gates and acceptance evidence; it does not weaken the completion criteria in the numbered goal files. Session titles, chat summaries, and OpenCode's session-local todos are non-authoritative.
 
 ## Reconciliation Authority — 2026-09-12
+
+### Terrain placement correction — 2026-09-13
+
+- Ground height queries now interpolate the exact triangle split rendered by
+  Godot; the Field Engineer's lowest mesh point remains 5 cm above that surface
+  through movement.
+- Airfield placement uses a 250 x 750 m tactical operational footprint and the
+  UI resolves nearby valid sites in deterministic 125 m rings up to 1 km.
+- Evidence: Release build; CTest 3/3 outside the localhost-restricted sandbox;
+  direct integration 178/178; headless and NVIDIA-rendered
+  `basic_selection_move` and `airfield_fighter_ferry`, including screenshots and
+  AVI recordings.
 
 This section supersedes contradictory historical status claims below. It is based on the current repository object graph and fresh local validation:
 
@@ -16,7 +28,7 @@ This section supersedes contradictory historical status claims below. It is base
 - Release build, CTest (3/3), direct native runners (18/18, 21/21, 164/164), Godot smoke, Godot presentation (91/91), and the four repository-owned validation scenarios pass on the current dirty tree.
 - `G03-COMBAT-BENCH` passes: `rts_combat_benchmark 2000 100` reports 4,000 initial units, 2,000 destroyed, 1,038 projectiles, changed state hash, and 11.058 ms cache-hit average (2026-09-12).
 - `G04-BENCH` passes: `rts_logistics_benchmark 10000 30 100` measures 10,000 airborne conventional aircraft, 30 moving carriers, safe-return/facility cache behavior, and intelligence updates at 0.951 ms cache-hit average (p95 1.488 ms; 2026-09-12). It is isolated from prediction/combat/economy/snapshot timing by design.
-- No canonical Goal 09 or Goal 11 specification exists at repository root. The Goal 06 and Goal 08 specifications also contain explicit TODO/in-progress gates that contradict their historical closure claims.
+- Goals 09, 10, and 11 now have canonical root specifications and current acceptance evidence. Historical sections below remain records, not competing state.
 
 ## Milestone Queue
 
@@ -30,10 +42,10 @@ Historical Goal 04–11 labels below are retained as implementation reports, not
 | Goal 05 — modding, asset pipeline, map editor | `VERIFIED` | Loadable test mod, generated-unit spawning, native map round-trip, editor draft/native export, deterministic atomic dependencies, reproducibility metadata, and focused review all pass (Release; CTest 3/3; direct 170/170; headless editor/export assertions; 2026-09-12). |
 | Goal 06 — multiplayer, replays, stats, AI | `VERIFIED` | Two loaded simulations use their owned direct-TCP managers: received commands enter the authoritative command phase, move both units, and leave state/checksums identical. The recorded command replays checksum-identically to terminal state; stats persist/aggregate; offline AI produces, researches, and terminates. Review: `docs/GOAL_06_ARCHITECTURE_REVIEW.md`. Release/CTest 3/3/direct 171/171 pass (2026-09-12). |
 | Goal 07 — deterministic AI foundation | `VERIFIED` | AI issues authoritative human-equivalent commands; tactical focus/retreat, operational grouping/front/staging, strategic research/production/expansion, equal-world determinism, and 128-vs-128 latency assertions pass. Review: `docs/GOAL_07_ARCHITECTURE_REVIEW.md`. Release/CTest 3/3/`rts_tests` 20/20/direct 176/176 pass (2026-09-12). |
-| Goal 08 — playable skirmish vertical slice | `ACTIVE` | Begin with its canonical numbered specification; historical candidate implementation is not acceptance evidence. |
-| Goal 09 — logistics improvements | `UNSPECIFIED` | No canonical root goal document exists. |
-| Goal 10 — terrain system | `GATED` | Its specification retains pending roads and terrain-collision criteria. |
-| Goal 11 — Forward Seizure feature foundation | `UNSPECIFIED` | Candidate dirty-tree implementation and tests exist, but no canonical root goal document exists. |
+| Goal 08 — playable skirmish vertical slice | `VERIFIED` | Native controller, logistics/intelligence presentation, terminal/replay flow, integrated benchmark, and current evidence are accepted; review: `docs/GOAL_08_CODEX_REVIEW.md`. |
+| Goal 09 — logistics improvements | `VERIFIED` | Canonical specification `09_LOGISTICS_IMPROVEMENTS.md` is satisfied; path-aware return, finite-stock resupply, telemetry, benchmark, tests, and Codex review all pass. |
+| Goal 10 — terrain system | `VERIFIED` | Canonical specification `10_TERRAIN_SYSTEM.md` is satisfied; heightmap, biomes, materials, roads, terrain collision, rendering, tests, and benchmark evidence pass. |
+| Goal 11 — Forward Seizure feature foundation | `VERIFIED` | Canonical specification `11_FORWARD_SEIZURE.md` is satisfied; territorial control, capability gating, deterministic progression, FOB construction, UI, tests, and review pass. |
 | Goal 11-TESTS | `COMPLETE` | Territorial control unit tests at `tests/test_territorial_control.cpp`: state transitions (5), zone type progression (8), seizure capability flags (8), installation type definitions (7); all tests pass |
 | GOAL-11-NEXT | `COMPLETE` | FOB construction completion notification is rendered and covered by the Godot presentation harness |
 | VAL-FRAMEWORK | `COMPLETE` | Cross-platform test/validation commands, explicit scenario registry, bounded Godot runner, schema-checked reports, logs, and non-zero failure propagation implemented |
@@ -81,19 +93,42 @@ Historical Goal 04–11 labels below are retained as implementation reports, not
 | G10-BENCH | `COMPLETE` | Scale benchmark 1000 units @ 169.227 ms cold field generation (expected for initial grid from terrain), subsequent ticks 0.711ms avg (within 50ms budget for simulation tick) |
 
 **Goal 10 complete: All criteria verified. Next: Goal 11 — Forward Seizure feature foundation (domain model complete, integration pending).**
-| G08-COMMANDS-DEFEND | `VERIFIED` | Defend command: `defend_area()` (simulation.cpp:431-451) stops + moves to position, retains automatic fire, enemy detection (80-unit range) for approach vector; `find_nearest_visible_enemy()` (simulation.cpp:450-483) returns nearest enemy within 80 units |
+| G08-SCENARIO | `VERIFIED` | The setup menu now exposes `START SKIRMISH`, which enters `native_skirmish.tscn`; its controller loads validated `two_landmass_skirmish.json` with two landmasses, sea lane, authored rosters, and three resource fields. The legacy presentation lab remains explicitly separate. |
 | G08-COMMANDS-HARVEST | `VERIFIED` | Harvest command: `harvest_resource()` (simulation.cpp:421-429) assigns Harvester component, moves to resource position; `update_harvesters()` (simulation.cpp:1523+) extracts per tick; `production_manager_.extract_resource()` calls extraction logic |
 | G08-ECONOMY | `VERIFIED` | Full build/research cycle verified: `commands_owned_factory_build_research_and_destruction` passes with queue creation, material deduction, production, research entry, completion, and unlocked production. All 137 integration tests pass including skirmish test that verifies full match loop with AI production and research. |
-| G08-COMBAT | `IN_PROGRESS` | Health/faction getters and damage/removal smoke pass. Visible projectile/health/selection lifecycle proof remains open (G08-UX requirement). |
-| G08-LOGISTICS | `IN_PROGRESS` | Visibility getters and isolated tests exist; main.gd does not implement the required player-visible endurance, recovery, stranding/resupply and intelligence flow. |
+| G08-COMBAT | `VERIFIED` | Combat/projectile damage, visibility-limited targeting, health state, and terminal match behavior are covered by the direct integration runner and native route state; the HUD renders projectiles and health from the authoritative controller. |
+| G08-LOGISTICS | `VERIFIED` | Native route displays aircraft fuel/recovery queues, naval stranded state, and intelligence records. The Godot harness asserts sortie endurance, naval stranding/resupply, and current-to-stale intelligence aging without leaking hidden live positions. |
 | G08-AI | `VERIFIED` | Perception/API subtask verified: one simulation-owned manager; Mass Warfare default; prototype sensor ranges; sorted/deduplicated current enemies; sensor-loss/death/faction/reset handling; invalid delta/identity rejection. Five regression tests pass. Production, research, attack/defend actions integrated via G08-COMMANDS authority repair. |
-| G08-MATCH | `VERIFIED` | Match result detection: `skirmish_state()` returns result (-1=active, 0=victory, 1=defeat, 2=draw), endgame UI: main.gd:773-798 shows winner/duration/rematch/exit |
-| G08-REPLAY-STATS | `VERIFIED` | `skirmish_save_replay()`/`replay()` exist, match history in user://matches/, `main.gd:805-818` loads history |
-| G08-UX | `VERIFIED` | HUD displays: resources/income (main.gd:868), production queue (882), research progress (884-892), logistics (fuel/stranded/safe_return/airbase queues 869-880) |
-| G08-PERF | `VERIFIED` | Skirmish benchmark: 282 survivors/400 ticks, max 8ms (< 50ms budget); Godot 4.7.2 loads GDExtension without errors |
-| G08-TESTS | `VERIFIED` | All 137 integration tests pass; 8/8 command authority tests pass (including commands_owned_factory_build_research_and_destruction); 16/16 rts_tests pass; 21/21 portable snapshot tests pass; release build successful |
-| G08-VERIFIED | `GATED` | Full functional criteria, integrated benchmark, inspected graphical evidence and milestone Codex review remain open. |
-| G08-STATE | `VERIFIED` | Command authority repair verified; process_commands/process_command_internal DO check ownership and tick (contrary to handoff claim); all validation tests pass; return/defend/harvest movement implemented and verified; full build/research cycle verified |
+| G08-MATCH | `VERIFIED` | Native Godot route advances the controller to its deterministic terminal result and presents result, rematch, and exit actions; `test_native_skirmish.gd` asserts all three states. |
+| G08-REPLAY-STATS | `VERIFIED` | Native Godot route saves a completed replay under `user://matches/`, verifies it through the isolated replay reader, and records a match summary through `StatsManager`; the harness asserts historical match count. |
+| G08-UX | `VERIFIED` | Native route displays map, faction, resources, income, tick state, selection, all command affordances, projectiles, health, air recovery/fuel queues, naval stranded count, current/stale intelligence, pause, result, replay, historical match count, and rematch/exit. The dedicated Godot harness covers the state transition. |
+| G08-PERF | `VERIFIED` | 2026-09-12 Release `rts_skirmish_benchmark`: 1,051 initial entities, 400 active ticks, movement/projectiles/destruction/production asserted, 1.643 ms average and 23.239 ms maximum (<50 ms). See `docs/PERFORMANCE.md`. |
+| G08-TESTS | `VERIFIED` | Fresh evidence: CTest 3/3, direct integration runner 176 assertions, behavior runner 20 assertions, native smoke, legacy presentation harness 91 assertions, and native-controller Godot setup-to-result/replay/rematch/logistics/intelligence harness 18 assertions. |
+| G08-VERIFIED | `VERIFIED` | All Goal 08 criteria are current: Release build, CTest 3/3, direct assertion runners, Godot smoke/native harness, integrated benchmark, inspected host-display setup/result evidence, and evaluated Codex review (`docs/GOAL_08_CODEX_REVIEW.md`). |
+| G08-STATE | `VERIFIED` | Current evidence and the controller/presentation split are recorded in `CURRENT_STATE`, `NEXT_TASKS`, and `PERFORMANCE`. |
+| G09-PATH | `VERIFIED` | Safe-return estimation now consumes an available A* route, sums route segments, and falls back deterministically to straight-line distance for out-of-grid/air-over-water routes; detour regression passes in the direct runner (177 assertions). |
+| G09-SUPPLY | `VERIFIED` | Authoritative naval RETURN now requires sufficient owned Energy and Material, deducts both atomically, restores bounded fuel, and rejects insufficient stock without mutation; skirmish assertions cover success and rejection. |
+| G09-TELEMETRY | `VERIFIED` | Native `skirmish_state()` exposes aircraft return Energy/Material/time estimates and the HUD renders route costs alongside endurance telemetry; native harness remains green at 18/18. |
+| G09-BENCH | `VERIFIED` | Release `rts_logistics_benchmark 10000 30 100` passes after the route optimization: 1.213 ms cache-hit average, p95 2.021 ms, max 12.789 ms; the detour path remains assertion-covered. |
+| G09-TESTS | `VERIFIED` | CTest 3/3, direct integration 177 assertions, and native Goal 08/09 logistics flow 19 assertions pass; finite-stock resupply and route detour assertions are active. |
+| G09-REVIEW | `VERIFIED` | Review recorded in `docs/GOAL_09_CODEX_REVIEW.md`; implementation, evidence quality, and limitations accepted. |
+| G10-HEIGHTMAP | `VERIFIED` | Deterministic 320×320 float32 heightmap loading and scenario parsing pass. |
+| G10-BIOMES | `VERIFIED` | Godot biome thresholds cover ocean, coast, plains, hills, and mountains. |
+| G10-MATERIALS | `VERIFIED` | Active terrain shader binds authored water, shore, grass, forest, mud, and rock materials with elevation bands. |
+| G10-ROADS | `VERIFIED` | Road completion applies traversal costs and terrain blockers; road construction/traversal assertions pass. |
+| G10-COLLISION | `VERIFIED` | Ground units follow authoritative terrain height after spawn and movement; new regression passes. |
+| G10-RENDERING | `VERIFIED` | HeightMap generates deterministic vertex/normal/color mesh and the active scene loads it. |
+| G10-TESTS | `VERIFIED` | CTest 3/3, direct terrain/road/collision assertions, and `test_goal10_terrain.gd` (9 assertions) pass. |
+| G10-BENCH | `VERIFIED` | Release `rts_scale_benchmark 1000 100 100` passes with 650.108 ms cold field generation and 0.723 ms cache-hit simulation ticks (p95 0.798 ms, max 2.260 ms); 1,000 units moved and state hash changed. |
+| G10-REVIEW | `VERIFIED` | Codex review recorded in `docs/GOAL_10_CODEX_REVIEW.md`. |
+| G11-DOMAIN | `VERIFIED` | Territorial states, zone types, installation types, and requirements are explicit native types. |
+| G11-CAPABILITIES | `VERIFIED` | Authored unit capability flags are assigned and INSTALL authority rejects unsupported issuers. |
+| G11-PROGRESSION | `VERIFIED` | Zone assignment/security progression is deterministic and tested for valid sequential transitions. |
+| G11-INSTALL | `VERIFIED` | Authoritative INSTALL starts FOB construction and rejects invalid capability/location/type requests. |
+| G11-CONSTRUCTION | `VERIFIED` | FOB construction advances over fixed ticks, remains inactive before completion, and activates on completion. |
+| G11-UI | `VERIFIED` | Godot HUD presents authoritative installation progress and completion notification; presentation harness passes 91 assertions. |
+| G11-TESTS | `VERIFIED` | Release build, CTest 3/3, direct integration 178 assertions, and Godot presentation 91 assertions pass. |
+| G11-REVIEW | `VERIFIED` | Review recorded in `docs/GOAL_11_CODEX_REVIEW.md`; authority, determinism, evidence, and limitations accepted. |
 | G07-TACTICAL | `VERIFIED` | Tactical AI functions implemented (`calculate_distance`, `calculate_best_position`, `should_retreat`, `calculate_threat_score`, `update_tactical_ai`) | Implemented in `src/ai/tactical_ai.cpp`. `update_tactical_ai()` iterates units, calculates threat scores, selects targets, determines optimal positioning, and submits MOVE commands via `AICommandGenerator`. All tests passing. |
 | G07-INTEGRATION | `VERIFIED` | Tactical AI integrated with `AIManager` and simulation tick loop | `src/ai/ai_manager.cpp` calls `update_tactical_ai(simulation_, command_generator_)`. Simulation loop invokes `update_ai()` per tick. |
 | G07-TESTS | `VERIFIED` | Tactical AI unit tests for all core functions | `tests/test_tactical_ai.cpp` with 13 tests (8 tactical AI + 5 RNG) |

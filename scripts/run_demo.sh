@@ -10,5 +10,9 @@ if [[ ! -x "$godot_bin" ]]; then
   exit 1
 fi
 
+echo "Killing existing Godot instances..." >&2
+pkill -f "Godot.*--path $demo_root/godot/project" 2>/dev/null || true
+sleep 1
+
 cmake --build "$demo_root/build"
-exec env RTS_AUTO_START_SKIRMISH=1 "$godot_bin" --path "$demo_root/godot/project"
+exec env RTS_AUTO_START_SKIRMISH=1 RTS_PROTOTYPE_VISUALS=1 "$godot_bin" --path "$demo_root/godot/project"

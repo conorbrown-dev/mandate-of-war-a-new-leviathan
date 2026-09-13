@@ -9,10 +9,12 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 inventory = json.loads((ROOT / "data/provenance/cc0_model_inventory.json").read_text())
+reference_mapping = json.loads((ROOT / "data/provenance/reference_model_mapping.json").read_text())
 mapping = json.loads((ROOT / "data/provenance/faction_prototype_mapping.json").read_text())
 visuals = json.loads((ROOT / "godot/project/visuals/visual_definitions.json").read_text())
 
 asset_ids = {entry["asset_id"] for entry in inventory["models"]}
+asset_ids.update(entry["asset_id"] for entry in reference_mapping["mappings"])
 visual_ids = {entry["visual_id"] for entry in visuals["visual_definitions"]}
 prototype_ids: set[str] = set()
 for entry in mapping["mappings"]:

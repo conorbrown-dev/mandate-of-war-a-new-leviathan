@@ -1,0 +1,15 @@
+{
+  "category": "nature",
+  "godot_forward": "-Z",
+  "godot_up": "+Y",
+  "bounds_m": {
+    "x": 20.508726119995117,
+    "y": 15.647927284240723,
+    "z": 19.46174430847168
+  },
+  "triangles_all_exported_meshes": 4859,
+  "usage": "active tactical forest MultiMesh",
+  "source_asset": "downloaded_assets/trees/oak-trees-pack-17var-lods-seasons-gameready/source/Oak pack.fbx",
+  "source_object": "Big_oak_tree__001_LOD1",
+  "source_pipeline": "User-provided tree conversion; Blender 5; embedded-texture GLB"
+}

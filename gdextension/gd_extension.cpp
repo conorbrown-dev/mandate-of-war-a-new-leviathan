@@ -1,4 +1,5 @@
 #include <cstdint>
+#include <chrono>
 #include <filesystem>
 #include <optional>
 
@@ -15,6 +16,7 @@
 #include "map/map_loader.hpp"
 #include "ecs/components/factions.hpp"
 #include "simulation/skirmish.hpp"
+#include "stats/stats_manager.hpp"
 
 using namespace godot;
 
@@ -166,7 +168,10 @@ protected:
         ClassDB::bind_method(D_METHOD("skirmish_update", "delta_ms"), &RtsExtension::skirmish_update);
         ClassDB::bind_method(D_METHOD("skirmish_position_visible", "x", "y"), &RtsExtension::skirmish_position_visible);
         ClassDB::bind_method(D_METHOD("skirmish_state"), &RtsExtension::skirmish_state);
+        ClassDB::bind_method(D_METHOD("skirmish_stats_summary"), &RtsExtension::skirmish_stats_summary);
         ClassDB::bind_method(D_METHOD("skirmish_command", "type", "ids", "x", "y", "extra"), &RtsExtension::skirmish_command);
+        ClassDB::bind_method(D_METHOD("skirmish_update_intelligence", "entity_id", "x", "y", "tick"), &RtsExtension::skirmish_update_intelligence);
+        ClassDB::bind_method(D_METHOD("skirmish_archive_intelligence", "entity_id"), &RtsExtension::skirmish_archive_intelligence);
         ClassDB::bind_method(D_METHOD("start_simulation"), &RtsExtension::start_simulation);
         ClassDB::bind_method(D_METHOD("stop_simulation"), &RtsExtension::stop_simulation);
         ClassDB::bind_method(D_METHOD("reset_simulation"), &RtsExtension::reset_simulation);
@@ -320,21 +325,13 @@ public:
     std::unique_ptr<rts::Skirmish> skirmish_;
     String skirmish_save_replay(const String& path) {
         String resolved_path = path;
-        if (path.begins_with("res://")) {
-            String relative_path = path.substr(6);
-            resolved_path = "res://" + relative_path;
-            resolved_path = ProjectSettings::get_singleton()->globalize_path(resolved_path);
-        }
+        if (path.contains("://")) resolved_path = ProjectSettings::get_singleton()->globalize_path(path);
         if(!skirmish_) return "No match";
         return skirmish_->save_replay(resolved_path.utf8().get_data()) ? String() : String(skirmish_->error().c_str());
     }
     String skirmish_verify_replay(const String& path) {
         String resolved_path = path;
-        if (path.begins_with("res://")) {
-            String relative_path = path.substr(6);
-            resolved_path = "res://" + relative_path;
-            resolved_path = ProjectSettings::get_singleton()->globalize_path(resolved_path);
-        }
+        if (path.contains("://")) resolved_path = ProjectSettings::get_singleton()->globalize_path(path);
         if(!skirmish_) skirmish_ = std::make_unique<rts::Skirmish>(*rts::runtime_simulation());
         return skirmish_->replay(resolved_path.utf8().get_data()) ? String() : String(skirmish_->error().c_str());
     }
@@ -347,10 +344,35 @@ public:
         }
         if (!skirmish_) skirmish_ = std::make_unique<rts::Skirmish>(*rts::runtime_simulation());
         if (!skirmish_->load(resolved_path.utf8().get_data())) return String(skirmish_->error().c_str());
+        recorded_result_ = -1;
         started_ = true;
         return "";
     }
-    void skirmish_update(double delta_ms) { if (skirmish_) skirmish_->update(delta_ms); }
+    void skirmish_update(double delta_ms) {
+        if (!skirmish_) return;
+        skirmish_->update(delta_ms);
+        if (skirmish_->result() < 0 || recorded_result_ == skirmish_->result()) return;
+        if (!stats_) {
+            const auto path = ProjectSettings::get_singleton()->globalize_path("user://matches");
+            stats_ = std::make_unique<rts::StatsManager>(path.utf8().get_data());
+        }
+        const auto now = std::chrono::system_clock::now().time_since_epoch();
+        const auto seconds = std::chrono::duration_cast<std::chrono::seconds>(now).count();
+        stats_->record_match(rts::MatchStats{
+            skirmish_->name(), static_cast<uint64_t>(seconds), "player", "Elite Precision",
+            skirmish_->result() == 0, static_cast<uint32_t>(skirmish_->checksums().size()),
+            0, 0, 0, 0, 0, 0, 0});
+        recorded_result_ = skirmish_->result();
+    }
+    void skirmish_update_intelligence(int64_t entity_id, double x, double y, int64_t tick) {
+        if (!skirmish_ || entity_id <= 0 || tick < 0) return;
+        rts::runtime_simulation()->logistics_manager().update_intelligence(
+            static_cast<rts::EntityId>(entity_id), static_cast<float>(x), static_cast<float>(y), static_cast<uint32_t>(tick));
+    }
+    void skirmish_archive_intelligence(int64_t entity_id) {
+        if (!skirmish_ || entity_id <= 0) return;
+        rts::runtime_simulation()->logistics_manager().archive_intelligence(static_cast<rts::EntityId>(entity_id));
+    }
     int64_t skirmish_command(int64_t type, const PackedInt32Array& ids, double x, double y, int64_t extra) {
         if (!skirmish_ || skirmish_->result() != -1 || type < 0 || type > 8 || extra < 0 || extra > UINT32_MAX) return 0;
         std::vector<rts::EntityId> entities;
@@ -371,6 +393,32 @@ public:
         state["takeoff_queue"]=static_cast<int64_t>(logistics.takeoff_queue_size(skirmish_->base(0)));
         state["landing_queue"]=static_cast<int64_t>(logistics.landing_queue_size(skirmish_->base(0)));
         state["runway_active"]=static_cast<int64_t>(logistics.active_runway_operations(skirmish_->base(0)));
+        // Keep the fog-of-war memory authoritative: visible contacts refresh their
+        // last-known position, while contacts leaving sensor range become stale
+        // records and never leak their live position to the presentation.
+        for (auto id : simulation.get_entity_list()) {
+            rts::FactionId faction;
+            if (simulation.get_unit_is_dead(id) || !simulation.get_unit_faction_id(id, faction) || faction == rts::FactionId::ELITE_PRECISION) continue;
+            if (simulation.is_visible_to(rts::FactionId::ELITE_PRECISION, id)) {
+                logistics.update_intelligence(id, simulation.get_unit_x(id), simulation.get_unit_y(id), simulation.simulation_tick());
+            } else if (logistics.get_intelligence(id) && logistics.get_intelligence(id)->currently_observed) {
+                logistics.archive_intelligence(id);
+            }
+        }
+        Array intelligence;
+        for (const auto& intel : logistics.intelligence_snapshot()) {
+            Dictionary record;
+            record["id"] = intel.entity_id;
+            record["x"] = intel.last_x;
+            record["y"] = intel.last_y;
+            record["last_seen_tick"] = static_cast<int64_t>(intel.last_seen_tick);
+            record["age"] = static_cast<int64_t>(simulation.simulation_tick() - intel.last_seen_tick);
+            record["freshness"] = intel.freshness;
+            record["currently_observed"] = intel.currently_observed;
+            record["stale"] = !intel.currently_observed && (simulation.simulation_tick() - intel.last_seen_tick) > 120;
+            intelligence.append(record);
+        }
+        state["intelligence"] = intelligence;
         Array units;
         for (auto id : simulation.get_entity_list()) {
             rts::FactionId faction;
@@ -382,10 +430,17 @@ public:
             float hp=0,max_hp=0; simulation.get_unit_health(id,hp,max_hp);
             unit["health"]=hp; unit["max_health"]=max_hp;
             unit["base"]=id==skirmish_->base(static_cast<int>(faction));
+            if (faction != rts::FactionId::ELITE_PRECISION) {
+                unit["intel_age"] = ::logistics_get_intelligence_age(static_cast<int>(id));
+                unit["intel_stale"] = ::logistics_is_intelligence_stale(static_cast<int>(id));
+            }
             unit["kind"]="ground";
             if(auto* aircraft=simulation.component_manager().get_component<rts::Aircraft>(id)) {
                 unit["kind"]="air"; unit["fuel"]=aircraft->fuel; unit["max_fuel"]=aircraft->max_fuel;
                 unit["safe_return"]=aircraft->safe_return; unit["status"]=static_cast<int>(aircraft->status);
+                unit["return_energy"] = aircraft->predicted_return_energy;
+                unit["return_material"] = aircraft->predicted_return_material;
+                unit["return_time_ms"] = aircraft->predicted_return_time_ms;
             }
             if(auto* vessel=simulation.component_manager().get_component<rts::NavalVessel>(id)) {
                 unit["kind"]="sea"; unit["fuel"]=vessel->fuel; unit["max_fuel"]=vessel->max_fuel;
@@ -428,6 +483,18 @@ public:
             }
         }
         state["queue"]=queue;
+        Array resources;
+        for (const auto& [id, node] : production.resource_nodes()) {
+            Dictionary resource;
+            resource["id"] = id;
+            resource["x"] = node.x;
+            resource["y"] = node.y;
+            resource["amount"] = node.amount;
+            resource["type"] = static_cast<int>(node.type);
+            resource["depleted"] = node.depleted;
+            resources.append(resource);
+        }
+        state["resources"] = resources;
         Array projects;
         for(uint32_t i=0;i<rts::get_research_projects().size();++i) {
             const auto id=rts::Simulation::research_id(i);
@@ -446,6 +513,20 @@ public:
         }
         state["projects"]=projects;
         return state;
+    }
+
+    Dictionary skirmish_stats_summary() {
+        Dictionary summary;
+        if (!stats_) {
+            const auto path = ProjectSettings::get_singleton()->globalize_path("user://matches");
+            stats_ = std::make_unique<rts::StatsManager>(path.utf8().get_data());
+        }
+        const auto value = stats_->get_summary();
+        summary["total_matches"] = static_cast<int64_t>(value.total_matches);
+        summary["total_wins"] = static_cast<int64_t>(value.total_wins);
+        summary["total_losses"] = static_cast<int64_t>(value.total_losses);
+        summary["average_duration_ticks"] = value.average_match_duration_ticks;
+        return summary;
     }
 
     ~RtsExtension() override {
@@ -1203,6 +1284,8 @@ public:
 
 private:
     bool started_ = false;
+    int recorded_result_ = -1;
+    std::unique_ptr<rts::StatsManager> stats_;
 };
 
 void initialize_rts_extension_module(ModuleInitializationLevel level) {

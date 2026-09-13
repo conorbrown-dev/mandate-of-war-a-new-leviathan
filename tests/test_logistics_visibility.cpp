@@ -108,6 +108,31 @@ TEST(logistics_visibility_is_safe_return) {
     }
 }
 
+TEST(logistics_visibility_safe_return_uses_detour_route) {
+    LogisticsManager manager;
+    ComponentManager components;
+    manager.set_component_manager(&components);
+    Carrier carrier{};
+    carrier.tier = Carrier::Tier::T1_LIGHT;
+    carrier.x = 8.0f; carrier.y = 1.0f;
+    carrier.runway_capacity = 1; carrier.deck_capacity = 2;
+    carrier.runway_usable = true; carrier.refuel_rate = 100.0f; carrier.rearm_rate = 20.0f;
+    carrier.max_fuel = carrier.current_fuel = 5000.0f;
+    carrier.max_munitions = carrier.current_munitions = 1000.0f;
+    manager.add_carrier(41, carrier);
+    Aircraft aircraft{};
+    aircraft.x = 1.0f; aircraft.y = 1.0f; aircraft.fuel = 100.0f; aircraft.max_fuel = 100.0f;
+    aircraft.fuel_consumption_rate = 0.5f; aircraft.material = aircraft.max_material = 20.0f;
+    aircraft.material_consumption_rate = 0.02f; aircraft.cruise_speed = 100.0f;
+    aircraft.status = Aircraft::Status::AIRBORNE; aircraft.type = Aircraft::Type::CONVENTIONAL;
+    components.add_component<Aircraft>(42, aircraft);
+    Pathfinding pathfinding(16, 8, 1.0f, 0.0f, 0.0f);
+    pathfinding.block_world_rectangle(4.0f, 1.0f, 0.5f, 0.5f);
+    const auto estimate = manager.estimate_safe_return(42, pathfinding);
+    if (estimate.facility_id != 41 || estimate.distance <= std::sqrt(49.0f) + 25.0f)
+        throw std::runtime_error("safe_return_did_not_use_longer_detour_route");
+}
+
 TEST(logistics_visibility_intelligence_age) {
     LogisticsManager manager;
     ComponentManager component_manager;

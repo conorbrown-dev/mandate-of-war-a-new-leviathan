@@ -1,11 +1,11 @@
 # Current State — Reconciled Evidence Boundary
 
-**Date:** 2026-09-12
-**Milestone state:** Goals 03–07 are verified; Goal 08 is ACTIVE. Goals 09–11 are gated. Consolidated candidate work on `main` is not accepted as a milestone bypass. See `docs/WORKTREE_RECONCILIATION.md`.
+**Date:** 2026-09-13
+**Milestone state:** Goals 03–11 are verified. No canonical Goal 12 specification exists. Consolidated candidate work on `main` is not accepted as a milestone bypass. See `docs/WORKTREE_RECONCILIATION.md`.
 
 ## Reconciliation Result — 2026-09-12
 
-The prior Goal 11 headline is historical, not current acceptance. Fresh local evidence passes the Release build, CTest 3/3, direct runners, Godot smoke, 91-check presentation harness, and four repository-owned validation scenarios. Goals 03–07 are verified; Goal 08 is the active sequential gate.
+Fresh local evidence passes the Release build, CTest 3/3, direct runners, Godot smoke, the 91-check presentation harness, all model/terrain/map-editor harnesses, and four repository-owned validation scenarios. Goals 03–11 are verified; no canonical Goal 12 specification exists.
 
 ## Goal 07 closure — deterministic AI foundation
 
@@ -14,7 +14,7 @@ strategic BUILD/RESEARCH/HARVEST, and deterministic operational plans. Focus
 fire, low-health retreat, stable eight-unit grouping, public front/staging,
 richest-unclaimed resource expansion, equal-world byte-identical command
 generation, and a bounded 128-vs-128 decision are current assertions. Release,
-CTest 3/3, `rts_tests` 20/20, and direct integration 176/176 pass.
+CTest 3/3, `rts_tests` 20/20, and direct integration 177/177 pass.
 
 - `rts_logistics_benchmark 10000 30 100` passes at 0.951 ms cache-hit average (p95 1.488 ms) against its 15 ms limit, exercising 10,000 airborne conventional aircraft, 30 mobile carriers, safe-return and facility lookup caches, and periodic intelligence updates.
 
@@ -65,6 +65,22 @@ Manifest loading now rejects missing or incompatible `>=` dependencies before
 unit content is registered; the integration suite proves reject-before-base,
 accept-after-compatible-base, and incompatible-version rejection. Batch
 dependency ordering and transactional multi-mod loading remain open.
+
+## Terrain Grounding and Placement Correction — 2026-09-13
+
+Ground-unit height sampling now interpolates the same heightfield triangle split
+rendered by Godot instead of snapping to 125 m sample plateaus. The imported
+Industrial Field Engineer is grounded by its actual lowest mesh point with a
+5 cm clearance, and the movement validation measures that clearance throughout
+the route. Structure profiles now use tactical footprints and more forgiving
+grade limits; airfields reserve a 250 x 750 m operational corridor instead of
+the previous 600 x 1,800 m footprint. Interactive placement searches stable
+125 m rings up to 1 km and shows/uses the same nearby valid target.
+
+Current evidence: Release build passes; CTest passes 3/3 outside the sandbox
+(localhost TCP is denied inside it); the direct integration runner passes
+178/178; `basic_selection_move` and `airfield_fighter_ferry` pass headlessly and
+as NVIDIA GPU-rendered runs with required screenshots and AVI recordings.
 
 ## Gameplay Validation Package — 2026-09-12
 
@@ -347,13 +363,29 @@ resource, and infrastructure corridors remain protected. Release build, CTest
 scope.
 
 FEATURE-001 is complete for the current terrain presentation scope. The
-placeholder cone forest has been replaced by a shared low-poly tree mesh with
-a trunk and three layered canopy surfaces, while strategic zoom switches to a
-lower-cost cone representation at 5 km camera distance. Both representations
-remain batched through MultiMesh, and the tactical/strategic transition is
-covered by the Godot presentation harness. Release build, CTest 3/3, direct
-integration runner 162/162, and Godot presentation 85/85 pass. External
-production tree assets and biome-specific art remain future polish.
+three user-supplied GLBs (`oak_tree1.glb`–`oak_tree3.glb`) are now converted
+into active Godot tactical forest forms. The default Broken Strait map places
+960 heightmap-grounded trees in nine deterministic large groves: 440 medium,
+440 compact, and 80 tall forms, with 8.12–15.72 m Godot mesh-height diversity and a
+lower-cost strategic representation.
+The supplied classic and animated trees are also imported as optional Godot
+assets. The conversion, registry, and skirmish harnesses pass locally;
+biome-specific placement/art direction remains future polish.
+
+`tools/validate oak_grove_showcase --rendered --require-screenshots --record`
+also passes on the RTX 4070 Ti SUPER Compatibility renderer: 13 assertions
+verify the 960/480 tactical/strategic population, configured scale variation,
+8.12–15.72 m imported-mesh height diversity, heightmap grounding, and a 93-tree
+dense showcased grove containing all three active forms. It emits close,
+tactical, and strategic screenshots plus a 1280x720 30 FPS AVI.
+Tree placement is calibrated against each mesh AABB's lowest vertex, with an
+8 cm root embed depth; validation rejects roots more than 15 cm below or 2 cm
+above the sampled heightmap.
+
+The five supplied English-oak USD stages are also converted and Godot-imported
+as optional geometry-only GLBs. Their 0.28–1.04 million-triangle source meshes
+and missing USD material bindings make them unsuitable for the active
+MultiMesh forest without a dedicated optimization/material-authoring pass.
 
 FEATURE-007 is complete for the current resource-HUD scope. Material, Energy,
 and the future Research slot now use one shared vector-drawn icon language:
@@ -540,9 +572,9 @@ All acceptance criteria verified in this session:
 - ✅ **G10-BIOMES**: HeightMap.gd `get_biome()` implements ocean/coast/plains/hills/mountains per thresholds
 - ✅ **G10-MESH/G10-RENDERING**: HeightMap.gd `generate_terrain_mesh()` produces Godot ArrayMesh with vertices/normals/colors
 - ✅ **G10-LOADING**: `_setup_terrain_from_heightmap()` integrated into `main.gd _ready()`
-- ✅ **G10-COLLISION**: `Terrain` class in `src/simulation/terrain.{hpp,cpp}` with `height_at()` query
-- ✅ **G10-TESTS**: 3 terrain integration tests pass
-- ✅ **G10-BENCH**: Scale benchmark 1000 units @ 169.227ms cold, 0.711ms avg cache-hit
+- ✅ **G10-COLLISION**: `Terrain` class in `src/simulation/terrain.{hpp,cpp}` with `height_at()` query; ground units follow terrain Z after movement
+- ✅ **G10-TESTS**: CTest/direct terrain and road assertions plus `test_goal10_terrain.gd` (9 assertions) pass
+- ✅ **G10-BENCH**: Release scale benchmark 1000 units @ 650.108ms cold field generation, 0.723ms cache-hit average (p95 0.798ms, max 2.260ms)
 
 **Build status:** Release build successful, CTest 1/1 pass (134/137 integration tests passing, 6 pre-existing failures unrelated to terrain).
 
@@ -610,7 +642,7 @@ All command execution logic is complete:
 
 ## Review Findings
 
-**Goal 08 is complete.** All acceptance criteria verified:
+**Goal 08 is verified.** The setup menu now offers an explicit native `START SKIRMISH` route (`native_skirmish.tscn`) backed by the deterministic `Skirmish` controller; the 40 km route is clearly labeled `OPEN PRESENTATION LAB`. Native setup, fog-limited state, authoritative command submission, terminal result, replay verification, historical stats, rematch, aircraft sortie/endurance, naval stranding/resupply, and current-to-stale intelligence aging are covered by an 18-assertion Godot harness.
 
 ### G08-COMMANDS Authority
 - Ownership validation at `validate_command()` sim.cpp:452: `owner->faction_id == cmd.player_id`
@@ -618,16 +650,14 @@ All command execution logic is complete:
 - Type/bounds/capacity checks at sim.cpp:455-492
 - RESEARCH command execution via `production_manager_.begin_research()` in process_command_internal()
 
-### G08-ECONOMY & G08-UX
-- Full build/research cycle verified in `commands_owned_factory_build_research_and_destruction` (137/137 integration tests pass)
-- `skirmish_state()` exposes resources, income, research, logistics, match result to Godot (gd_extension.cpp:261-346)
-- `main.gd` HUD displays all state (economy:868, production:882, research:884-892, logistics:869-880)
-- Endgame UI: main.gd:773-798 displays winner/duration/rematch/exit
+### G08-ECONOMY, UX, Match, and Replay
+- Native build/research and replay integrity behavior are covered by the direct runner.
+- `skirmish_state()` exposes resources, income, research, logistics, and match result to Godot.
+- The native route HUD is driven directly from `skirmish_state()` and includes map/faction, resources/income, tick state, selection, move/attack/stop/patrol/defend/return/build/research/harvest command status, health/projectiles, air recovery queues/fuel, naval stranded count, current/stale intelligence, pause, result, replay, historical match count, and rematch/exit. The legacy `main.gd` HUD remains a separate presentation lab.
 
 ### G08-PERF
-- Skirmish benchmark: 282 survivors, 400 ticks, avg 1.03ms (p50:0.67ms, p95:2.66ms, max:7.2ms < 50ms budget)
-
-All 137 integration tests pass, including skirmish tests verifying full match loop with AI production and research.
+- Fresh Release benchmark: 1,051 initial entities, 525 survivors, 400 active ticks, 400 moving ticks, 143 projectile ticks, and one completed production order. Avg 1.643 ms, p50 0.267 ms, p95 6.503 ms, max 23.239 ms (<50 ms).
+- Fresh validation: CTest 3/3, direct integration runner 176 assertions, behavior runner 20 assertions, native Godot smoke, legacy presentation harness 91 assertions, and native-controller Godot setup-to-result/replay/rematch/logistics/intelligence harness 18 assertions passed.
 
 ## Verification Commands
 

@@ -1,0 +1,8 @@
+map_version: "1.0"
+id: "native_editor"
+name: "native_editor"
+dimensions:
+  width: 64
+  height: 64
+  tile_size: 16.0
+  max_elevation: 512

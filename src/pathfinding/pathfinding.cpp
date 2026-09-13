@@ -157,7 +157,7 @@ float Pathfinding::heuristic(int x, int y, int dx, int dy) const {
     return static_cast<float>(std::abs(x - dx) + std::abs(y - dy)) * 0.25f;
 }
 
-std::vector<std::pair<float, float>> Pathfinding::find_path(float sx, float sy, float dx, float dy) {
+std::vector<std::pair<float, float>> Pathfinding::find_path(float sx, float sy, float dx, float dy) const {
     const int sx_grid = to_grid_x(sx);
     const int sy_grid = to_grid_y(sy);
     const int dx_grid = to_grid_x(dx);
@@ -358,6 +358,7 @@ std::pair<float, float> Pathfinding::flow_direction(float x, float y, float dx, 
     const int dx_grid = to_grid_x(dx);
     const int dy_grid = to_grid_y(dy);
     if (!is_walkable(dx_grid, dy_grid)) {
+        std::fprintf(stderr, "DEBUG: flow_direction destination not walkable at (%d,%d)\n", dx_grid, dy_grid);
         return {0.0f, 0.0f};
     }
 

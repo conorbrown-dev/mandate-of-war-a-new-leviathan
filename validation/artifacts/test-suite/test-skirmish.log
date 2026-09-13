@@ -8,6 +8,6 @@ Started Broken Strait with 1 player Field Engineer and 1 AI Field Engineer
 WARNING: Field Engineer could not queue this unit
    at: push_warning (core/variant/variant_utility.cpp:1033)
    GDScript backtrace (most recent call first):
-       [0] _queue_commander_unit (res://main.gd:2064)
+       [0] _queue_commander_unit (res://main.gd:2072)
        [1] _run (res://test_skirmish.gd:184)
 GODOT_SKIRMISH_PRESENTATION checks=91 failures=0

@@ -1,0 +1,16 @@
+{
+  "category": "nature",
+  "godot_forward": "-Z",
+  "godot_up": "+Y",
+  "bounds_m": {
+    "x": 3.1685134172439575,
+    "y": 17.065309401834384,
+    "z": 3.0456804037094116
+  },
+  "triangles_all_exported_meshes": 965969,
+  "usage": "optional English-oak USD geometry conversion; deferred from active forest due to source triangle count",
+  "source_asset": "downloaded_assets/trees/tree_english_oak_forest_01_usd/Tree_English_Oak_Forest_01_A.usd",
+  "source_object": "largest render mesh",
+  "source_pipeline": "User-provided USD conversion; usd-core 26.8; geometry-only GLB",
+  "material_status": "No USD material binding was present in the supplied stage; material authoring remains deferred."
+}
