@@ -10,7 +10,7 @@ Goal 06 is complete when:
 
 | ID | Criterion | Status |
 |----|-----------|--------|
-| G06-NETWORKING | Two local instances can play a minimal match over LAN/direct connect | ⏸️ TODO |
+| G06-NETWORKING | Two local instances can play a minimal match over LAN/direct connect | ⏳ Transport verified 2026-09-12: loopback listen/connect/serialized batch exchange passes; simulation match integration remains. |
 | G06-REPLAY | Replay reproduces that match for the established simulation model | ⏸️ TODO |
 | G06-STATS | Historical stats persist (schema + storage) | ✅ Verified 2026-09-12: `stats_persist_and_summarize_match_history` writes, reloads, and aggregates two matches. |
 | G06-AI | Basic offline AI opponent can play | ⏸️ TODO |

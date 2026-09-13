@@ -2,11 +2,13 @@
 #include "network/types.hpp"
 #include "network/serializer.hpp"
 #include "network/buffer.hpp"
+#include "network/network_manager.hpp"
 #include "simulation/command_manager.hpp"
 
 #include <cmath>
 #include <cstring>
 #include <limits>
+#include <thread>
 
 TEST(input_command_serialization) {
     using namespace rts;
@@ -146,6 +148,35 @@ TEST(command_manager_capacity_is_fail_closed) {
     if (!manager.inject_local_command(first) || manager.inject_local_command(second) ||
         manager.local_command_count() != 1) {
         throw std::runtime_error("Command queue must reject overflow without partial mutation");
+    }
+}
+
+TEST(network_loopback_frame_batch_round_trip) {
+    using namespace rts;
+    constexpr uint16_t port = 51234;
+    NetworkManager server;
+    NetworkManager client;
+    if (!server.listen(port)) throw std::runtime_error("Loopback server failed to listen");
+    bool connected = false;
+    std::thread connector([&] { connected = client.connect("127.0.0.1", port); });
+    if (!server.accept()) {
+        connector.join();
+        throw std::runtime_error("Loopback server failed to accept");
+    }
+    connector.join();
+    if (!connected) throw std::runtime_error("Loopback client failed to connect");
+    FrameCommandBatch sent{};
+    sent.tick = 4;
+    sent.command_count = 1;
+    sent.commands[0].tick_id = 4;
+    sent.commands[0].entity_id = 7;
+    sent.commands[0].player_id = 1;
+    sent.commands[0].cmd_type = static_cast<uint8_t>(CommandType::MOVE);
+    client.send_frame_command_batch(sent);
+    FrameCommandBatch received{};
+    if (!server.receive_frame_command_batch(received) || received.tick != 4 || received.command_count != 1 ||
+        received.commands[0].entity_id != 7 || received.commands[0].cmd_type != sent.commands[0].cmd_type) {
+        throw std::runtime_error("Loopback command batch did not round-trip");
     }
 }
 

@@ -79,6 +79,8 @@ bool TcpTransport::connect(const std::string& host, uint16_t port) {
     
     connected_ = true;
     is_server_ = false;
+    // Client and server use the same active socket abstraction below.
+    client_socket_ = socket_;
     bytes_sent_ = 0;
     bytes_received_ = 0;
     last_activity_time_ = 0.0f;
