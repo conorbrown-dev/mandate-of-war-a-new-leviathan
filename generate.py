@@ -5,6 +5,7 @@ Generates unit definitions, meshes, materials, and metadata from faction/tier/ro
 """
 
 import argparse
+import hashlib
 import json
 import os
 import sys
@@ -12,6 +13,7 @@ from pathlib import Path
 
 # Base path for generated assets
 BASE_PATH = Path(__file__).parent.parent / "data" / "generated_units"
+GENERATOR_VERSION = "1.0"
 
 def generate_unit(faction: str, tier: int, role: str, **kwargs) -> dict:
     """Generate a unit definition from faction/tier/role parameters."""
@@ -99,6 +101,14 @@ def save_unit(unit: dict, output_dir: Path) -> Path:
     
     return output_path
 
+def save_metadata(unit: dict, output_dir: Path) -> Path:
+    canonical = json.dumps(unit, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    metadata = {"generator_version": GENERATOR_VERSION, "unit_id": unit["id"], "definition_sha256": hashlib.sha256(canonical).hexdigest()}
+    path = output_dir / f"{unit['id']}.metadata.json"
+    with open(path, "w") as f:
+        json.dump(metadata, f, indent=2, sort_keys=True)
+    return path
+
 def generate_mesh(unit: dict, output_dir: Path) -> Path:
     """Generate a procedural placeholder mesh for the unit."""
     mesh_dir = output_dir / "meshes"
@@ -149,8 +159,10 @@ def main():
     mesh_path = generate_mesh(unit, args.output)
     unit["placeholder_mesh"] = str(mesh_path.relative_to(args.output))
     unit_path = save_unit(unit, args.output)
+    metadata_path = save_metadata(unit, args.output)
     print(f"Generated unit: {unit_path}")
     print(f"Generated mesh: {mesh_path}")
+    print(f"Generated metadata: {metadata_path}")
     
     return 0
 
