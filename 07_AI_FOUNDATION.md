@@ -1,6 +1,6 @@
 # Goal 07 — Deterministic AI Foundation
 
-**Status:** VERIFIED  
+**Status:** VERIFIED
 **Reference:** `docs/AI_ARCHITECTURE.md`, `docs/EXECUTION_LEDGER.md`  
 **Last updated:** 2026-09-07
 
@@ -10,14 +10,14 @@ Goal 07 is complete when:
 
 | ID | Criterion | Status |
 |----|-----------|--------|
-| G07-COMMANDS | AI can generate and submit commands identical to human players | ✅ VERIFIED |
-| G07-TACTICAL | Tactical AI: target selection, positioning, retreat, focus fire | ✅ VERIFIED |
-| G07-OPERATIONAL | Operational AI: army grouping, front determination, staging | ✅ VERIFIED |
-| G07-DETERMINISTIC | Same state + same inputs → same AI decisions (verified by test) | ✅ VERIFIED |
-| G07-TESTS | AI unit tests (determinism, validity, performance) pass | ✅ VERIFIED |
-| G07-STRATEGIC | Strategic AI: economy, expansion, research prioritization with DeterministicRNG tie-breaking | ✅ VERIFIED |
-| G07-VERIFIED | Codex review evaluated; all tests pass | ✅ VERIFIED |
-| G07-STATE | docs/state updated (OPENCODE_HANDOFF, CURRENT_STATE, NEXT_TASKS) | ✅ VERIFIED |
+| G07-COMMANDS | AI can generate and submit commands identical to human players | ✅ Verified 2026-09-12: tactical and strategic tests require validated ATTACK, MOVE, BUILD, RESEARCH, and HARVEST commands in the normal simulation queue. |
+| G07-TACTICAL | Tactical AI: target selection, positioning, retreat, focus fire | ✅ Verified 2026-09-12: visible focus target, engagement positioning, base-threat priority, and low-health retreat are asserted. |
+| G07-OPERATIONAL | Operational AI: army grouping, front determination, staging | ✅ Verified 2026-09-12: stable eight-unit groups and deterministic front/staging coordinates are asserted. |
+| G07-DETERMINISTIC | Same state + same inputs → same AI decisions (verified by test) | ✅ Verified 2026-09-12: equal worlds produce byte-identical queued commands and plans. |
+| G07-TESTS | AI unit tests (determinism, validity, performance) pass | ✅ Verified 2026-09-12: focused visibility, tactical, operational, strategic, deterministic, and 128-vs-128 latency assertions pass. |
+| G07-STRATEGIC | Strategic AI: economy, expansion, research prioritization with DeterministicRNG tie-breaking | ✅ Verified 2026-09-12: research/production queueing and richest-unclaimed-resource selection/claim are asserted through authoritative commands. |
+| G07-VERIFIED | Codex review evaluated; all tests pass | ✅ Verified 2026-09-12: `docs/GOAL_07_ARCHITECTURE_REVIEW.md`; Release, CTest 3/3, `rts_tests` 20/20, direct 176/176 pass. |
+| G07-STATE | docs/state updated (OPENCODE_HANDOFF, CURRENT_STATE, NEXT_TASKS) | ✅ Verified 2026-09-12: state, review, and next-goal routing are synchronized. |
 
 ## Previous Goal Status
 

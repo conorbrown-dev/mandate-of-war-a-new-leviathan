@@ -1,11 +1,20 @@
 # Current State — Reconciled Evidence Boundary
 
 **Date:** 2026-09-12
-**Milestone state:** Goals 03–06 are verified; Goal 07 is ACTIVE. Goals 08–11 are gated. Consolidated candidate work on `main` is not accepted as a milestone bypass. See `docs/WORKTREE_RECONCILIATION.md`.
+**Milestone state:** Goals 03–07 are verified; Goal 08 is ACTIVE. Goals 09–11 are gated. Consolidated candidate work on `main` is not accepted as a milestone bypass. See `docs/WORKTREE_RECONCILIATION.md`.
 
 ## Reconciliation Result — 2026-09-12
 
-The prior Goal 11 headline is historical, not current acceptance. Fresh local evidence passes the Release build, CTest 3/3, direct runners, Godot smoke, 91-check presentation harness, and four repository-owned validation scenarios. Goals 03–06 are verified; Goal 07 is the active sequential gate.
+The prior Goal 11 headline is historical, not current acceptance. Fresh local evidence passes the Release build, CTest 3/3, direct runners, Godot smoke, 91-check presentation harness, and four repository-owned validation scenarios. Goals 03–07 are verified; Goal 08 is the active sequential gate.
+
+## Goal 07 closure — deterministic AI foundation
+
+`AIManager` now uses authoritative simulation commands for tactical ATTACK/MOVE,
+strategic BUILD/RESEARCH/HARVEST, and deterministic operational plans. Focus
+fire, low-health retreat, stable eight-unit grouping, public front/staging,
+richest-unclaimed resource expansion, equal-world byte-identical command
+generation, and a bounded 128-vs-128 decision are current assertions. Release,
+CTest 3/3, `rts_tests` 20/20, and direct integration 176/176 pass.
 
 - `rts_logistics_benchmark 10000 30 100` passes at 0.951 ms cache-hit average (p95 1.488 ms) against its 15 ms limit, exercising 10,000 airborne conventional aircraft, 30 mobile carriers, safe-return and facility lookup caches, and periodic intelligence updates.
 

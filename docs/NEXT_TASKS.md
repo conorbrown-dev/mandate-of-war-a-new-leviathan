@@ -1,12 +1,11 @@
 # Next Tasks — Reconciled Sequential Recovery
 
-**Updated:** 2026-09-12. Goals 05 and 06 are verified; Goal 07 is active. Goals 08–11 are gated. See `docs/WORKTREE_RECONCILIATION.md`.
+**Updated:** 2026-09-12. Goals 05–07 are verified; Goal 08 is active. Goals 09–11 are gated. See `docs/WORKTREE_RECONCILIATION.md`.
 
-## Active: Goal 07 — deterministic AI foundation
+## Active: Goal 08 — playable skirmish vertical slice
 
-1. Read `07_DETERMINISTIC_AI_FOUNDATION.md` and reconcile its criteria against current code before accepting historical AI claims.
-2. Add only the narrow deterministic behavior evidence required by the Goal 07 criteria, then run its focused tests, Release build, CTest, and direct runner.
-3. Record the focused review and advance only after every Goal 07 criterion is evidenced.
+1. Read `08_PLAYABLE_SKIRMISH_VERTICAL_SLICE.md` and reconcile its explicit TODO/in-progress rows against current code and presentation evidence.
+2. Work only the first unverified Goal 08 acceptance criterion; add a representative scenario rather than relying on historical smoke or benchmark claims.
 
 ## Gated work
 

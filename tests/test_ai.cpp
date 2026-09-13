@@ -214,6 +214,28 @@ TEST(ai_strategic_research_and_production_use_authoritative_commands) {
             "Strategic build command must enter the authoritative production queue");
 }
 
+TEST(ai_strategic_expansion_claims_best_unclaimed_resource_with_authoritative_command) {
+    Simulation sim;
+    sim.start();
+    sim.create_faction_base(FactionId::MASS_WARFARE, 0, 0);
+    const auto scout = sim.create_unit_with_type(5, 0, UnitType::MASS_SWARM_TANK, FactionId::MASS_WARFARE);
+    sim.production_manager().add_resource_node(42, ResourceNode{30, 0, 100, 100, ResourceNode::Type::METAL, false});
+    sim.production_manager().add_resource_node(43, ResourceNode{40, 0, 200, 200, ResourceNode::Type::METAL, false});
+    sim.ai_manager().set_faction_id(FactionId::MASS_WARFARE);
+    sim.ai_manager().update(1000.0f);
+    require(sim.ai_manager().expansion_target() == 43, "Strategic expansion chooses the richest unclaimed resource with stable tie-breaking");
+    bool harvest = false;
+    for (const auto& command : sim.command_manager().get_local_commands()) {
+        harvest |= command.entity_id == scout && command.cmd_type == static_cast<uint8_t>(CommandType::HARVEST) &&
+            command.target_x == 4000 && command.target_y == 0;
+    }
+    require(harvest, "Strategic expansion must submit an authoritative HARVEST command");
+    sim.update(50.0f);
+    require(!sim.production_manager().extractors().empty() &&
+            sim.production_manager().extractors().begin()->second.resource_node_id == 43,
+            "Strategic expansion command must create an extractor on the selected resource node");
+}
+
 TEST(ai_decision_latency_is_bounded_for_active_force) {
     Simulation sim;
     sim.start();

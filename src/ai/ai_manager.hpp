@@ -27,6 +27,7 @@ public:
     std::vector<EntityId> get_enemy_units() const;
     const std::vector<std::vector<EntityId>>& army_groups() const { return army_groups_; }
     EntityId focus_target() const { return focus_target_; }
+    EntityId expansion_target() const { return expansion_target_; }
     float front_x() const { return front_x_; }
     float front_y() const { return front_y_; }
     float staging_x() const { return staging_x_; }
@@ -46,6 +47,7 @@ private:
     std::vector<EntityId> enemy_units_;
     std::vector<std::vector<EntityId>> army_groups_;
     EntityId focus_target_{INVALID_ENTITY};
+    EntityId expansion_target_{INVALID_ENTITY};
     float front_x_{0.0f}, front_y_{0.0f};
     float staging_x_{0.0f}, staging_y_{0.0f};
     
@@ -54,6 +56,7 @@ private:
     
     void update_visibility();
     void update_operational_plan();
+    void plan_expansion();
     EntityId select_focus_target(EntityId base) const;
     bool objective_set_ = false;
     float objective_x_ = 0, objective_y_ = 0;

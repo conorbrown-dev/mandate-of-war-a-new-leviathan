@@ -33,6 +33,7 @@ void AIManager::update(float delta_ms) {
         update_visibility();
         gather_resources();
         produce_units();
+        plan_expansion();
         update_operational_plan();
         defend_base();
         
@@ -47,6 +48,7 @@ void AIManager::reset() {
     enemy_units_.clear();
     army_groups_.clear();
     focus_target_ = INVALID_ENTITY;
+    expansion_target_ = INVALID_ENTITY;
     front_x_ = front_y_ = staging_x_ = staging_y_ = 0.0f;
     time_since_last_decision_ = 0.0f;
     objective_set_ = false;
@@ -130,6 +132,44 @@ void AIManager::produce_units() {
         return ca != cb ? ca < cb : a < b;
     });
     if (!candidates.empty()) simulation_->issue_build_commands({base}, faction_id_, 0, 0, static_cast<int>(candidates.front()));
+}
+
+void AIManager::plan_expansion() {
+    if (!simulation_) return;
+    const auto base = simulation_->production_manager().faction_line(faction_id_);
+    if (base == INVALID_ENTITY) return;
+    std::vector<EntityId> mobile;
+    for (EntityId unit : visible_units_) {
+        if (unit == base) continue;
+        const auto* data = simulation_->component_manager().get_component<UnitData>(unit);
+        if (data && data->speed > 0.0f) mobile.push_back(unit);
+    }
+    if (mobile.empty()) return;
+    std::sort(mobile.begin(), mobile.end());
+    std::vector<EntityId> nodes;
+    for (const auto& [id, node] : simulation_->production_manager().resource_nodes()) {
+        if (!node.depleted && node.amount > 0.0f) nodes.push_back(id);
+    }
+    std::sort(nodes.begin(), nodes.end());
+    EntityId selected = INVALID_ENTITY;
+    float selected_amount = -1.0f;
+    for (EntityId id : nodes) {
+        bool claimed = false;
+        for (const auto& [extractor_id, extractor] : simulation_->production_manager().extractors()) {
+            (void)extractor_id;
+            if (extractor.resource_node_id == id && extractor.active) { claimed = true; break; }
+        }
+        const auto& node = simulation_->production_manager().resource_nodes().at(id);
+        if (!claimed && (node.amount > selected_amount || (node.amount == selected_amount && id < selected))) {
+            selected = id;
+            selected_amount = node.amount;
+        }
+    }
+    expansion_target_ = selected;
+    if (selected != INVALID_ENTITY) {
+        const auto& node = simulation_->production_manager().resource_nodes().at(selected);
+        simulation_->issue_harvest_commands({mobile.front()}, faction_id_, node.x, node.y);
+    }
 }
 
 void AIManager::attack_enemy() {
