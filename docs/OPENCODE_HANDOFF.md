@@ -15,7 +15,7 @@
 
 ## Current State
 
-**Active goal:** Goal 05 modding, asset pipeline, and map-editor acceptance. Goals 06–11 are gated. Earlier Goal 11 and Goal 12 wording below is historical implementation context, not current acceptance routing.
+**Active goal:** Goal 06 multiplayer, replays, stats, and AI acceptance. Goals 07–11 are gated. Goal 05 is verified; its review is `docs/GOAL_05_ARCHITECTURE_REVIEW.md`.
 
 **Reconciliation:** `main` is `1846132`; the prior `9c295bf` baseline is absent. A substantial dirty-tree implementation package is preserved, and `stash@{0}` remains unapplied user work. The model-integration branch has no commits absent from `main`, while its registered external worktree is unavailable. See `docs/WORKTREE_RECONCILIATION.md`.
 

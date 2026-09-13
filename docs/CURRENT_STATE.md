@@ -1,7 +1,7 @@
 # Current State — Reconciled Evidence Boundary
 
 **Date:** 2026-09-12
-**Milestone state:** Goals 03 and 04 are verified; Goal 05 is ACTIVE. Goals 06–11 are gated. Consolidated candidate work on `main` is not accepted as a milestone bypass. See `docs/WORKTREE_RECONCILIATION.md`.
+**Milestone state:** Goals 03–05 are verified; Goal 06 is ACTIVE. Goals 07–11 are gated. Consolidated candidate work on `main` is not accepted as a milestone bypass. See `docs/WORKTREE_RECONCILIATION.md`.
 
 ## Reconciliation Result — 2026-09-12
 

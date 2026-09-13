@@ -1,5 +1,10 @@
 # Asset Pipeline
 
+> **Goal 05 reproducibility boundary (2026-09-12):** `generate.py` writes a
+> linked unit definition, placeholder mesh, and metadata record. Metadata
+> contains `generator_version` and a SHA-256 of the canonical sorted definition
+> so an output can be reproduced and audited without cloud services.
+
 > **Goal 05 status (2026-09-12):** `generate.py` produces a unit JSON file and
 > procedural placeholder mesh metadata as a linked pair. The generated file is
 > valid only when optional CLI values preserve defaults and its

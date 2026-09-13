@@ -1,5 +1,11 @@
 # Modding
 
+> **Goal 05 safety boundary (2026-09-12):** Manifest `scripts` entries are
+> declarative only. `ModManager` neither opens nor executes them; no scripting
+> runtime is part of this release. Generated units are schema-validated before
+> registration, dependency batches are deterministic and atomic, and content
+> identities use full SHA-256 handles.
+
 > **Goal 05 status (2026-09-12):** A manifest-declared generated unit is now
 > schema-validated with its placeholder mesh, assigned a stable SHA-256 content
 > handle, and spawnable through the development simulation bridge. Dependency

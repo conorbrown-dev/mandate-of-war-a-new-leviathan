@@ -2,7 +2,7 @@
 
 **Last updated:** 2026-09-12
 
-**Sequence mode:** reconciliation complete; Goals 03 and 04 are verified and Goal 05 is ACTIVE. Goals 06–11 are GATED.
+**Sequence mode:** reconciliation complete; Goals 03–05 are verified and Goal 06 is ACTIVE. Goals 07–11 are GATED.
 
 **Milestone state:** Goals 02–04 have current local validation evidence. Goal 05 is now the active acceptance gate; candidate later-goal implementation cannot bypass it. See `docs/WORKTREE_RECONCILIATION.md`.
 
@@ -27,8 +27,8 @@ Historical Goal 04–11 labels below are retained as implementation reports, not
 | Goal 02 — simulation, scale, rendering, controls | `HISTORICAL` | Functional scale harnesses remain available, but historical performance rows are not current evidence for this dirty checkout. |
 | Goal 03 — economy, combat, factions | `VERIFIED` | `G03-COMBAT-BENCH` passes with meaningful target acquisition, projectile fire, destruction, state evolution, and a cache-hit average under the 12 ms gate. |
 | Goal 04 — logistics, air, naval, intelligence | `VERIFIED` | All 14 required behaviors map to current deterministic assertions; focused review and remediation are recorded in `docs/LOGISTICS_ARCHITECTURE_REVIEW.md`; Release/CTest/direct/benchmark evidence passed 2026-09-12. |
-| Goal 05 — modding, asset pipeline, map editor | `ACTIVE` | Generated-unit spawning, native map save/load, atomic dependency loading, and editor controls are verified. Editor exports a canonical bundle which reloads through RtsExtension/MapLoader (170 direct assertions plus headless editor assertions; 2026-09-12). Asset reproducibility metadata and required review remain. |
-| Goal 06 — multiplayer, replays, stats, AI | `GATED` | Its own numbered specification marks all acceptance criteria TODO. |
+| Goal 05 — modding, asset pipeline, map editor | `VERIFIED` | Loadable test mod, generated-unit spawning, native map round-trip, editor draft/native export, deterministic atomic dependencies, reproducibility metadata, and focused review all pass (Release; CTest 3/3; direct 170/170; headless editor/export assertions; 2026-09-12). |
+| Goal 06 — multiplayer, replays, stats, AI | `ACTIVE` | Begin with its canonical numbered specification; historical candidate systems are not acceptance evidence. |
 | Goal 07 — deterministic AI foundation | `GATED` | Candidate implementation exists, but it cannot close while earlier goals are gated. |
 | Goal 08 — playable skirmish vertical slice | `GATED` | Its specification retains in-progress rows and requires complete-flow visual/replay/stat evidence. |
 | Goal 09 — logistics improvements | `UNSPECIFIED` | No canonical root goal document exists. |

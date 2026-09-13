@@ -1,10 +1,10 @@
 # Next Tasks — Reconciled Sequential Recovery
 
-**Updated:** 2026-09-12. Goal 04 is verified; Goal 05 is active. Goals 06–11 are gated. See `docs/WORKTREE_RECONCILIATION.md`.
+**Updated:** 2026-09-12. Goal 05 is verified; Goal 06 is active. Goals 07–11 are gated. See `docs/WORKTREE_RECONCILIATION.md`.
 
-## Active: Goal 05 — modding, asset pipeline, map editor
+## Active: Goal 06 — multiplayer, replays, stats, AI
 
-1. Read `05_MODDING_ASSET_PIPELINE_MAP_EDITOR.md` and reconcile its acceptance criteria with current code.
+1. Read the canonical Goal 06 specification and reconcile its acceptance criteria with current code.
 2. Verified slice: load a test mod, validate its generated unit and placeholder mesh, and spawn it through the development simulation bridge.
 3. Verified slice: native map save/load round-trips terrain, resources, spawn points, and initial entities.
 4. Verified slice: manifest loading enforces already-loaded dependency presence and compatible `>=` versions.
@@ -12,7 +12,7 @@
 6. Verified slice: staged batch loading publishes no partial manifests or generated units when a later asset fails.
 7. Verified slice: standalone Godot editor state supports terrain/water, bounds, spawns, resources, and entities with headless assertions.
 8. Verified slice: editor state exports a canonical map bundle and native MapLoader reloads it through RtsExtension.
-9. Finish asset reproducibility metadata and required modding/asset/map review before advancing.
+9. Goal 05 review is recorded in `docs/GOAL_05_ARCHITECTURE_REVIEW.md`; rerun the full closure matrix and advance only if it passes.
 
 ## Gated work
 
