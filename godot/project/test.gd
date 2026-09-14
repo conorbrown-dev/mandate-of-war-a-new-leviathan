@@ -80,18 +80,21 @@ func _init() -> void:
 	var accepted_moves: int = extension.call("issue_move_commands", move_ids, 0, 8.0, 3.0, 3.0)
 	for _tick in range(10):
 		extension.call("update_simulation", 50.0)
-	var positions: PackedFloat32Array = extension.call("get_unit_positions", move_ids)
-	var x: float = positions[0] if positions.size() == 2 else NAN
-	var y: float = positions[1] if positions.size() == 2 else NAN
+	var transforms: PackedFloat32Array = extension.call("get_unit_transforms", move_ids)
+	var x: float = transforms[0] if transforms.size() == 3 else NAN
+	var y: float = transforms[1] if transforms.size() == 3 else NAN
 	var second_move_count: int = extension.call("issue_move_commands", move_ids, 0, 30.0, 3.0, 3.0)
 	extension.call("update_simulation", 50.0)
 	var stop_count: int = extension.call("issue_stop_commands", move_ids, 0)
 	extension.call("update_simulation", 50.0)
-	var stopped_x: float = extension.call("get_unit_x", entity_id)
+	var stopped_position: PackedFloat32Array = extension.call("get_unit_position", entity_id)
+	var stopped_x: float = stopped_position[0] if stopped_position.size() == 2 else NAN
 	for _tick in range(3):
 		extension.call("update_simulation", 50.0)
-	var after_stop_x: float = extension.call("get_unit_x", entity_id)
-	var tick_ms: float = extension.call("get_simulation_tick_ms")
+	var after_stop_position: PackedFloat32Array = extension.call("get_unit_position", entity_id)
+	var after_stop_x: float = after_stop_position[0] if after_stop_position.size() == 2 else NAN
+	var hud_state: Dictionary = extension.call("get_hud_state", 0, -1, entity_id, 0.0, 0.0, false)
+	var tick_ms: float = float(hud_state.get("tick_ms", -1.0))
 	extension.call("stop_simulation")
 
 	if count != 1:
@@ -135,79 +138,15 @@ func _init() -> void:
 	extension.call("start_simulation")
 	var new_entity_id: int = extension.call("create_unit", 10.0, 20.0)
 	extension.call("update_simulation", 50.0)
-	var new_x: float = extension.call("get_unit_x", new_entity_id)
-	var new_y: float = extension.call("get_unit_y", new_entity_id)
+	var new_position: PackedFloat32Array = extension.call("get_unit_position", new_entity_id)
+	var new_x: float = new_position[0] if new_position.size() == 2 else NAN
+	var new_y: float = new_position[1] if new_position.size() == 2 else NAN
 
 	if count_after_reset != 0 or new_x != 10.0 or new_y != 20.0:
 		push_error("RtsExtension reset test failed: count_after_reset=%d new_x=%f new_y=%f" % [count_after_reset, new_x, new_y])
 		quit(1)
 		return
 
-	# Test 3: Health visibility (Goal 08-COMBAT)
-	var health_result: Array = extension.call("get_unit_health", new_entity_id)
-	if health_result.size() != 2:
-		push_error("Health getter failed: expected array of size 2, got %d" % health_result.size())
-		quit(1)
-		return
-	var current_health: float = health_result[0]
-	var max_health: float = health_result[1]
-	if not is_equal_approx(current_health, 100.0):
-		push_error("Initial current health check failed: %f" % current_health)
-		quit(1)
-		return
-	if not is_equal_approx(max_health, 100.0):
-		push_error("Initial max health check failed: %f" % max_health)
-		quit(1)
-		return
-	var is_dead: bool = extension.call("get_unit_is_dead", new_entity_id)
-	if is_dead:
-		push_error("Fresh unit should not be dead")
-		quit(1)
-		return
-	
-	var damage_result: bool = extension.call("apply_damage", new_entity_id, 150.0)
-	if not damage_result:
-		push_error("apply_damage returned false for valid target")
-		quit(1)
-		return
-	extension.call("update_simulation", 50.0)
-	is_dead = extension.call("get_unit_is_dead", new_entity_id)
-	if not is_dead:
-		push_error("Unit with 150 damage to 100 max health should be dead")
-		quit(1)
-		return
-	
-	health_result = extension.call("get_unit_health", new_entity_id)
-	current_health = health_result[0] if health_result.size() == 2 else -1.0
-	if current_health >= 0.0:
-		push_error("Dead unit health getter should return empty array, got current=%f" % current_health)
-		quit(1)
-		return
-	
-	extension.call("stop_simulation")
-	
-	# Test 4: exported AI state shares the fixed-tick simulation owner.
-	extension.call("start_simulation")
-	extension.call("ai_init")
-	extension.call("ai_set_faction_id", 1)
-	extension.call("create_unit_with_type", 0.0, 0.0, 3, 1)
-	extension.call("create_unit_with_type", 1.0, 0.0, 0, 0)
-	extension.call("create_unit_with_type", 300.0, 0.0, 0, 0)
-	extension.call("ai_update", 1000.0)
-	if extension.call("ai_get_visible_unit_count") != 1 or extension.call("ai_get_enemy_unit_count") != 1:
-		push_error("AI bindings must share simulation state and exclude hidden enemies")
-		quit(1)
-		return
-	extension.call("ai_set_faction_id", 4294967297)
-	if extension.call("ai_get_visible_unit_count") != 1:
-		push_error("AI faction binding must reject overflowing IDs before narrowing")
-		quit(1)
-		return
-	extension.call("reset_simulation")
-	if extension.call("ai_get_visible_unit_count") != 0 or extension.call("ai_get_enemy_unit_count") != 0:
-		push_error("Rematch must clear AI observations across the native boundary")
-		quit(1)
-		return
 	extension.call("stop_simulation")
 	print("RtsExtension smoke test passed")
 	quit(0)

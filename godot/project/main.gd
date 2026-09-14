@@ -1322,16 +1322,17 @@ func _register_presented_unit(entity_id: int, unit_type: int, faction_id: int, w
 
 
 func _sync_new_entities() -> void:
-	var all_ids: PackedInt32Array = extension.call("get_entity_ids")
-	for entity_id in all_ids:
+	var newly_presented: Array = extension.call("get_unpresented_entities", PackedInt32Array(entity_ids))
+	for entity in newly_presented:
+		var entity_id := int(entity.get("id", -1))
 		if hidden_base_ids.has(entity_id):
 			continue
 		if entity_to_instance.has(entity_id):
 			continue
-		var faction_id := int(extension.call("get_unit_faction_id", entity_id))
+		var faction_id := int(entity.get("faction_id", -1))
 		if faction_id < 0 or faction_id > 2:
 			continue
-		var position := Vector2(float(extension.call("get_unit_x", entity_id)), float(extension.call("get_unit_y", entity_id)))
+		var position := Vector2(float(entity.get("x", 0.0)), float(entity.get("y", 0.0)))
 		var unit_type := 0
 		if faction_id == HUMAN_PLAYER_ID and not pending_player_build_types.is_empty():
 			unit_type = pending_player_build_types.pop_front()
@@ -1382,26 +1383,20 @@ func _spawn_faction_units(side: Dictionary, color: Color, player_controlled: boo
 
 func _sync_unit_transforms() -> Vector2:
 	var fetch_start_us := Time.get_ticks_usec()
-	var latest_positions: PackedFloat32Array = extension.call("get_unit_positions", entity_ids)
-	var latest_headings: PackedFloat32Array = extension.call("get_unit_headings", entity_ids)
+	var latest_transforms: PackedFloat32Array = extension.call("get_unit_transforms", entity_ids)
 	var fetch_ms := float(Time.get_ticks_usec() - fetch_start_us) / 1000.0
-	if latest_positions.size() != entity_ids.size() * 2:
-		push_error("Native position snapshot size did not match entity IDs")
+	if latest_transforms.size() != entity_ids.size() * 3:
+		push_error("Native transform snapshot size did not match entity IDs")
 		return Vector2(fetch_ms, 0.0)
-	var previous_positions := unit_positions
-	unit_positions = latest_positions
+	unit_positions = PackedFloat32Array()
+	unit_positions.resize(entity_ids.size() * 2)
 	var upload_start_us := Time.get_ticks_usec()
 	for index in range(entity_ids.size()):
-		var x := unit_positions[index * 2]
-		var z := unit_positions[index * 2 + 1]
-		var heading := latest_headings[index] + PI if index < latest_headings.size() else float(unit_visual_headings.get(entity_ids[index], PI))
-		if previous_positions.size() == unit_positions.size():
-			var delta := Vector2(x - previous_positions[index * 2], z - previous_positions[index * 2 + 1])
-			if delta.length_squared() > 0.000001:
-				# Godot's forward axis is -Z, so add PI to align the visible hull
-				# with the authoritative movement vector in the X/Z battlefield.
-				if index >= latest_headings.size():
-					heading = atan2(delta.x, delta.y) + PI
+		var x := latest_transforms[index * 3]
+		var z := latest_transforms[index * 3 + 1]
+		unit_positions[index * 2] = x
+		unit_positions[index * 2 + 1] = z
+		var heading := latest_transforms[index * 3 + 2] + PI
 		unit_visual_headings[entity_ids[index]] = heading
 		var basis := Basis(Vector3.UP, heading)
 		if prototype_visuals_enabled and prototype_visual_views.has(entity_ids[index]):
@@ -1422,14 +1417,14 @@ func _validate_state() -> void:
 	if count != entity_ids.size():
 		push_error("Entity count drift: expected %d, got %d" % [entity_ids.size(), count])
 	
-	var latest_positions: PackedFloat32Array = extension.call("get_unit_positions", entity_ids)
-	if latest_positions.size() != entity_ids.size() * 2:
-		push_error("Position snapshot size mismatch: expected %d, got %d" % [entity_ids.size() * 2, latest_positions.size()])
+	var latest_transforms: PackedFloat32Array = extension.call("get_unit_transforms", entity_ids)
+	if latest_transforms.size() != entity_ids.size() * 3:
+		push_error("Transform snapshot size mismatch: expected %d, got %d" % [entity_ids.size() * 3, latest_transforms.size()])
 		return
 	
 	for i in range(entity_ids.size()):
-		var x: float = latest_positions[i * 2]
-		var z: float = latest_positions[i * 2 + 1]
+		var x: float = latest_transforms[i * 3]
+		var z: float = latest_transforms[i * 3 + 1]
 		if not is_finite(x) or not is_finite(z):
 			push_error("Invalid position for entity %d: (%.2f, %.2f)" % [entity_ids[i], x, z])
 
@@ -2327,7 +2322,7 @@ func _order_commander_to_build(build_type: int, target: Vector2) -> void:
 	if build_type >= 100 and not bool(extension.call("validate_structure_placement", build_type - 100, target.x, target.y)):
 		push_warning("Structure placement rejected at the cursor location")
 		return
-	var commander_position := Vector2(float(extension.call("get_unit_x", commander_id)), float(extension.call("get_unit_y", commander_id)))
+	var commander_position := _native_unit_position(commander_id)
 	var direction := (target - commander_position).normalized()
 	if direction.length_squared() < 0.001:
 		direction = Vector2.RIGHT
@@ -2348,8 +2343,9 @@ func _process_pending_build_order() -> void:
 	var commander_id := _player_engineer_id()
 	var target: Vector2 = pending_build_order.target
 	var approach: Vector2 = pending_build_order.approach
-	var dx := float(extension.call("get_unit_x", commander_id)) - approach.x
-	var dz := float(extension.call("get_unit_y", commander_id)) - approach.y
+	var commander_position := _native_unit_position(commander_id)
+	var dx := commander_position.x - approach.x
+	var dz := commander_position.y - approach.y
 	if dx * dx + dz * dz > 16.0:
 		return
 	var build_type := int(pending_build_order.type)
@@ -2359,6 +2355,15 @@ func _process_pending_build_order() -> void:
 	else:
 		_queue_commander_unit(build_type, target)
 	pending_build_order.clear()
+
+
+func _native_unit_position(entity_id: int) -> Vector2:
+	var position: PackedFloat32Array = extension.call("get_unit_position", entity_id)
+	if position.size() != 2:
+		push_error("Native unit position snapshot is invalid for entity %d" % entity_id)
+		return Vector2.ZERO
+	return Vector2(position[0], position[1])
+
 
 func _screen_to_world(screen_position: Vector2) -> Vector2:
 	var ray_origin := camera.project_ray_origin(screen_position)
@@ -2568,8 +2573,7 @@ func _set_build_ghost_valid(valid: bool) -> void:
 func _queue_commander_structure(structure_type: int, target: Vector2) -> bool:
 	if not selected_ids.has(_player_engineer_id()):
 		return false
-	var line_id := int(extension.call("get_faction_production_line", HUMAN_PLAYER_ID))
-	if bool(extension.call("queue_structure", line_id, HUMAN_PLAYER_ID, structure_type, target.x, target.y)):
+	if bool(extension.call("queue_faction_structure", HUMAN_PLAYER_ID, structure_type, target.x, target.y)):
 		pending_structure_position = target
 		_update_hud()
 		return true
@@ -2758,16 +2762,23 @@ func _selection_bounds() -> Rect2:
 func _update_hud() -> void:
 	_update_steering_debug()
 	var scenario_name: String = scenario_definition.get("display_name", "Scale profile")
+	var commander_id := int(commander_ids.get(HUMAN_PLAYER_ID, -1))
+	var selected_for_hud := selected_ids[0] if selected_ids.size() == 1 else -1
+	var inspect_fob := fob_build_target != Vector2.INF
+	var fob_x := fob_build_target.x if inspect_fob else 0.0
+	var fob_y := fob_build_target.y if inspect_fob else 0.0
+	var hud_state: Dictionary = extension.call(
+		"get_hud_state", HUMAN_PLAYER_ID, commander_id, selected_for_hud, fob_x, fob_y, inspect_fob
+	)
 	debug_label.text = ("%s\nPlayer: %d  Enemy: %d  Selected: %d\nFPS: %d  Sim: %.2f ms" % [
 		scenario_name,
 		player_entity_ids.size(),
 		ai_entity_ids.size(),
 		selected_ids.size(),
 		Engine.get_frames_per_second(),
-		extension.call("get_simulation_tick_ms"),
+		hud_state.get("tick_ms", 0.0),
 	]).to_upper()
-	var commander_id := int(commander_ids.get(HUMAN_PLAYER_ID, -1))
-	var storage: Array = extension.call("economy_get_storage_info", commander_id)
+	var storage: Array = hud_state.get("storage", [])
 	var selection_detail := "Drag-select a force to inspect it."
 	if material_order_mode == 1:
 		selection_detail = "CLAIM MODE  •  RIGHT-CLICK A MATERIAL FACILITY"
@@ -2776,10 +2787,9 @@ func _update_hud() -> void:
 	elif fob_build_mode:
 		selection_detail = "FOB PLACEMENT  •  LEFT-CLICK TERRAIN"
 	var selected_unit: Dictionary = {}
-	var selected_off_road: PackedFloat32Array = PackedFloat32Array()
+	var selected_off_road: PackedFloat32Array = hud_state.get("selected_off_road", PackedFloat32Array())
 	if selected_ids.size() == 1:
-		selected_unit = _selected_unit_snapshot(selected_ids[0])
-		selected_off_road = extension.call("get_unit_off_road_state", selected_ids[0])
+		selected_unit = _selected_unit_snapshot(selected_ids[0], hud_state.get("selected_health", []))
 		if selected_off_road.size() >= 3:
 			var travel_surface := "ROAD" if selected_off_road[2] > 0.98 else "OFF-ROAD"
 			selection_detail = "%s  •  %s  •  WEAR %.1f  •  %.0f%% SPEED" % [
@@ -2792,10 +2802,9 @@ func _update_hud() -> void:
 			selection_detail = "%s  •  AWAITING ORDERS" % selected_unit.get("name", "UNIT")
 	elif selected_ids.size() > 1:
 		selection_detail = "FORMATION READY  •  RIGHT-CLICK TO MOVE"
-	var production_queue: Array = extension.call("get_production_queue", commander_id) if commander_id > 0 else []
-	var fob_installation: Array = []
-	if fob_build_target != Vector2.INF:
-		fob_installation = extension.call("territory_get_installation_info", fob_build_target.x, fob_build_target.y)
+	var production_queue: Array = hud_state.get("production_queue", [])
+	var fob_installation: Array = hud_state.get("fob_installation", [])
+	if inspect_fob:
 		if not fob_installation.is_empty():
 			var fob_constructing := int(fob_installation[3]) == 1
 			if fob_was_constructing and not fob_constructing:
@@ -2827,14 +2836,14 @@ func _update_hud() -> void:
 		"queue": production_queue,
 		"fob_installation": fob_installation,
 		"fob_completion_notification": fob_completion_notification,
-		"build_catalog": extension.call("get_build_catalog", HUMAN_PLAYER_ID) if commander_id > 0 else [],
+		"build_catalog": hud_state.get("build_catalog", []),
 		"material": _hud_resource(storage, 0),
 		"energy": _hud_resource(storage, 1),
 		"research": _hud_resource(storage, 2),
 		"material_income": "",
 		"energy_income": "",
 		"research_income": "",
-		"tick": extension.call("get_simulation_tick_ms"),
+		"tick": hud_state.get("tick_ms", 0.0),
 		"fps": Engine.get_frames_per_second(),
 		"engine": "ONLINE",
 	})
@@ -2846,10 +2855,11 @@ func _hud_resource(storage: Array, index: int) -> String:
 	return "%.0f" % float(storage[index])
 
 
-func _selected_unit_snapshot(entity_id: int) -> Dictionary:
+func _selected_unit_snapshot(entity_id: int, health: Array = []) -> Dictionary:
 	var root: Node3D = demo_unit_views.get(entity_id, null)
 	var unit_type := int(root.get_meta("unit_type", -1)) if root != null else -1
-	var health: Array = extension.call("get_unit_health", entity_id)
+	if health.is_empty():
+		health = extension.call("get_unit_health", entity_id)
 	return {
 		"id": entity_id,
 		"name": UNIT_TYPE_DISPLAY_NAME.get(unit_type, "COMBAT UNIT"),

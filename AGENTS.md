@@ -1,6 +1,8 @@
 # AGENTS.md
 
-# Near-Future RTS Game Project
+> **Authority override:** Read `docs/STATUS.md` first. Goal 0B — Thin the Godot/GDExtension boundary is complete and no successor work package is assigned. Older Goal 03–11 and worktree-reconciliation claims below are historical, not current milestone authority.
+
+# Mandate of War — Agent Instructions
 
 ## Role
 
@@ -8,34 +10,30 @@ You are an implementation agent for a large-scale near-future RTS inspired by Su
 
 ## Authoritative Current Status
 
-**Active work package:** `DOC-RECONCILE` followed by `G03-COMBAT-BENCH` recovery. Goal 04 and every later numbered goal are gated.
+**Current work package:** None assigned; Goal 0B — Thin the Godot/GDExtension boundary is complete.
 
-**Canonical committed baseline:** `main` at `184613211256f16d4e24a1635d79f77cd4e8f36b`. The previously cited `9c295bf` object is absent from this repository and must not be used as evidence.
+**Beginning baseline:** `main` at `d7e6f45cec045921813c3e9a7074ff09964e800d`. Do not rely on prior baseline claims without current evidence.
 
-**Actual checkout:** `main` at `1846132` with a substantial uncommitted implementation and validation package. It builds and passes the current local regression suite, but uncommitted work is not part of `main` and must be reported separately. See `docs/WORKTREE_RECONCILIATION.md`.
+**Actual checkout:** inspect `git status --short` before editing. Preserve any user-owned changes; do not reuse older worktree descriptions as current evidence.
 
-**Start here:** `docs/OPENCODE_HANDOFF.md`
+**Start here:** `docs/STATUS.md`, then `docs/DEVELOPMENT_WORKFLOW.md` and `docs/ARCHITECTURE.md`.
 
-Do not trust older claims that Goals 03–11 are complete. The canonical sequence is the numbered goal files at repository root. A fresh 2,000-vs-2,000 combat benchmark fails with no combat activity, so Goal 03 is active again. Do not begin Goal 04 until Goal 03's definition of done is re-established; do not begin Goal 05 until `04_LOGISTICS_AIR_NAVAL_INTEL.md` satisfies its definition of done.
+Do not use older Goal 03–11 claims to select work. Goal 0B narrowed the presentation API and did not authorize a gameplay milestone or engine rewrite. Do not begin a successor milestone without an assigned work package.
 
 ## Working Directory
 
-This repository (`/home/conor/repos/mandate-of-war`) is the working directory for this project.
+The repository root is the working directory for this project.
 
 ## Required Reading Order
 
 Before making changes, read:
 
-1. `docs/OPENCODE_HANDOFF.md`
-2. `docs/EXECUTION_LEDGER.md`
-3. `00_PROJECT_CHARTER.md`
-4. the active milestone document `03_ECONOMY_COMBAT_FACTIONS.md`, plus `02_SIMULATION_AND_SCALE.md` and `03_RENDERING_AND_CONTROLS.md` for the preserved baseline
-5. `docs/ARCHITECTURE.md`
-6. `docs/CURRENT_STATE.md`
-7. `docs/NEXT_TASKS.md`
-8. `EXTENSION_STATUS.md`
-9. relevant ADRs under `docs/adr/`
-10. `git status --short`, plus staged and unstaged diffs for files in scope
+1. `docs/STATUS.md`
+2. `docs/DEVELOPMENT_WORKFLOW.md`
+3. `docs/REPOSITORY_INVENTORY.md`
+4. `docs/ARCHITECTURE.md`
+5. `git status --short`, plus staged and unstaged diffs for files in scope
+6. only when needed for historical context: `docs/OPENCODE_HANDOFF.md`, `docs/EXECUTION_LEDGER.md`, `docs/base/`, and relevant ADRs
 
 ## Development Rules
 

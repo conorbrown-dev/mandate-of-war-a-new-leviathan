@@ -1,6 +1,8 @@
-# Next Tasks — Reconciled Sequential Recovery
+# Next Tasks — Historical Recovery Notes
 
-**Updated:** 2026-09-13. Goals 05–11 are verified; no canonical Goal 12 specification exists. See `docs/WORKTREE_RECONCILIATION.md`.
+> **Current next task:** None assigned. Goal 0B — Thin the Godot/GDExtension boundary is complete; see [STATUS.md](STATUS.md). The text below is preserved historical planning, not an active queue.
+
+**Updated:** 2026-09-14. Goals 05–11 are verified; no canonical Goal 12 specification exists. See `docs/WORKTREE_RECONCILIATION.md`.
 
 ## Completed: Goal 09 — logistics improvements
 

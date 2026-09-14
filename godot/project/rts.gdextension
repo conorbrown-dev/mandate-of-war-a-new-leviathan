@@ -1,0 +1,23 @@
+[configuration]
+
+entry_symbol = "rts_extension_library_init"
+compatibility_minimum = "4.7"
+reloadable = true
+
+[languages]
+
+cpp = true
+
+[libraries]
+
+linux.debug.x86_64 = "res://bin/librts_gdextension.so"
+linux.release.x86_64 = "res://bin/librts_gdextension.so"
+
+[dependencies]
+
+linux.debug.x86_64 = {
+    "res://bin/librts_simulation.so": ""
+}
+linux.release.x86_64 = {
+    "res://bin/librts_simulation.so": ""
+}

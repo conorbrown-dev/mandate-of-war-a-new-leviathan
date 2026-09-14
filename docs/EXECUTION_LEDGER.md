@@ -1,6 +1,8 @@
 # Execution Ledger
 
-**Last updated:** 2026-09-13
+> **Current ledger state (2026-09-14):** `Goal 0B — Thin the Godot/GDExtension boundary` is COMPLETE. No successor work package is assigned. [STATUS.md](STATUS.md) is the canonical current-state document. The remaining entries preserve historical milestone evidence only and cannot advance or gate future work without revalidation.
+
+**Last updated:** 2026-09-14
 
 **Sequence mode:** reconciliation complete; Goals 03–11 are verified. No canonical Goal 12 specification exists.
 

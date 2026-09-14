@@ -120,7 +120,8 @@ func _run() -> void:
 	view.hover_context = {"key": "unit:%d" % view.player_entity_ids[0], "title": "FRIENDLY // ENGINEERING VEHICLE", "detail": "INTEGRITY 100 / 100", "accent": Color("#7ad99b")}
 	view._update_hud()
 	check(view.command_hud.snapshot.get("hover_title", "") == "FRIENDLY // ENGINEERING VEHICLE" and view.command_hud.snapshot.get("hover_detail", "") == "INTEGRITY 100 / 100", "bottom inspection strip receives stable hovered-unit context")
-	var engineer_off_road_state: PackedFloat32Array = view.extension.call("get_unit_off_road_state", view.player_entity_ids[0])
+	var engineer_hud_state: Dictionary = view.extension.call("get_hud_state", 0, int(view.commander_ids.get(0, -1)), view.player_entity_ids[0], 0.0, 0.0, false)
+	var engineer_off_road_state: PackedFloat32Array = engineer_hud_state.get("selected_off_road", PackedFloat32Array())
 	check(engineer_off_road_state.size() == 3 and view.command_hud.snapshot.get("off_road_speed_multiplier", -1.0) >= 0.0 and "WEAR" in String(view.command_hud.snapshot.get("selection_detail", "")), "selected ground units expose off-road wear and speed telemetry")
 	var pan_key := InputEventKey.new()
 	pan_key.pressed = true
@@ -190,12 +191,15 @@ func _run() -> void:
 		view._sync_new_entities()
 	check(view.player_entity_ids.size() == 2, "completed Command Walker production adds a player unit")
 	check((view.demo_unit_views.has(view.player_entity_ids[1]) or view.prototype_visual_views.has(view.player_entity_ids[1])) and view.demo_unit_views.size() + view.prototype_visual_views.size() >= 3, "completed unit receives a visible 3D model")
-	check(view.extension.call("get_unit_x", view.player_entity_ids[1]) != view.extension.call("get_unit_x", commander_id), "completed unit spawns at a visible factory rally point")
+	var produced_position: PackedFloat32Array = view.extension.call("get_unit_position", view.player_entity_ids[1])
+	var commander_position: PackedFloat32Array = view.extension.call("get_unit_position", commander_id)
+	check(produced_position.size() == 2 and commander_position.size() == 2 and produced_position[0] != commander_position[0], "completed unit spawns at a visible factory rally point")
 	view._set_selected(engineer_id, true)
 	check(view._build_unit_type_at_index(3) == 9 and view._build_unit_type_at_index(4) == 10 and view._build_unit_type_at_index(5) == 11, "new unit shortcuts resolve from the native catalog rather than hard-coded unit types")
-	var fighter_queue_before_airfield: Array = view.extension.call("get_production_queue", commander_id)
+	var fighter_queue_before_airfield: Array = view.extension.call("get_hud_state", 0, commander_id, -1, 0.0, 0.0, false).get("production_queue", [])
 	view._queue_commander_unit(9)
-	check(view.extension.call("get_production_queue", commander_id).size() == fighter_queue_before_airfield.size(), "runway aircraft cannot be queued before an airfield is online")
+	var fighter_queue_after_airfield: Array = view.extension.call("get_hud_state", 0, commander_id, -1, 0.0, 0.0, false).get("production_queue", [])
+	check(fighter_queue_after_airfield.size() == fighter_queue_before_airfield.size(), "runway aircraft cannot be queued before an airfield is online")
 	var visibility_hex := first_model.get_node("VisibilityHex") as MeshInstance3D
 	var radar_hex := first_model.get_node("RadarHex") as MeshInstance3D
 	var attack_hex := first_model.get_node("AttackHex") as MeshInstance3D

@@ -31,6 +31,8 @@ GAMEPLAY_SCENARIOS = {
 PERFORMANCE_SCENARIOS = {"simulation_scale_1000", "combat_benchmark_2000"}
 CONTRACT_SCENARIOS = {
     "native_extension_smoke": ("test.gd", "RtsExtension smoke test passed"),
+    "gdextension_boundary": ("test_gdextension_boundary.gd", "GDEXTENSION_BOUNDARY checks="),
+    "hud_bridge": ("test_hud_bridge.gd", "HUD_BRIDGE checks="),
     "skirmish_presentation": ("test_skirmish.gd", "GODOT_SKIRMISH_PRESENTATION"),
     "native_skirmish_match_to_result": ("test_native_skirmish.gd", "GODOT_NATIVE_SKIRMISH"),
     "terrain_contract": ("test_goal10_terrain.gd", "GODOT_GOAL10_TERRAIN"),

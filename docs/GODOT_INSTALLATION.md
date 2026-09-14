@@ -1,11 +1,13 @@
 # Godot 4.x Build and Validation
 
+> **Goal 0A update:** Prefer `python3 scripts/dev.py build` and `python3 scripts/dev.py smoke`; set `GODOT_BIN` when Godot 4.7.2 is not on `PATH`. The commands below are historical examples.
+
 ## Build
 
 The checked-in executable reports Godot `4.7.2.stable.official`.
 
 ```bash
-cd /home/conor/repos/mandate-of-war
+cd /path/to/mandate-of-war
 cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
 cmake --build build
 ```

@@ -182,7 +182,7 @@ def generate_from_json(json_path: str, output_dir: Path | None = None) -> None:
 def generate_all_units_from_stats(stats_path: Path, output_dir: Path) -> None:
     """Generate meshes for all units in unit_faction_stats.json."""
     if stats_path is None:
-        stats_path = Path("/home/conor/repos/mandate-of-war/data/unit_faction_stats.json")
+        stats_path = Path(__file__).resolve().parents[1] / "data" / "unit_faction_stats.json"
     
     if output_dir is None:
         output_dir = stats_path.parent / "blender"
@@ -219,4 +219,3 @@ if __name__ == "__main__":
         print("Blender RTS Unit Generator")
         print("Usage: blender --background --python generate_unit_blender.py -- <unit_json_path>")
         print("Or run interactively in Blender's Scripting workspace")
-

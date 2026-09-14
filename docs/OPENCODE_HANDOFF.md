@@ -1,4 +1,6 @@
-## Documentation Files
+> **Superseded operational status:** Goal 0B is complete and no successor work package is assigned. Read [STATUS.md](STATUS.md), [DEVELOPMENT_WORKFLOW.md](DEVELOPMENT_WORKFLOW.md), and [ARCHITECTURE.md](ARCHITECTURE.md) before using this file. The content below is preserved historical handoff detail; it must not be used to select a milestone or assert current validation.
+
+## Historical documentation record
 
 | File | Status |
 |---|---|

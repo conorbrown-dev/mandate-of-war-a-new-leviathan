@@ -354,7 +354,8 @@ func _scenario_airfield_fighter_ferry() -> void:
 	if fighter_id > 0:
 		var fighter_view: Node = view.get("prototype_visual_views").get(fighter_id)
 		var fighter_definition: Dictionary = fighter_view.get("_definition") if fighter_view != null else {}
-		_check(int(extension.call("get_unit_faction_id", fighter_id)) == 0 and String(fighter_definition.get("visual_id", "")) == "visual.industrial.fighter.f15c.prototype", "air.default_faction_uses_f15c", "The default faction's fighter uses the imported F-15C visual", {"faction_id": int(extension.call("get_unit_faction_id", fighter_id)), "visual_id": String(fighter_definition.get("visual_id", "")), "source_asset_id": String(fighter_definition.get("source_asset_id", ""))})
+		var player_owned := view.get("player_entity_ids").has(fighter_id)
+		_check(player_owned and String(fighter_definition.get("visual_id", "")) == "visual.industrial.fighter.f15c.prototype", "air.default_faction_uses_f15c", "The default faction's fighter uses the imported F-15C visual", {"player_owned": player_owned, "visual_id": String(fighter_definition.get("visual_id", "")), "source_asset_id": String(fighter_definition.get("source_asset_id", ""))})
 		_check(fighter_entry.x < -20000.0, "air.fighter_enters_from_off_map", "The fighter is created beyond the tactical map edge", {"entry": _vec2(fighter_entry)})
 		var inside_position := fighter_entry
 		var ingress_ticks := 0
@@ -518,7 +519,8 @@ func _find_valid_build_position(view: Node, preferred: Vector2, unit_type: int) 
 
 func _entity_position(view: Node, entity_id: int) -> Vector2:
 	var extension: Object = view.get("extension")
-	return Vector2(float(extension.call("get_unit_x", entity_id)), float(extension.call("get_unit_y", entity_id)))
+	var position: PackedFloat32Array = extension.call("get_unit_position", entity_id)
+	return Vector2(position[0], position[1]) if position.size() == 2 else Vector2.ZERO
 
 
 func _capture_checkpoint(view: Node, checkpoint: String) -> void:

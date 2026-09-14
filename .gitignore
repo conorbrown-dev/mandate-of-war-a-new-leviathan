@@ -12,6 +12,8 @@ librts_simulation.so
 rts_benchmark
 rts_tests
 extension_api.json
+# Legacy local vendor caches are deliberately ignored. The active build fetches
+# its pinned dependencies into build/_deps instead.
 vendor/
 gdextension_interface.h
 
@@ -20,8 +22,6 @@ godot/project/bin/
 godot/project/.godot/
 godot/project/godot
 godot/project/godot_bin
-godot/project/rts.gdextension
-godot/project/rts.gdextension.uid
 godot/lib/
 godot-linux-install
 Godot_v4.7.2-stable_linux.x86_64
@@ -49,3 +49,11 @@ downloaded_assets/
 
 # Generated gameplay-validation evidence
 validation/artifacts/
+
+# Godot's import cache is generated; source assets and their authored .uid
+# metadata remain trackable. Existing committed .import files are retained as
+# historical import evidence and are not removed by this change.
+godot/project/.godot/
+*.import
+__pycache__/
+*.py[cod]

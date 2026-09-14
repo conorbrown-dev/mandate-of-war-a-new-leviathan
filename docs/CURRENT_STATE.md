@@ -1,4 +1,6 @@
-# Current State — Reconciled Evidence Boundary
+# Current State — Historical Evidence Boundary
+
+> **Current authority:** [STATUS.md](STATUS.md) supersedes this document for present status. The detailed claims below are historical records and are not current proof unless reproduced.
 
 **Date:** 2026-09-13
 **Milestone state:** Goals 03–11 are verified. No canonical Goal 12 specification exists. Consolidated candidate work on `main` is not accepted as a milestone bypass. See `docs/WORKTREE_RECONCILIATION.md`.

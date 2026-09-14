@@ -71,7 +71,7 @@ Use this checklist to verify that discussed, prompted, backlog, and implemented 
 
 ## 4. Movement and Pathfinding
 
-- [ ] Ground movement.
+- [~] Ground movement.
 - [ ] Air movement.
 - [ ] Naval movement.
 - [ ] Different movement classes can use different navigation rules.
@@ -112,15 +112,15 @@ Use this checklist to verify that discussed, prompted, backlog, and implemented 
 
 ### Material
 
-- [ ] **[PACK]** Material resource exists.
-- [ ] Material is used for construction feedstock.
+- [-] **[PACK]** Material resource exists.
+- [-] Material is used for construction feedstock.
 - [ ] Material is used for ammunition.
 - [ ] Material is used for spare parts.
 - [ ] Material is used for physical logistics/deployment costs.
 
 ### Energy
 
-- [ ] **[PACK]** Energy resource exists.
+- [-] **[PACK]** Energy resource exists.
 - [ ] Energy represents electrical generation.
 - [ ] Energy represents fuel where appropriate.
 - [ ] Energy represents reactor output.
@@ -129,7 +129,7 @@ Use this checklist to verify that discussed, prompted, backlog, and implemented 
 
 ### Research
 
-- [ ] **[PACK]** Research resource exists.
+- [-] **[PACK]** Research resource exists.
 - [ ] Research supports technology development.
 - [ ] Research supports doctrine.
 - [ ] Research unlocks advanced systems.
@@ -151,7 +151,7 @@ Use this checklist to verify that discussed, prompted, backlog, and implemented 
 ### Original / Legacy Implementation
 
 - [ ] **[PACK][LEGACY]** Basic factory.
-- [ ] **[PACK][LEGACY]** Build queues.
+- [-] **[PACK][LEGACY]** Build queues.
 - [ ] **[PACK][LEGACY]** Build time.
 - [ ] **[PACK][LEGACY]** Resource-consuming production.
 - [ ] **[PACK][LEGACY]** Unit spawning.
@@ -273,7 +273,7 @@ Use this checklist to verify that discussed, prompted, backlog, and implemented 
 
 ## 12. Aircraft Operations
 
-- [ ] Airbases.
+- [-] Airbases.
 - [ ] Airstrips.
 - [ ] Physical/meaningful runway dependency.
 - [ ] Fixed-wing aircraft queue for runway.

@@ -1,5 +1,7 @@
 # Godot Integration Status
 
+> **Goal 0A update:** The active build uses CMake `FetchContent` for pinned `godot-cpp`; it does not use ignored `vendor/godot-cpp` output. `godot/project/rts.gdextension` is checked-in source configuration. Read [STATUS.md](STATUS.md) for current verification limits; the claims below are historical integration evidence.
+
 The Linux x86_64 GDExtension integration is working with the repository's Godot 4.7.2 binary.
 
 ## Working Path

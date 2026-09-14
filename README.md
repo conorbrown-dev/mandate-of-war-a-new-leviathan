@@ -1,4 +1,21 @@
-# Near-Future RTS
+# Mandate of War
+
+> **Current authority:** [docs/STATUS.md](docs/STATUS.md) is the single current-state document. This README's older milestone narrative below is historical context only; Goal 0B is complete and no successor work package is assigned.
+
+## Reproducible quick start
+
+On Linux x86_64, install CMake 3.20+, a C++20 compiler, OpenSSL development headers, Python 3, Git, and Godot 4.7.2. Set `GODOT_BIN` if Godot is not on `PATH`, then run:
+
+```bash
+python3 scripts/dev.py configure
+python3 scripts/dev.py build
+python3 scripts/dev.py smoke
+python3 scripts/dev.py run
+```
+
+The build fetches pinned dependencies into `build/_deps`; it does not use an untracked `vendor/` directory. See [docs/DEVELOPMENT_WORKFLOW.md](docs/DEVELOPMENT_WORKFLOW.md) and [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+
+# Historical project overview
 
 A large-scale near-future RTS prototype with a C++ fixed-tick simulation and Godot 4 presentation layer.
 

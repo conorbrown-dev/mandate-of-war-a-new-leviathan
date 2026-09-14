@@ -1,7 +1,28 @@
 cmake_minimum_required(VERSION 3.20)
 project(rts_simulation VERSION 0.1.0 LANGUAGES CXX)
 
+include(FetchContent)
+
 find_package(OpenSSL REQUIRED)
+
+# A clean checkout must not depend on an ignored, prebuilt vendor tree.  The
+# commit is intentionally exact so the generated GDExtension bindings remain
+# reproducible.  Godot 4.7.2 is the validated engine API for this project.
+set(GODOTCPP_API_VERSION "4.7" CACHE STRING "Godot API targeted by godot-cpp" FORCE)
+set(GODOTCPP_TARGET "template_debug" CACHE STRING "godot-cpp template target" FORCE)
+FetchContent_Declare(
+    godot-cpp
+    GIT_REPOSITORY https://github.com/godotengine/godot-cpp.git
+    GIT_TAG 9c8aeff0f58ad030f3d1030e8262de1322cd0ccd
+    GIT_SHALLOW FALSE
+)
+FetchContent_Declare(
+    glm
+    GIT_REPOSITORY https://github.com/g-truc/glm.git
+    GIT_TAG 1.0.1
+    GIT_SHALLOW TRUE
+)
+FetchContent_MakeAvailable(godot-cpp glm)
 
 enable_testing()
 
@@ -50,27 +71,22 @@ set(SIMULATION_SOURCES
 # === Include directories ===
 
 include_directories(${CMAKE_SOURCE_DIR}/src)
-include_directories(${CMAKE_SOURCE_DIR}/vendor/godot-cpp/include)
-include_directories(${CMAKE_SOURCE_DIR}/vendor/godot-cpp/gen/include)
-include_directories(${CMAKE_SOURCE_DIR}/vendor/glm)
 
 # === Simulation library ===
 
 add_library(rts_simulation SHARED ${SIMULATION_SOURCES})
 target_include_directories(rts_simulation PUBLIC ${CMAKE_SOURCE_DIR}/src)
-target_link_libraries(rts_simulation PUBLIC OpenSSL::SSL OpenSSL::Crypto)
+target_link_libraries(rts_simulation PUBLIC OpenSSL::SSL OpenSSL::Crypto glm::glm)
 
 # === GDExtension library ===
 
 add_library(rts_gdextension SHARED gdextension/gd_extension.cpp)
 target_include_directories(rts_gdextension PUBLIC
     ${CMAKE_SOURCE_DIR}/src
-    ${CMAKE_SOURCE_DIR}/vendor/godot-cpp/include
-    ${CMAKE_SOURCE_DIR}/vendor/godot-cpp/gen/include
 )
 target_link_libraries(rts_gdextension
     rts_simulation
-    ${CMAKE_SOURCE_DIR}/vendor/godot-cpp/build/bin/libgodot-cpp.linux.template_debug.x86_64.a
+    godot::cpp
 )
 set_target_properties(rts_gdextension PROPERTIES
     BUILD_RPATH "$ORIGIN"

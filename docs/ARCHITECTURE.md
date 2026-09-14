@@ -1,5 +1,24 @@
 # Architecture
 
+> **Goal 0B practical map:** Active simulation: `src/simulation/simulation.{hpp,cpp}`; active bridge: `gdextension/gd_extension.cpp` and CMake target `rts_gdextension`; active Godot entry: `godot/project/main.tscn` → `main.gd`; active descriptor: `godot/project/rts.gdextension`. Input travels Godot HUD/input → `RtsExtension` → authoritative C++ command/tick → state queries/events → Godot `MultiMeshInstance3D`/HUD. `src/gdextension/` and `gdextension/gd_extension.hpp` are legacy, uncompiled paths. See [STATUS.md](STATUS.md); detailed material below is historical architecture context.
+
+## Foundation ownership guide
+
+| Change | Start in | Validate with |
+| --- | --- | --- |
+| Unit/faction/balance data | `data/`, especially `data/unit_faction_stats.json` | Relevant native test plus content validation. |
+| Simulation rule | `src/simulation/` and its owning system under `src/` | A state assertion in `tests/`. |
+| Pathfinding | `src/pathfinding/` and `src/spatial/` | `tests/test_pathfinding.cpp` and relevant scenario. |
+| Visual/presentation | `godot/project/main.gd`, scenes, shaders, visual registry | Named Godot contract/scenario. |
+| HUD/input | `godot/project/main.gd`, `command_hud.gd` | Matching Godot contract/scenario. |
+| Benchmark/test | `benchmark/`, `tests/`, `tools/validate.py` | The exact runner, with workload described. |
+
+Current deferred debt is deliberate: global `Simulation` lifetime, broad GDExtension API, map-backed ECS/spatial structures, synchronous flow-field/pathfinding, oversized `main.gd`, and partial mod-data model. The foundation work clarifies these boundaries; it does not refactor them.
+
+## Goal 0B boundary policy
+
+Godot may use lifecycle calls, authoritative command submission, batched state queries, and aggregate skirmish/HUD data. It must not depend on the dummy C++ renderer, test-only AI reset, raw duplicate logistics/economy probes, unused low-level economy/faction/movement setup calls, unconsumed direct commands, internal production-line IDs, test-only combat mutation/inspection APIs, or raw production queues. Forty-two public bindings were retired; their native systems remain available to native tests and simulation code. The main HUD now consumes one `get_hud_state` aggregate instead of separate timing, economy, queue, unit telemetry, FOB, and catalog reads. Entity discovery uses one `get_unpresented_entities(known_ids)` snapshot rather than an ID list plus per-entity faction and position calls. Per-frame transforms use one packed `get_unit_transforms(ids)` snapshot; the raw position and heading bindings were retired. Single-entity callers use `get_unit_position(id)` rather than raw X/Y bindings; `get_unit_health(id)` remains solely for hover inspection of an arbitrary visible unit. Structure construction uses `queue_faction_structure(faction, type, position)` rather than exposing the production line. `tools/validate.py gdextension_boundary` asserts the retained and retired surface.
+
 **Status:** Directional architecture plus verified current-state notes
 **Last updated:** 2026-09-01
 

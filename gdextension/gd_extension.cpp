@@ -2,6 +2,7 @@
 #include <chrono>
 #include <filesystem>
 #include <optional>
+#include <unordered_set>
 
 #include <godot_cpp/classes/project_settings.hpp>
 #include <godot_cpp/classes/ref_counted.hpp>
@@ -166,7 +167,6 @@ protected:
         ClassDB::bind_method(D_METHOD("skirmish_verify_replay", "path"), &RtsExtension::skirmish_verify_replay);
         ClassDB::bind_method(D_METHOD("skirmish_load", "path"), &RtsExtension::skirmish_load);
         ClassDB::bind_method(D_METHOD("skirmish_update", "delta_ms"), &RtsExtension::skirmish_update);
-        ClassDB::bind_method(D_METHOD("skirmish_position_visible", "x", "y"), &RtsExtension::skirmish_position_visible);
         ClassDB::bind_method(D_METHOD("skirmish_state"), &RtsExtension::skirmish_state);
         ClassDB::bind_method(D_METHOD("skirmish_stats_summary"), &RtsExtension::skirmish_stats_summary);
         ClassDB::bind_method(D_METHOD("skirmish_command", "type", "ids", "x", "y", "extra"), &RtsExtension::skirmish_command);
@@ -190,7 +190,7 @@ protected:
         ClassDB::bind_method(D_METHOD("create_faction_base", "faction_id", "x", "y"), &RtsExtension::create_faction_base);
         ClassDB::bind_method(D_METHOD("destroy_resource_site", "entity_id", "x", "y"), &RtsExtension::destroy_resource_site);
         ClassDB::bind_method(D_METHOD("get_entity_ids"), &RtsExtension::get_entity_ids);
-        ClassDB::bind_method(D_METHOD("move_unit", "entity_id", "x", "y"), &RtsExtension::move_unit);
+        ClassDB::bind_method(D_METHOD("get_unpresented_entities", "known_entity_ids"), &RtsExtension::get_unpresented_entities);
         ClassDB::bind_method(
             D_METHOD("move_units_formation", "entity_ids", "center_x", "center_y", "spacing"),
             &RtsExtension::move_units_formation
@@ -208,14 +208,6 @@ protected:
             &RtsExtension::issue_attack_commands
         );
         ClassDB::bind_method(
-            D_METHOD("issue_patrol_commands", "entity_ids", "player_id", "x", "y"),
-            &RtsExtension::issue_patrol_commands
-        );
-        ClassDB::bind_method(
-            D_METHOD("issue_return_commands", "entity_ids", "player_id"),
-            &RtsExtension::issue_return_commands
-        );
-        ClassDB::bind_method(
             D_METHOD("issue_build_commands", "entity_ids", "player_id", "x", "y", "unit_type"),
             &RtsExtension::issue_build_commands
         );
@@ -224,67 +216,30 @@ protected:
             &RtsExtension::issue_harvest_commands
         );
         ClassDB::bind_method(
-            D_METHOD("issue_defend_commands", "entity_ids", "player_id", "x", "y"),
-            &RtsExtension::issue_defend_commands
-        );
-        ClassDB::bind_method(
             D_METHOD("issue_install_commands", "entity_ids", "player_id", "x", "y", "installation_type"),
             &RtsExtension::issue_install_commands
         );
-        ClassDB::bind_method(D_METHOD("destroy_unit", "entity_id"), &RtsExtension::destroy_unit);
         ClassDB::bind_method(D_METHOD("get_entity_count"), &RtsExtension::get_entity_count);
-        ClassDB::bind_method(D_METHOD("get_simulation_tick_ms"), &RtsExtension::get_simulation_tick_ms);
-        ClassDB::bind_method(D_METHOD("get_unit_x", "entity_id"), &RtsExtension::get_unit_x);
-        ClassDB::bind_method(D_METHOD("get_unit_y", "entity_id"), &RtsExtension::get_unit_y);
-        ClassDB::bind_method(D_METHOD("get_unit_positions", "entity_ids"), &RtsExtension::get_unit_positions);
-        ClassDB::bind_method(D_METHOD("get_unit_headings", "entity_ids"), &RtsExtension::get_unit_headings);
+        ClassDB::bind_method(D_METHOD("get_unit_position", "entity_id"), &RtsExtension::get_unit_position);
+        ClassDB::bind_method(D_METHOD("get_unit_transforms", "entity_ids"), &RtsExtension::get_unit_transforms);
         ClassDB::bind_method(D_METHOD("get_unit_steering_state", "entity_id"), &RtsExtension::get_unit_steering_state);
-        ClassDB::bind_method(D_METHOD("get_unit_off_road_state", "entity_id"), &RtsExtension::get_unit_off_road_state);
-        ClassDB::bind_method(D_METHOD("initialize_faction", "faction_id", "x", "y"), &RtsExtension::initialize_faction);
         ClassDB::bind_method(D_METHOD("create_unit_with_type", "x", "y", "unit_type", "faction_id"), &RtsExtension::create_unit_with_type);
         ClassDB::bind_method(D_METHOD("get_unit_visual_id", "unit_type"), &RtsExtension::get_unit_visual_id);
         ClassDB::bind_method(D_METHOD("send_visual_pack_handshake", "pack_id", "pack_version", "sha256"), &RtsExtension::send_visual_pack_handshake);
         ClassDB::bind_method(D_METHOD("set_expected_visual_pack", "pack_id", "pack_version", "sha256"), &RtsExtension::set_expected_visual_pack);
-        ClassDB::bind_method(D_METHOD("logistics_carrier_deck_occupancy", "facility_id"), &RtsExtension::logistics_carrier_deck_occupancy);
-        ClassDB::bind_method(D_METHOD("logistics_takeoff_queue_size", "facility_id"), &RtsExtension::logistics_takeoff_queue_size);
-        ClassDB::bind_method(D_METHOD("logistics_landing_queue_size", "facility_id"), &RtsExtension::logistics_landing_queue_size);
-        ClassDB::bind_method(D_METHOD("logistics_active_runway_operations", "facility_id"), &RtsExtension::logistics_active_runway_operations);
-        ClassDB::bind_method(D_METHOD("logistics_is_safe_return", "entity_id"), &RtsExtension::logistics_is_safe_return);
-        ClassDB::bind_method(D_METHOD("logistics_get_intelligence_age", "entity_id"), &RtsExtension::logistics_get_intelligence_age);
-        ClassDB::bind_method(D_METHOD("logistics_is_intelligence_stale", "entity_id"), &RtsExtension::logistics_is_intelligence_stale);
         ClassDB::bind_method(D_METHOD("economy_add_resource_node", "node_id", "x", "y", "amount", "type"), &RtsExtension::economy_add_resource_node);
-        ClassDB::bind_method(D_METHOD("economy_add_extractor", "extractor_id", "x", "y", "node_id", "extraction_rate"), &RtsExtension::economy_add_extractor);
         ClassDB::bind_method(D_METHOD("economy_add_storage", "storage_id", "x", "y", "metal_capacity", "energy_capacity", "research_capacity"), &RtsExtension::economy_add_storage);
         ClassDB::bind_method(D_METHOD("economy_add_production_line", "line_id", "storage_id", "build_speed_metal", "build_speed_energy", "max_jobs"), &RtsExtension::economy_add_production_line);
-        ClassDB::bind_method(D_METHOD("economy_enqueue_construction", "line_id", "entity_id", "type", "metal_cost", "energy_cost", "metal_per_tick", "energy_per_tick"), &RtsExtension::economy_enqueue_construction);
-        ClassDB::bind_method(D_METHOD("economy_update_all", "delta_ms"), &RtsExtension::economy_update_all);
         ClassDB::bind_method(D_METHOD("economy_get_resource_node_count"), &RtsExtension::economy_get_resource_node_count);
-        ClassDB::bind_method(D_METHOD("economy_get_resource_node_info", "node_id"), &RtsExtension::economy_get_resource_node_info);
         ClassDB::bind_method(D_METHOD("economy_get_storage_info", "storage_id"), &RtsExtension::economy_get_storage_info);
-        ClassDB::bind_method(D_METHOD("economy_get_queue_size", "line_id"), &RtsExtension::economy_get_queue_size);
         ClassDB::bind_method(D_METHOD("territory_get_zone_count"), &RtsExtension::territory_get_zone_count);
         ClassDB::bind_method(D_METHOD("territory_get_zone_info", "zone_id"), &RtsExtension::territory_get_zone_info);
         ClassDB::bind_method(D_METHOD("territory_get_installation_info", "x", "y"), &RtsExtension::territory_get_installation_info);
         ClassDB::bind_method(D_METHOD("get_build_catalog", "faction_id"), &RtsExtension::get_build_catalog);
-        ClassDB::bind_method(D_METHOD("get_production_queue", "line_id"), &RtsExtension::get_production_queue);
-        ClassDB::bind_method(D_METHOD("queue_structure", "line_id", "faction_id", "structure_type", "x", "y"), &RtsExtension::queue_structure);
-        ClassDB::bind_method(D_METHOD("get_faction_production_line", "faction_id"), &RtsExtension::get_faction_production_line);
-        ClassDB::bind_method(D_METHOD("economy_get_completed_build_count"), &RtsExtension::economy_get_completed_build_count);
-    ClassDB::bind_method(D_METHOD("get_unit_health", "entity_id"), &RtsExtension::get_unit_health);
-    ClassDB::bind_method(D_METHOD("get_unit_is_dead", "entity_id"), &RtsExtension::get_unit_is_dead);
-    ClassDB::bind_method(D_METHOD("apply_damage", "entity_id", "damage"), &RtsExtension::apply_damage);
-    ClassDB::bind_method(D_METHOD("get_unit_faction_id", "entity_id"), &RtsExtension::get_unit_faction_id);
-        ClassDB::bind_method(D_METHOD("render_add_unit", "x", "y", "unit_type"), &RtsExtension::render_add_unit_instance);
-        ClassDB::bind_method(D_METHOD("render_update"), &RtsExtension::update_renderer);
-        ClassDB::bind_method(D_METHOD("render_get_instance_count"), &RtsExtension::get_render_instance_count);
-        ClassDB::bind_method(D_METHOD("set_debug_mode", "enabled"), &RtsExtension::set_renderer_debug_mode);
+        ClassDB::bind_method(D_METHOD("queue_faction_structure", "faction_id", "structure_type", "x", "y"), &RtsExtension::queue_faction_structure);
+        ClassDB::bind_method(D_METHOD("get_hud_state", "faction_id", "storage_id", "selected_entity_id", "fob_x", "fob_y", "include_fob"), &RtsExtension::get_hud_state);
+        ClassDB::bind_method(D_METHOD("get_unit_health", "entity_id"), &RtsExtension::get_unit_health);
         ClassDB::bind_method(D_METHOD("map_loader_load_map", "path"), &RtsExtension::map_loader_load_map);
-        ClassDB::bind_method(D_METHOD("ai_init"), &RtsExtension::ai_init);
-        ClassDB::bind_method(D_METHOD("ai_update", "delta_ms"), &RtsExtension::ai_update);
-        ClassDB::bind_method(D_METHOD("ai_reset"), &RtsExtension::ai_reset);
-        ClassDB::bind_method(D_METHOD("ai_set_faction_id", "faction_id"), &RtsExtension::ai_set_faction_id);
-        ClassDB::bind_method(D_METHOD("ai_get_visible_unit_count"), &RtsExtension::ai_get_visible_unit_count);
-        ClassDB::bind_method(D_METHOD("ai_get_enemy_unit_count"), &RtsExtension::ai_get_enemy_unit_count);
     }
     
     Array territory_get_zone_info(int64_t zone_id) const {
@@ -648,6 +603,10 @@ public:
             static_cast<rts::EntityId>(line_id), static_cast<rts::FactionId>(faction_id), static_cast<uint8_t>(structure_type), static_cast<float>(x), static_cast<float>(y));
     }
 
+    bool queue_faction_structure(int64_t faction_id, int64_t structure_type, double x, double y) const {
+        return queue_structure(get_faction_production_line(faction_id), faction_id, structure_type, x, y);
+    }
+
     bool validate_structure_placement(int64_t structure_type, double x, double y) const {
         if (structure_type < 0 || structure_type > 3) return false;
         return rts::runtime_simulation()->validate_structure_placement(
@@ -721,6 +680,21 @@ public:
         return queue;
     }
 
+    Dictionary get_hud_state(int64_t faction_id, int64_t storage_id, int64_t selected_entity_id,
+                             double fob_x, double fob_y, bool include_fob) const {
+        Dictionary state;
+        if (faction_id < 0 || faction_id > 2) return state;
+
+        state["tick_ms"] = get_simulation_tick_ms();
+        state["storage"] = economy_get_storage_info(storage_id);
+        state["build_catalog"] = get_build_catalog(faction_id);
+        state["production_queue"] = get_production_queue(get_faction_production_line(faction_id));
+        state["selected_health"] = selected_entity_id > 0 ? get_unit_health(selected_entity_id) : Array();
+        state["selected_off_road"] = selected_entity_id > 0 ? get_unit_off_road_state(selected_entity_id) : PackedFloat32Array();
+        state["fob_installation"] = include_fob ? territory_get_installation_info(fob_x, fob_y) : Array();
+        return state;
+    }
+
     bool destroy_resource_site(int64_t entity_id, double x, double y) const {
         if (entity_id <= 0) return false;
         return rts::runtime_simulation()->destroy_resource_site(
@@ -733,6 +707,30 @@ public:
         ids.resize(static_cast<int>(entities.size()));
         for (int index = 0; index < ids.size(); ++index) ids[index] = static_cast<int32_t>(entities[index]);
         return ids;
+    }
+
+    Array get_unpresented_entities(const PackedInt32Array& known_entity_ids) const {
+        std::unordered_set<int32_t> known;
+        known.reserve(static_cast<size_t>(known_entity_ids.size()));
+        for (int index = 0; index < known_entity_ids.size(); ++index) {
+            if (known_entity_ids[index] > 0) known.insert(known_entity_ids[index]);
+        }
+
+        Array entities;
+        auto& simulation = *rts::runtime_simulation();
+        for (const auto entity_id : simulation.get_entity_list()) {
+            const auto id = static_cast<int32_t>(entity_id);
+            if (id <= 0 || known.contains(id)) continue;
+            rts::FactionId faction_id;
+            if (!simulation.get_unit_faction_id(entity_id, faction_id)) continue;
+            Dictionary entity;
+            entity["id"] = id;
+            entity["faction_id"] = static_cast<int>(faction_id);
+            entity["x"] = simulation.get_unit_x(entity_id);
+            entity["y"] = simulation.get_unit_y(entity_id);
+            entities.append(entity);
+        }
+        return entities;
     }
 
     void move_unit(int64_t entity_id, double x, double y) const {
@@ -996,6 +994,14 @@ public:
         return simulation_get_unit_y(static_cast<int>(entity_id));
     }
 
+    PackedFloat32Array get_unit_position(int64_t entity_id) const {
+        PackedFloat32Array position;
+        position.resize(2);
+        position.set(0, static_cast<float>(get_unit_x(entity_id)));
+        position.set(1, static_cast<float>(get_unit_y(entity_id)));
+        return position;
+    }
+
     PackedFloat32Array get_unit_positions(const PackedInt32Array& entity_ids) const {
         PackedFloat32Array positions;
         positions.resize(entity_ids.size() * 2);
@@ -1018,6 +1024,22 @@ public:
             headings.clear();
         }
         return headings;
+    }
+
+    PackedFloat32Array get_unit_transforms(const PackedInt32Array& entity_ids) const {
+        const auto positions = get_unit_positions(entity_ids);
+        const auto headings = get_unit_headings(entity_ids);
+        if (positions.size() != entity_ids.size() * 2 || headings.size() != entity_ids.size()) {
+            return PackedFloat32Array();
+        }
+        PackedFloat32Array transforms;
+        transforms.resize(entity_ids.size() * 3);
+        for (int index = 0; index < entity_ids.size(); ++index) {
+            transforms.set(index * 3, positions[index * 2]);
+            transforms.set(index * 3 + 1, positions[index * 2 + 1]);
+            transforms.set(index * 3 + 2, headings[index]);
+        }
+        return transforms;
     }
 
     PackedFloat32Array get_unit_steering_state(int64_t entity_id) const {
