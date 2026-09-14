@@ -60,6 +60,8 @@ void Simulation::start() {
     ai_enabled_ = true;
     faction_research_.clear();
     territorial_control_.reset();
+    control_point_battle_.reset();
+    reinforcement_delivery_.reset();
     road_network_.reset();
     pathfinding_.clear_traversal_costs();
     naval_pathfinding_.clear_traversal_costs();
@@ -1078,6 +1080,60 @@ void Simulation::environment_phase(float delta_ms) {
         apply_completed_road(completed_road);
     }
     territorial_control_.update(50.0f);
+    if (control_point_battle_.active()) {
+        std::vector<ControlPointUnitPresence> unit_presence;
+        const auto entities = component_manager_.entities_with<Position, Faction, GroundSteering>(entity_manager_.get_entities());
+        unit_presence.reserve(entities.size());
+        for (const auto entity : entities) {
+            const auto* position = component_manager_.get_component<Position>(entity);
+            const auto* faction = component_manager_.get_component<Faction>(entity);
+            const auto* health = component_manager_.get_component<Health>(entity);
+            if (position && faction && (!health || !health->is_dead)) {
+                unit_presence.push_back({faction->faction_id, position->x, position->y});
+            }
+        }
+        control_point_battle_.update(delta_ms, unit_presence);
+    }
+    if (reinforcement_delivery_.update(delta_ms)) {
+        const auto& package = reinforcement_delivery_.package();
+        create_unit_with_type(reinforcement_delivery_.zone_x(), reinforcement_delivery_.zone_y(),
+                              package.unit_type, reinforcement_delivery_.owner());
+    }
+}
+
+bool Simulation::begin_control_point_battle(const std::vector<ControlPointDefinition>& points,
+                                            FactionId player, FactionId enemy, float hold_duration_ms) {
+    return control_point_battle_.begin(points, player, enemy, hold_duration_ms);
+}
+
+bool Simulation::configure_reinforcement_delivery(float x, float y, float radius, FactionId owner) {
+    return reinforcement_delivery_.configure(x, y, radius, owner);
+}
+
+bool Simulation::select_reinforcement_delivery_zone(FactionId player, float x, float y) {
+    if (player != reinforcement_delivery_.owner()) return false;
+    const bool land = is_land_position(x, y);
+    const bool blocked = !pathfinding_.is_walkable(pathfinding_.to_grid_x(x), pathfinding_.to_grid_y(y));
+    return reinforcement_delivery_.select_zone(x, y, land, blocked);
+}
+
+bool Simulation::request_reinforcement_delivery(FactionId player) {
+    if (player != reinforcement_delivery_.owner()) return false;
+    const auto& package = reinforcement_delivery_.package();
+    const EntityId line = production_manager_.faction_line(player);
+    const auto storage = production_manager_.storages().find(line);
+    const bool funded = storage != production_manager_.storages().end() &&
+        storage->second.metal_storage >= package.material_cost && storage->second.energy_storage >= package.energy_cost;
+    if (!reinforcement_delivery_.request(funded)) return false;
+    return production_manager_.deduct_faction_resources(player, package.material_cost, package.energy_cost);
+}
+
+void Simulation::set_reinforcement_resources(FactionId faction, float material, float energy) {
+    const EntityId line = production_manager_.faction_line(faction);
+    auto storage = production_manager_.storages().find(line);
+    if (storage == production_manager_.storages().end()) return;
+    storage->second.metal_storage = std::max(0.0f, material);
+    storage->second.energy_storage = std::max(0.0f, energy);
 }
 
 float Simulation::get_unit_x(EntityId entity) const {

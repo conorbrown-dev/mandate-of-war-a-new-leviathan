@@ -2,9 +2,9 @@
   "unit_id": "elite_main_battle_tank",
   "format_version": "1.0",
   "dimensions": {
-    "width": 2.0,
-    "height": 1.5,
-    "depth": 2.0
+    "width": 3.8,
+    "height": 2.8,
+    "depth": 8.5
   },
   "base_type": "ground_unit",
   "role_details": {

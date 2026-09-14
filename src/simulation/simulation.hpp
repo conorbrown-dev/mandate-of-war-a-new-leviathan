@@ -22,6 +22,8 @@
 #include "../ecs/components/harvester.hpp"
 #include "../ecs/components/territorial_control.hpp"
 #include "command_manager.hpp"
+#include "control_point_battle.hpp"
+#include "reinforcement_delivery.hpp"
 #include "ai/ai_manager.hpp"
 
 namespace rts {
@@ -225,6 +227,16 @@ public:
     void enable_ai(bool enabled) { ai_enabled_ = enabled; }
     const std::vector<InputCommand>& command_log() const { return command_log_; }
 
+    bool begin_control_point_battle(const std::vector<ControlPointDefinition>& points,
+                                    FactionId player, FactionId enemy, float hold_duration_ms);
+    void reset_control_point_battle() { control_point_battle_.reset(); }
+    const ControlPointBattle& control_point_battle() const { return control_point_battle_; }
+    bool configure_reinforcement_delivery(float x, float y, float radius, FactionId owner);
+    bool select_reinforcement_delivery_zone(FactionId player, float x, float y);
+    bool request_reinforcement_delivery(FactionId player);
+    void set_reinforcement_resources(FactionId faction, float material, float energy);
+    const ReinforcementDelivery& reinforcement_delivery() const { return reinforcement_delivery_; }
+
 private:
     bool running_{false};
     bool ai_enabled_ = true;
@@ -256,6 +268,8 @@ private:
     Terrain terrain_;
     RoadNetwork road_network_;
     TerritorialControlManager territorial_control_;
+    ControlPointBattle control_point_battle_;
+    ReinforcementDelivery reinforcement_delivery_;
     
     std::unique_ptr<AIManager> ai_manager_;
 

@@ -24,6 +24,8 @@ BASELINE_ROOT = ROOT / "validation" / "baselines"
 GAMEPLAY_SCENARIOS = {
     "basic_selection_move",
     "vehicle_movement_smoke",
+    "control_point_skirmish_smoke",
+    "reinforcement_delivery_smoke",
     "strategic_zoom_transition",
     "oak_grove_showcase",
     "airfield_fighter_ferry",

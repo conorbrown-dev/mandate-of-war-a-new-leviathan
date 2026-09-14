@@ -134,6 +134,53 @@ TEST(commands_ground_vehicle_profiles_are_authored_per_prototype) {
           "ground chassis steering profiles are authored per prototype rather than inferred from unit type");
 }
 
+TEST(control_point_battle_contests_captures_holds_and_resets_natively) {
+    Simulation s;
+    s.start();
+    check(s.begin_control_point_battle({{0.0f, 0.0f, 12.0f}}, FactionId::ELITE_PRECISION,
+                                       FactionId::MASS_WARFARE, 200.0f),
+          "control point battle accepts one bounded objective");
+    const int player = s.create_unit_with_type(0.0f, 0.0f, UnitType::ELITE_MAIN_BATTLE_TANK,
+                                               FactionId::ELITE_PRECISION);
+    const int enemy = s.create_unit_with_type(0.0f, 0.0f, UnitType::MASS_SWARM_TANK,
+                                              FactionId::MASS_WARFARE);
+    check(player > 0 && enemy > 0, "opposing ground units spawn at objective");
+    s.update(50.0f);
+    check(s.control_point_battle().points().front().state == ControlPointState::CONTESTED,
+          "enemy presence prevents immediate player capture");
+
+    s.destroy_unit(static_cast<EntityId>(enemy));
+    for (int tick = 0; tick < 110; ++tick) s.update(50.0f);
+    check(s.control_point_battle().points().front().state == ControlPointState::FRIENDLY,
+          "remaining eligible ground unit captures the point through native progress");
+    check(s.control_point_battle().result() == ControlPointBattleResult::VICTORY,
+          "holding a captured point completes the native match result");
+
+    s.reset();
+    check(s.control_point_battle().result() == ControlPointBattleResult::INACTIVE &&
+              s.control_point_battle().points().empty(),
+          "simulation reset returns the tactical objective to a clean match state");
+}
+
+TEST(reinforcement_delivery_deducts_once_rejects_invalid_and_spawns_on_completion) {
+    Simulation s; s.start();
+    s.create_faction_base(FactionId::ELITE_PRECISION, 0.0f, 0.0f);
+    s.set_reinforcement_resources(FactionId::ELITE_PRECISION, 600.0f, 400.0f);
+    check(s.configure_reinforcement_delivery(20.0f, 0.0f, 20.0f, FactionId::ELITE_PRECISION), "delivery configures a friendly zone");
+    const auto line = s.production_manager().faction_line(FactionId::ELITE_PRECISION);
+    const float material_before = s.production_manager().storages().at(line).metal_storage;
+    check(!s.select_reinforcement_delivery_zone(FactionId::ELITE_PRECISION, 80.0f, 0.0f), "outside zone is rejected");
+    check(s.production_manager().storages().at(line).metal_storage == material_before, "invalid selection spends nothing");
+    check(s.select_reinforcement_delivery_zone(FactionId::ELITE_PRECISION, 20.0f, 0.0f), "valid zone selects");
+    check(s.request_reinforcement_delivery(FactionId::ELITE_PRECISION), "funded request accepted once");
+    check(s.production_manager().storages().at(line).metal_storage == material_before - 260.0f, "successful request deducts exact material once");
+    check(!s.request_reinforcement_delivery(FactionId::ELITE_PRECISION), "duplicate request rejected while incoming");
+    for (int tick = 0; tick < 80; ++tick) s.update(50.0f);
+    check(s.reinforcement_delivery().state() == ReinforcementDeliveryState::COMPLETED && s.entity_count() >= 2, "completion creates the native reinforcement unit");
+    s.reset();
+    check(s.reinforcement_delivery().state() == ReinforcementDeliveryState::INACTIVE, "reset clears delivery state");
+}
+
 TEST(commands_ground_vehicles_brake_inside_arrival_radius_without_snapping) {
     Simulation s; s.start();
     const int id = s.create_unit_with_type(0, 0, UnitType::ELITE_MAIN_BATTLE_TANK,

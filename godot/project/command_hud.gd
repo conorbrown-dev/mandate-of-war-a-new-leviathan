@@ -239,6 +239,17 @@ func _draw() -> void:
 	_panel(identity, CYAN)
 	_text(identity.position + Vector2(11, 17), "NFR // TACTICAL COMMAND", 9, CYAN, ui_scale)
 	_text(identity.position + Vector2(11, 37), String(snapshot.get("scenario", "SKIRMISH")).to_upper(), 15, INK, ui_scale)
+	var objective_status := String(snapshot.get("objective_status", ""))
+	if not objective_status.is_empty():
+		var objective := Rect2((w - 560.0) * 0.5, 12.0, 560.0, 40.0)
+		var objective_accent := GREEN if objective_status.begins_with("VICTORY") else RED if objective_status.begins_with("DEFEAT") else AMBER
+		_panel(objective, objective_accent)
+		_text(objective.position + Vector2(10, 25), objective_status, 11, objective_accent, ui_scale)
+	var reinforcement_status := String(snapshot.get("reinforcement_status", ""))
+	if not reinforcement_status.is_empty():
+		var reinforcement := Rect2((w - 560.0) * 0.5, 56.0, 560.0, 34.0)
+		_panel(reinforcement, CYAN)
+		_text(reinforcement.position + Vector2(10, 22), reinforcement_status, 10, CYAN, ui_scale)
 
 	var economy_width := 374.0
 	var economy := Rect2(w - economy_width - 14.0, 12, economy_width, 56)

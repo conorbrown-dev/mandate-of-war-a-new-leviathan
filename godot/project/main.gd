@@ -41,6 +41,8 @@ const CIVILIAN_DRESSING_PATH := "res://scenarios/civilian_dressing.json"
 const TREE_INSTANCE_TARGET := 960
 const TREE_CLUSTER_COUNT := 9
 const SkirmishConfigLoader := preload("res://skirmish_config.gd")
+const ControlPointPresentationScript := preload("res://control_point_presentation.gd")
+const ReinforcementPresentationScript := preload("res://reinforcement_delivery_presentation.gd")
 const ArmorTexture := preload("res://assets/units/near_future_armor_tile_v1.png")
 const MATERIAL_SITES := [
 	{"id": 900, "name": "RARE METALS", "position": Vector2(-15500, -9000), "owner": -1, "color": Color("#ffbd52")},
@@ -225,6 +227,13 @@ var fob_build_target := Vector2.INF
 var fob_was_constructing := false
 var fob_completion_notification := ""
 var hover_context: Dictionary = {}
+var control_point_presentation: Node3D
+var control_point_battle_enabled := false
+var control_point_battle_status := ""
+var reinforcement_presentation: Node3D
+var reinforcement_delivery_enabled := false
+var reinforcement_delivery_selecting := false
+var reinforcement_delivery_status := ""
 
 func _get_visible_unit_count() -> int:
 	var env_count := OS.get_environment("UNIT_COUNT")
@@ -370,7 +379,11 @@ func _ready() -> void:
 	scenario_title.text = String(scenario_definition.display_name).to_upper()
 	scenario_description.text = String(scenario_definition.description).to_upper()
 	scenario_status.text = "Elite Precision vs Mass Warfare\n%s" % scenario_definition.victory.description
-	if OS.get_environment("RTS_AUTO_START_SKIRMISH") == "1":
+	if OS.get_environment("RTS_CONTROL_POINT_SKIRMISH") == "1":
+		_start_control_point_skirmish.call_deferred()
+	elif OS.get_environment("RTS_REINFORCEMENT_DELIVERY_SMOKE") == "1":
+		_start_reinforcement_delivery_smoke.call_deferred()
+	elif OS.get_environment("RTS_AUTO_START_SKIRMISH") == "1":
 		_on_start_skirmish_pressed.call_deferred()
 	if OS.get_environment("RTS_AUTO_START_NATIVE_SKIRMISH") == "1":
 		_on_native_skirmish_pressed.call_deferred()
@@ -378,6 +391,61 @@ func _ready() -> void:
 
 func _on_native_skirmish_pressed() -> void:
 	get_tree().change_scene_to_file("res://native_skirmish.tscn")
+
+
+func _start_control_point_skirmish() -> void:
+	if match_started:
+		return
+	_on_start_skirmish_pressed()
+	if not match_started:
+		return
+	var point := Vector2(-12100.0, 0.0)
+	var point_radius := 55.0
+	var packed_points := PackedFloat32Array([point.x, point.y, point_radius])
+	control_point_battle_enabled = bool(extension.call("control_point_battle_begin", packed_points, HUMAN_PLAYER_ID, 1, 3000.0))
+	if not control_point_battle_enabled:
+		push_error("Failed to begin native control-point battle")
+		return
+	for row in range(3):
+		for column in range(4):
+			var spawn := point + Vector2(-150.0 + float(column) * 10.0, -12.0 + float(row) * 12.0)
+			var vehicle_id := int(extension.call("create_unit_with_type", spawn.x, spawn.y, 6, HUMAN_PLAYER_ID))
+			if vehicle_id > 0:
+				_register_presented_unit(vehicle_id, 6, HUMAN_PLAYER_ID, spawn)
+	for index in range(1):
+		var defender_spawn := point + Vector2(-15.0 + float(index) * 10.0, 12.0)
+		var defender_id := int(extension.call("create_unit_with_type", defender_spawn.x, defender_spawn.y, 8, 1))
+		if defender_id > 0:
+			_register_presented_unit(defender_id, 8, 1, defender_spawn)
+	if control_point_presentation == null:
+		control_point_presentation = ControlPointPresentationScript.new()
+		add_child(control_point_presentation)
+	control_point_battle_status = "CONTROL POINT ALPHA // NEUTRAL // MOVE VEHICLES INTO THE ZONE"
+	camera_target = Vector3(point.x - 80.0, _terrain_height_at(point.x - 80.0, point.y), point.y)
+	camera_distance = 420.0
+	target_camera_distance = 420.0
+	_update_camera(1.0)
+	_update_control_point_presentation()
+
+
+func _start_reinforcement_delivery_smoke() -> void:
+	if match_started:
+		return
+	_on_start_skirmish_pressed()
+	if not match_started:
+		return
+	var zone := Vector2(-12100.0, 0.0)
+	reinforcement_delivery_enabled = bool(extension.call("reinforcement_delivery_configure", zone.x, zone.y, 65.0, HUMAN_PLAYER_ID))
+	extension.call("reinforcement_delivery_set_resources", HUMAN_PLAYER_ID, 600.0, 400.0)
+	if reinforcement_delivery_enabled:
+		reinforcement_presentation = ReinforcementPresentationScript.new()
+		add_child(reinforcement_presentation)
+		reinforcement_delivery_status = "DELIVERY ZONE READY // D: SELECT ZONE // F: REQUEST PACKAGE"
+		camera_target = Vector3(zone.x - 80.0, _terrain_height_at(zone.x - 80.0, zone.y), zone.y)
+		camera_distance = 420.0
+		target_camera_distance = 420.0
+		_update_camera(1.0)
+		_update_reinforcement_presentation()
 
 
 func _setup_environment_debug_panel() -> void:
@@ -794,6 +862,41 @@ func _process(delta: float) -> void:
 		_update_hud()
 
 	_update_territory()
+	_update_control_point_presentation()
+	_update_reinforcement_presentation()
+
+
+func _update_control_point_presentation() -> void:
+	if not control_point_battle_enabled or extension == null:
+		return
+	var battle: Dictionary = extension.call("control_point_battle_state")
+	var points: Array = battle.get("points", [])
+	if control_point_presentation != null:
+		control_point_presentation.sync(points, func(x: float, z: float): return _terrain_height_at(x, z))
+	if points.is_empty():
+		return
+	var point: Dictionary = points[0]
+	var result := int(battle.get("result", 0))
+	var state_name: String = ["NEUTRAL", "FRIENDLY", "ENEMY", "CONTESTED"][clampi(int(point.get("state", 0)), 0, 3)]
+	if result == 2:
+		control_point_battle_status = "VICTORY // ALPHA SECURED"
+	elif result == 3:
+		control_point_battle_status = "DEFEAT // ALPHA LOST"
+	else:
+		control_point_battle_status = "ALPHA // %s // CAPTURE %.0f%% // HOLD %.1f / %.1f SEC" % [state_name,
+			absf(float(point.get("capture_progress", 0.0))) * 100.0,
+			float(battle.get("hold_elapsed_ms", 0.0)) / 1000.0,
+			float(battle.get("hold_duration_ms", 0.0)) / 1000.0]
+
+
+func _update_reinforcement_presentation() -> void:
+	if not reinforcement_delivery_enabled or extension == null:
+		return
+	var delivery: Dictionary = extension.call("reinforcement_delivery_state")
+	if reinforcement_presentation != null:
+		reinforcement_presentation.sync(delivery, func(x: float, z: float): return _terrain_height_at(x, z))
+	if not String(delivery.get("reason", "")).is_empty():
+		reinforcement_delivery_status = String(delivery.get("reason", reinforcement_delivery_status))
 
 
 func _update_territory() -> void:
@@ -870,6 +973,16 @@ func _unhandled_input(event: InputEvent) -> void:
 		_issue_stop_order()
 		return
 	if event is InputEventKey and event.pressed:
+		if reinforcement_delivery_enabled and event.keycode == KEY_D:
+			reinforcement_delivery_selecting = true
+			reinforcement_delivery_status = "SELECT DELIVERY ZONE // LEFT-CLICK THE CYAN AREA"
+			return
+		if reinforcement_delivery_enabled and event.keycode == KEY_F:
+			if bool(extension.call("reinforcement_delivery_request", HUMAN_PLAYER_ID)):
+				reinforcement_delivery_status = "TRANSPORT INBOUND"
+			else:
+				reinforcement_delivery_status = String(extension.call("reinforcement_delivery_state").get("reason", "REQUEST REJECTED"))
+			return
 		if event.keycode == KEY_8:
 			fob_build_mode = selected_ids.size() > 0
 			material_order_mode = 0
@@ -911,6 +1024,14 @@ func _unhandled_input(event: InputEvent) -> void:
 				zoom_focus_pending = false
 		elif event.button_index == MOUSE_BUTTON_LEFT:
 			if event.pressed:
+				if reinforcement_delivery_selecting:
+					var delivery_target := _screen_to_world(event.position)
+					reinforcement_delivery_selecting = false
+					if bool(extension.call("reinforcement_delivery_select_zone", HUMAN_PLAYER_ID, delivery_target.x, delivery_target.y)):
+						reinforcement_delivery_status = "ZONE SELECTED // PRESS F TO REQUEST"
+					else:
+						reinforcement_delivery_status = String(extension.call("reinforcement_delivery_state").get("reason", "ZONE REJECTED"))
+					return
 				if fob_build_mode:
 					return
 				if road_build_mode:
@@ -1610,7 +1731,7 @@ func _select_nearest(screen_position: Vector2) -> void:
 	# At strategic zoom a vehicle's rendered hull is only a few pixels wide.
 	# Use a forgiving but bounded screen-space hit radius for a direct click.
 	var closest_distance := clampf(camera_distance * 0.22, 20.0, 32.0)
-	for entity_id in player_entity_ids:
+	for entity_id in ai_entity_ids:
 		var world_position := _entity_world_position(entity_id)
 		if camera.is_position_behind(world_position):
 			continue
@@ -2886,6 +3007,8 @@ func _update_hud() -> void:
 		"tick": hud_state.get("tick_ms", 0.0),
 		"fps": Engine.get_frames_per_second(),
 		"engine": "ONLINE",
+		"objective_status": control_point_battle_status,
+		"reinforcement_status": reinforcement_delivery_status,
 	})
 
 

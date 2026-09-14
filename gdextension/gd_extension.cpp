@@ -1,8 +1,10 @@
 #include <cstdint>
 #include <chrono>
+#include <cmath>
 #include <filesystem>
 #include <optional>
 #include <unordered_set>
+#include <vector>
 
 #include <godot_cpp/classes/project_settings.hpp>
 #include <godot_cpp/classes/ref_counted.hpp>
@@ -17,6 +19,7 @@
 #include "map/map_loader.hpp"
 #include "ecs/components/factions.hpp"
 #include "simulation/skirmish.hpp"
+#include "simulation/simulation.hpp"
 #include "stats/stats_manager.hpp"
 
 using namespace godot;
@@ -189,6 +192,7 @@ protected:
         ClassDB::bind_method(D_METHOD("create_unit", "x", "y"), &RtsExtension::create_unit);
         ClassDB::bind_method(D_METHOD("create_faction_base", "faction_id", "x", "y"), &RtsExtension::create_faction_base);
         ClassDB::bind_method(D_METHOD("destroy_resource_site", "entity_id", "x", "y"), &RtsExtension::destroy_resource_site);
+        ClassDB::bind_method(D_METHOD("destroy_unit", "entity_id"), &RtsExtension::destroy_unit);
         ClassDB::bind_method(D_METHOD("get_entity_ids"), &RtsExtension::get_entity_ids);
         ClassDB::bind_method(D_METHOD("get_unpresented_entities", "known_entity_ids"), &RtsExtension::get_unpresented_entities);
         ClassDB::bind_method(
@@ -235,6 +239,14 @@ protected:
         ClassDB::bind_method(D_METHOD("territory_get_zone_count"), &RtsExtension::territory_get_zone_count);
         ClassDB::bind_method(D_METHOD("territory_get_zone_info", "zone_id"), &RtsExtension::territory_get_zone_info);
         ClassDB::bind_method(D_METHOD("territory_get_installation_info", "x", "y"), &RtsExtension::territory_get_installation_info);
+        ClassDB::bind_method(D_METHOD("control_point_battle_begin", "points", "player_faction", "enemy_faction", "hold_duration_ms"), &RtsExtension::control_point_battle_begin);
+        ClassDB::bind_method(D_METHOD("control_point_battle_reset"), &RtsExtension::control_point_battle_reset);
+        ClassDB::bind_method(D_METHOD("control_point_battle_state"), &RtsExtension::control_point_battle_state);
+        ClassDB::bind_method(D_METHOD("reinforcement_delivery_configure", "x", "y", "radius", "faction_id"), &RtsExtension::reinforcement_delivery_configure);
+        ClassDB::bind_method(D_METHOD("reinforcement_delivery_select_zone", "faction_id", "x", "y"), &RtsExtension::reinforcement_delivery_select_zone);
+        ClassDB::bind_method(D_METHOD("reinforcement_delivery_request", "faction_id"), &RtsExtension::reinforcement_delivery_request);
+        ClassDB::bind_method(D_METHOD("reinforcement_delivery_set_resources", "faction_id", "material", "energy"), &RtsExtension::reinforcement_delivery_set_resources);
+        ClassDB::bind_method(D_METHOD("reinforcement_delivery_state"), &RtsExtension::reinforcement_delivery_state);
         ClassDB::bind_method(D_METHOD("get_build_catalog", "faction_id"), &RtsExtension::get_build_catalog);
         ClassDB::bind_method(D_METHOD("queue_faction_structure", "faction_id", "structure_type", "x", "y"), &RtsExtension::queue_faction_structure);
         ClassDB::bind_method(D_METHOD("get_hud_state", "faction_id", "storage_id", "selected_entity_id", "fob_x", "fob_y", "include_fob"), &RtsExtension::get_hud_state);
@@ -274,6 +286,82 @@ protected:
     
     int territory_get_zone_count() const {
         return ::territory_get_zone_count();
+    }
+
+    bool control_point_battle_begin(const PackedFloat32Array& packed_points, int64_t player_faction,
+                                    int64_t enemy_faction, double hold_duration_ms) const {
+        if (packed_points.is_empty() || packed_points.size() % 3 != 0 ||
+            player_faction < 0 || player_faction > 2 || enemy_faction < 0 || enemy_faction > 2 ||
+            !std::isfinite(hold_duration_ms)) return false;
+        std::vector<rts::ControlPointDefinition> points;
+        points.reserve(static_cast<size_t>(packed_points.size() / 3));
+        for (int index = 0; index < packed_points.size(); index += 3) {
+            points.push_back({packed_points[index], packed_points[index + 1], packed_points[index + 2]});
+        }
+        return rts::runtime_simulation()->begin_control_point_battle(
+            points, static_cast<rts::FactionId>(player_faction),
+            static_cast<rts::FactionId>(enemy_faction), static_cast<float>(hold_duration_ms));
+    }
+
+    void control_point_battle_reset() const {
+        rts::runtime_simulation()->reset_control_point_battle();
+    }
+
+    Dictionary control_point_battle_state() const {
+        const auto& battle = rts::runtime_simulation()->control_point_battle();
+        Dictionary state;
+        state["result"] = static_cast<int>(battle.result());
+        state["hold_elapsed_ms"] = battle.hold_elapsed_ms();
+        state["hold_duration_ms"] = battle.hold_duration_ms();
+        Array points;
+        for (const auto& point : battle.points()) {
+            Dictionary value;
+            value["x"] = point.definition.x;
+            value["y"] = point.definition.y;
+            value["radius"] = point.definition.radius;
+            value["state"] = static_cast<int>(point.state);
+            value["capture_progress"] = point.capture_progress;
+            value["friendly_units"] = point.friendly_units;
+            value["enemy_units"] = point.enemy_units;
+            points.append(value);
+        }
+        state["points"] = points;
+        return state;
+    }
+
+    bool reinforcement_delivery_configure(double x, double y, double radius, int64_t faction_id) const {
+        if (faction_id < 0 || faction_id > 2) return false;
+        return rts::runtime_simulation()->configure_reinforcement_delivery(static_cast<float>(x), static_cast<float>(y),
+            static_cast<float>(radius), static_cast<rts::FactionId>(faction_id));
+    }
+
+    bool reinforcement_delivery_select_zone(int64_t faction_id, double x, double y) const {
+        if (faction_id < 0 || faction_id > 2) return false;
+        return rts::runtime_simulation()->select_reinforcement_delivery_zone(static_cast<rts::FactionId>(faction_id),
+            static_cast<float>(x), static_cast<float>(y));
+    }
+
+    bool reinforcement_delivery_request(int64_t faction_id) const {
+        if (faction_id < 0 || faction_id > 2) return false;
+        return rts::runtime_simulation()->request_reinforcement_delivery(static_cast<rts::FactionId>(faction_id));
+    }
+
+    void reinforcement_delivery_set_resources(int64_t faction_id, double material, double energy) const {
+        if (faction_id < 0 || faction_id > 2) return;
+        rts::runtime_simulation()->set_reinforcement_resources(static_cast<rts::FactionId>(faction_id),
+            static_cast<float>(material), static_cast<float>(energy));
+    }
+
+    Dictionary reinforcement_delivery_state() const {
+        const auto& delivery = rts::runtime_simulation()->reinforcement_delivery();
+        Dictionary state;
+        state["state"] = static_cast<int>(delivery.state());
+        state["reason"] = String(delivery.reason().c_str());
+        state["x"] = delivery.zone_x(); state["y"] = delivery.zone_y(); state["radius"] = delivery.zone_radius();
+        state["elapsed_ms"] = delivery.elapsed_ms(); state["duration_ms"] = delivery.package().delivery_duration_ms;
+        state["material_cost"] = delivery.package().material_cost; state["energy_cost"] = delivery.package().energy_cost;
+        state["unit_type"] = static_cast<int>(delivery.package().unit_type);
+        return state;
     }
 
 public:

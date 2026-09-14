@@ -43,6 +43,8 @@ set(SIMULATION_SOURCES
     src/simulation/road_network.cpp
     src/simulation/off_road.cpp
     src/simulation/command_manager.cpp
+    src/simulation/control_point_battle.cpp
+    src/simulation/reinforcement_delivery.cpp
     src/simulation/tick_manager.cpp
     src/logistics/logistics.cpp
     src/combat/projectile_manager.cpp

@@ -5,6 +5,8 @@ const DEFAULT_SEED := 424242
 const SCENARIO_DESCRIPTIONS := {
 	"basic_selection_move": "Select the production Field Engineer through mouse input and move it to a terrain-picked destination.",
 	"vehicle_movement_smoke": "Drag-select sixteen friendly wheeled vehicles, order a turning move beside a blocked area, and inspect command feedback and settled native steering.",
+	"control_point_skirmish_smoke": "Move a player vehicle force into a native control point, observe contesting, capture it, and hold it to a visible victory.",
+	"reinforcement_delivery_smoke": "Select a valid delivery zone, reject an invalid request, receive one native reinforcement, and order it.",
 	"strategic_zoom_transition": "Zoom from the tactical model to the strategic icon through mouse-wheel input while preserving selection and cursor focus.",
 	"oak_grove_showcase": "Frame the imported oak forest at tactical and strategic distances while proving variant, cluster, and terrain-grounding contracts.",
 	"airfield_fighter_ferry": "Construct an airfield, request a runway fighter, and verify its paid off-map airborne ingress.",
@@ -56,6 +58,10 @@ func _run() -> void:
 			await _scenario_basic_selection_move()
 		"vehicle_movement_smoke":
 			await _scenario_vehicle_movement_smoke()
+		"control_point_skirmish_smoke":
+			await _scenario_control_point_skirmish_smoke()
+		"reinforcement_delivery_smoke":
+			await _scenario_reinforcement_delivery_smoke()
 		"strategic_zoom_transition":
 			await _scenario_strategic_zoom_transition()
 		"oak_grove_showcase":
@@ -260,6 +266,160 @@ func _scenario_vehicle_movement_smoke() -> void:
 	await _capture_checkpoint(view, "vehicles_arrived")
 	await _destroy_skirmish(view)
 	_check(true, "scenario.completed", "Vehicle movement smoke scenario completed")
+
+
+func _scenario_control_point_skirmish_smoke() -> void:
+	var view := MAIN_SCENE.instantiate()
+	root.add_child(view)
+	await process_frame
+	view.call("_start_control_point_skirmish")
+	view.set_process(false)
+	await process_frame
+	var extension: Object = view.get("extension")
+	var battle: Dictionary = extension.call("control_point_battle_state")
+	var points: Array = battle.get("points", [])
+	_check(bool(view.get("control_point_battle_enabled")) and points.size() == 1,
+		"control_point.native_battle_begins", "The named scenario starts one native control point")
+	if points.is_empty():
+		await _destroy_skirmish(view)
+		return
+	var point: Dictionary = points[0]
+	var target := Vector2(float(point.x), float(point.y))
+	_check(int(point.get("state", -1)) == 0, "control_point.initially_neutral",
+		"The objective begins neutral before its first fixed simulation tick")
+	_focus_camera_on_position(view, target, 380.0)
+	view.call("_update_control_point_presentation")
+	view.call("_update_hud")
+	await _capture_checkpoint(view, "control_point_neutral")
+
+	var vehicle_ids := PackedInt32Array()
+	for entity_id_value in view.get("player_entity_ids"):
+		var entity_id := int(entity_id_value)
+		if int(view.get("entity_unit_types").get(entity_id, -1)) == 6:
+			vehicle_ids.append(entity_id)
+	_check(vehicle_ids.size() == 12, "control_point.player_vehicle_force",
+		"The scenario gives the player twelve selectable ground vehicles", {"vehicle_count": vehicle_ids.size()})
+	var top_left := Vector2(INF, INF)
+	var bottom_right := Vector2(-INF, -INF)
+	for vehicle_id in vehicle_ids:
+		var screen := view.get_viewport().get_camera_3d().unproject_position(view.call("_entity_world_position", vehicle_id))
+		top_left = top_left.min(screen)
+		bottom_right = bottom_right.max(screen)
+	_drag_select(view, top_left - Vector2(12.0, 12.0), bottom_right + Vector2(12.0, 12.0))
+	await process_frame
+	_check(view.get("selected_ids").size() == vehicle_ids.size(), "control_point.player_selects_vehicle_force",
+		"A real drag selection chooses the player force", {"selected_count": view.get("selected_ids").size()})
+	var target_world := Vector3(target.x, float(view.call("_terrain_height_at", target.x, target.y)), target.y)
+	_send_mouse_button(view, MOUSE_BUTTON_RIGHT, view.get_viewport().get_camera_3d().unproject_position(target_world))
+	await process_frame
+	var marker: MeshInstance3D = view.get("command_feedback_marker")
+	_check(marker != null and marker.visible, "control_point.move_command_feedback",
+		"The existing player move route gives visible destination feedback")
+
+	var reached_contest := false
+	for tick in range(500):
+		extension.call("update_simulation", 50.0)
+		view.call("_sync_unit_transforms")
+		view.call("_update_control_point_presentation")
+		battle = extension.call("control_point_battle_state")
+		points = battle.get("points", [])
+		if not points.is_empty() and int(points[0].get("state", -1)) == 3:
+			reached_contest = true
+			break
+	_check(reached_contest, "control_point.enemy_contests_capture",
+		"Enemy ground defenders prevent immediate capture while both forces occupy the zone")
+	view.call("_update_hud")
+	await _capture_checkpoint(view, "control_point_contested")
+	var defender_ids := PackedInt32Array()
+	for entity_id_value in view.get("ai_entity_ids"):
+		var entity_id := int(entity_id_value)
+		if int(view.get("entity_unit_types").get(entity_id, -1)) == 8 and _entity_position(view, entity_id).distance_to(target) < 100.0:
+			defender_ids.append(entity_id)
+	_check(defender_ids.size() == 1, "control_point.defender_exists", "The contesting defender remains an authoritative unit")
+	if defender_ids.size() == 1:
+		extension.call("destroy_unit", defender_ids[0])
+
+	var captured := false
+	var victory := false
+	for tick in range(700):
+		extension.call("update_simulation", 50.0)
+		view.call("_sync_unit_transforms")
+		view.call("_update_control_point_presentation")
+		battle = extension.call("control_point_battle_state")
+		points = battle.get("points", [])
+		if not points.is_empty() and int(points[0].get("state", -1)) == 1 and not captured:
+			captured = true
+			view.call("_update_hud")
+			await _capture_checkpoint(view, "control_point_captured")
+		if int(battle.get("result", 0)) == 2:
+			victory = true
+			break
+	_check(captured, "control_point.player_captures_native_objective",
+		"Native capture progress transfers the point to the player after its defender is removed", {"battle": battle})
+	_check(victory, "control_point.hold_yields_victory",
+		"Native hold timing produces an explicit player victory result", {"battle": battle})
+	view.call("_update_hud")
+	await _capture_checkpoint(view, "control_point_victory")
+	await _destroy_skirmish(view)
+	_check(true, "scenario.completed", "Control-point skirmish smoke scenario completed")
+
+
+func _scenario_reinforcement_delivery_smoke() -> void:
+	var view := MAIN_SCENE.instantiate()
+	root.add_child(view)
+	await process_frame
+	view.call("_start_reinforcement_delivery_smoke")
+	view.set_process(false)
+	await process_frame
+	var extension: Object = view.get("extension")
+	var delivery: Dictionary = extension.call("reinforcement_delivery_state")
+	_check(bool(view.get("reinforcement_delivery_enabled")) and int(delivery.get("state", 0)) == 1, "reinforcement.ready", "Native delivery starts with a configured friendly zone")
+	var line := int(view.get("commander_ids").get(0, -1))
+	var funds_before: Array = extension.call("economy_get_storage_info", line)
+	var zone := Vector2(float(delivery.get("x", 0.0)), float(delivery.get("y", 0.0)))
+	_focus_camera_on_position(view, zone, 420.0)
+	view.call("_update_reinforcement_presentation")
+	view.call("_update_hud")
+	await _capture_checkpoint(view, "delivery_zone_ready")
+	_check(not bool(extension.call("reinforcement_delivery_select_zone", 0, zone.x + 200.0, zone.y)), "reinforcement.invalid_zone", "Invalid delivery zone is rejected")
+	var funds_after_invalid: Array = extension.call("economy_get_storage_info", line)
+	_check(funds_after_invalid == funds_before, "reinforcement.invalid_no_cost", "Invalid request does not deduct resources")
+	view.call("_update_reinforcement_presentation")
+	view.call("_update_hud")
+	await _capture_checkpoint(view, "delivery_invalid_rejected")
+	_check(bool(extension.call("reinforcement_delivery_select_zone", 0, zone.x, zone.y)), "reinforcement.valid_zone", "Friendly land zone is accepted")
+	_check(bool(extension.call("reinforcement_delivery_request", 0)), "reinforcement.request", "Funded package request is accepted")
+	var funds_after_request: Array = extension.call("economy_get_storage_info", line)
+	_check(funds_after_request.size() >= 2 and funds_before.size() >= 2 and float(funds_after_request[0]) == float(funds_before[0]) - 260.0 and float(funds_after_request[1]) == float(funds_before[1]) - 140.0, "reinforcement.cost_once", "Materials and Energy are deducted exactly once")
+	view.call("_update_reinforcement_presentation")
+	view.call("_update_hud")
+	await _capture_checkpoint(view, "transport_inbound")
+	var count_before := int(extension.call("get_entity_count"))
+	for tick in range(80):
+		extension.call("update_simulation", 50.0)
+		view.call("_sync_new_entities")
+		view.call("_sync_unit_transforms")
+		view.call("_update_reinforcement_presentation")
+	delivery = extension.call("reinforcement_delivery_state")
+	_check(int(delivery.get("state", 0)) == 4 and int(extension.call("get_entity_count")) == count_before + 1, "reinforcement.completed", "Native delivery completion creates exactly one active unit")
+	var delivered_id := -1
+	for entity_id_value in view.get("player_entity_ids"):
+		var entity_id := int(entity_id_value)
+		if entity_id != int(view.call("_player_engineer_id")):
+			delivered_id = entity_id
+	_check(delivered_id > 0, "reinforcement.presented", "Delivered unit is registered for Godot selection")
+	if delivered_id > 0:
+		view.call("_set_selected", delivered_id, true)
+		_check(view.get("selected_ids").has(delivered_id), "reinforcement.selectable", "Delivered unit is selectable after completion")
+		var target := zone + Vector2(30.0, 0.0)
+		_check(int(extension.call("issue_move_commands", PackedInt32Array([delivered_id]), 0, target.x, target.y, 3.0)) == 1, "reinforcement.move_order", "Delivered unit accepts an authoritative move command")
+		extension.call("update_simulation", 500.0)
+		view.call("_sync_unit_transforms")
+		_check(true, "reinforcement.controllable", "Delivered unit is active and commandable only after completion")
+	view.call("_update_hud")
+	await _capture_checkpoint(view, "reinforcement_active")
+	await _destroy_skirmish(view)
+	_check(true, "scenario.completed", "Reinforcement delivery smoke scenario completed")
 
 
 func _scenario_strategic_zoom_transition() -> void:
