@@ -3,6 +3,7 @@ extends Node3D
 const DEFAULT_UNIT_COUNT := 1000
 const DEFAULT_SKIRMISH_PATH := "res://scenarios/commander_start_skirmish.json"
 const UNIT_SPACING := 3.0
+const COMMAND_MARKER_DURATION_SECONDS := 4.0
 const UNIT_BASE_COLOR := Color(0.12, 0.62, 1.0, 1.0)
 const UNIT_SELECTED_COLOR := Color(1.0, 0.72, 0.08, 1.0)
 const PLAYER_FACTION_COLOR := Color(0.12, 0.62, 1.0, 1.0)
@@ -204,6 +205,8 @@ var road_views: Dictionary = {}
 var blueprint_pointer_down := false
 var pending_completed_structures: Array[Dictionary] = []
 var selected_structure_view: Node3D
+var command_feedback_marker: MeshInstance3D
+var command_feedback_remaining := 0.0
 var civilian_building_instance_count := 0
 var civilian_building_positions: Array[Vector2] = []
 var tree_lod_distance := 5000.0
@@ -748,6 +751,7 @@ func _exit_tree() -> void:
 
 
 func _process(delta: float) -> void:
+	_update_command_feedback(delta)
 	# Middle-button release can be missed if focus changes while the pointer is
 	# outside the window. Never leave tactical panning latched in that case.
 	if panning and not Input.is_mouse_button_pressed(MOUSE_BUTTON_MIDDLE):
@@ -1407,6 +1411,10 @@ func _sync_unit_transforms() -> Vector2:
 			unit_multimesh.set_instance_transform(index, Transform3D(basis, Vector3(x, 0.4, z)))
 			var demo_root: Node3D = demo_unit_views.get(entity_ids[index], null)
 			if demo_root != null:
+				demo_root.transform = Transform3D(
+					basis.scaled(demo_root.scale),
+					Vector3(x, _terrain_height_at(x, z), z)
+				)
 				_set_unit_lod(demo_root)
 	var upload_ms := float(Time.get_ticks_usec() - upload_start_us) / 1000.0
 	return Vector2(fetch_ms, upload_ms)
@@ -2273,6 +2281,38 @@ func _issue_move_order(screen_position: Vector2) -> void:
 	)
 	if accepted_count != selected_ids.size():
 		push_warning("Move order rejected: accepted=%d/%d entity=%d target=(%.6f,%.6f)" % [accepted_count, selected_ids.size(), selected_ids[0], target.x, target.y])
+		return
+	_show_command_feedback(target)
+
+
+func _show_command_feedback(target: Vector2) -> void:
+	if command_feedback_marker == null:
+		command_feedback_marker = MeshInstance3D.new()
+		command_feedback_marker.name = "CommandFeedbackMarker"
+		var mesh := TorusMesh.new()
+		mesh.inner_radius = 1.4
+		mesh.outer_radius = 1.7
+		mesh.rings = 16
+		mesh.ring_segments = 8
+		command_feedback_marker.mesh = mesh
+		var material := StandardMaterial3D.new()
+		material.albedo_color = Color(0.20, 0.90, 1.0, 0.92)
+		material.emission_enabled = true
+		material.emission = Color(0.08, 0.55, 1.0, 1.0)
+		material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+		command_feedback_marker.material_override = material
+		add_child(command_feedback_marker)
+	command_feedback_marker.position = Vector3(target.x, _terrain_height_at(target.x, target.y) + 0.22, target.y)
+	command_feedback_marker.visible = true
+	command_feedback_remaining = COMMAND_MARKER_DURATION_SECONDS
+
+
+func _update_command_feedback(delta: float) -> void:
+	if command_feedback_marker == null or not command_feedback_marker.visible:
+		return
+	command_feedback_remaining -= delta
+	if command_feedback_remaining <= 0.0:
+		command_feedback_marker.visible = false
 
 
 func _issue_stop_order() -> void:

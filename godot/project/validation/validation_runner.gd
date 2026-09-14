@@ -4,6 +4,7 @@ const MAIN_SCENE := preload("res://main.tscn")
 const DEFAULT_SEED := 424242
 const SCENARIO_DESCRIPTIONS := {
 	"basic_selection_move": "Select the production Field Engineer through mouse input and move it to a terrain-picked destination.",
+	"vehicle_movement_smoke": "Drag-select sixteen friendly wheeled vehicles, order a turning move beside a blocked area, and inspect command feedback and settled native steering.",
 	"strategic_zoom_transition": "Zoom from the tactical model to the strategic icon through mouse-wheel input while preserving selection and cursor focus.",
 	"oak_grove_showcase": "Frame the imported oak forest at tactical and strategic distances while proving variant, cluster, and terrain-grounding contracts.",
 	"airfield_fighter_ferry": "Construct an airfield, request a runway fighter, and verify its paid off-map airborne ingress.",
@@ -53,6 +54,8 @@ func _run() -> void:
 	match _scenario:
 		"basic_selection_move":
 			await _scenario_basic_selection_move()
+		"vehicle_movement_smoke":
+			await _scenario_vehicle_movement_smoke()
 		"strategic_zoom_transition":
 			await _scenario_strategic_zoom_transition()
 		"oak_grove_showcase":
@@ -158,6 +161,105 @@ func _scenario_basic_selection_move() -> void:
 	await _capture_checkpoint(view, "engineer_arrived")
 	await _destroy_skirmish(view)
 	_check(true, "scenario.completed", "Selection and movement scenario completed")
+
+
+func _scenario_vehicle_movement_smoke() -> void:
+	var view := await _create_skirmish()
+	var extension: Object = view.get("extension")
+	var group_ids := PackedInt32Array()
+	var group_center := _entity_position(view, int(view.call("_player_engineer_id"))) + Vector2(120.0, -80.0)
+	for row in range(4):
+		for column in range(4):
+			var spawn := group_center + Vector2((float(column) - 1.5) * 5.0, (float(row) - 1.5) * 5.0)
+			var vehicle_id := int(extension.call("create_unit_with_type", spawn.x, spawn.y, 6, 0))
+			_check(vehicle_id > 0, "vehicle.spawn.%d" % group_ids.size(), "Friendly wheeled vehicle spawns on the active landmass", {"entity_id": vehicle_id, "position": _vec2(spawn)})
+			if vehicle_id > 0:
+				group_ids.append(vehicle_id)
+				view.call("_register_presented_unit", vehicle_id, 6, 0, spawn)
+	_check(group_ids.size() == 16, "vehicle.group_size", "The smoke scenario owns a 16-vehicle friendly group", {"vehicle_count": group_ids.size()})
+	if group_ids.size() != 16:
+		await _destroy_skirmish(view)
+		return
+
+	# A static native navigation blocker is present beside the command route.
+	var destination := _find_valid_land_target(view, group_center, 140.0)
+	var obstacle := group_center + Vector2(0.0, -1000.0)
+	if destination != group_center:
+		extension.call("block_civilian_area", obstacle.x, obstacle.y, 18.0)
+	_check(destination != group_center, "vehicle.destination_on_land", "The ordered destination is valid land", {"destination": _vec2(destination), "obstacle": _vec2(obstacle)})
+	_focus_camera_on_position(view, group_center + Vector2(70.0, 15.0), 85.0)
+	await process_frame
+	var top_left := Vector2(INF, INF)
+	var bottom_right := Vector2(-INF, -INF)
+	for vehicle_id in group_ids:
+		var screen := view.get_viewport().get_camera_3d().unproject_position(view.call("_entity_world_position", vehicle_id))
+		top_left = top_left.min(screen)
+		bottom_right = bottom_right.max(screen)
+	_drag_select(view, top_left - Vector2(12.0, 12.0), bottom_right + Vector2(12.0, 12.0))
+	await process_frame
+	_check(view.get("selected_ids").size() == group_ids.size(), "vehicle.drag_select_group", "One player drag-selects the complete friendly vehicle group", {"selected_count": view.get("selected_ids").size()})
+	_focus_camera_on_position(view, group_center, 35.0)
+	await _capture_checkpoint(view, "vehicles_selected")
+
+	_focus_camera_on_position(view, group_center + Vector2(70.0, 15.0), 85.0)
+	var destination_world := Vector3(destination.x, float(view.call("_terrain_height_at", destination.x, destination.y)), destination.y)
+	_send_mouse_button(view, MOUSE_BUTTON_RIGHT, view.get_viewport().get_camera_3d().unproject_position(destination_world))
+	await process_frame
+	var marker: MeshInstance3D = view.get("command_feedback_marker")
+	_check(marker != null and marker.visible, "vehicle.command_feedback", "Right-click creates a visible destination marker without changing movement authority")
+	await _capture_checkpoint(view, "move_command_feedback")
+
+	var start_positions: Dictionary = {}
+	for vehicle_id in group_ids:
+		start_positions[vehicle_id] = _entity_position(view, vehicle_id)
+	var max_speed := 0.0
+	var heading_changed_after_motion := false
+	var minimum_hull_alignment := 1.0
+	var hull_alignment_samples := 0
+	var settled := false
+	for tick in range(2200):
+		extension.call("update_simulation", 50.0)
+		view.call("_sync_unit_transforms")
+		for vehicle_id in group_ids:
+			var current_position := _entity_position(view, vehicle_id)
+			var motion: Vector2 = current_position - start_positions[vehicle_id]
+			var steering: PackedFloat32Array = extension.call("get_unit_steering_state", vehicle_id)
+			if steering.size() >= 3:
+				max_speed = maxf(max_speed, absf(steering[2]))
+				if motion.length() > 0.02 and absf(steering[0]) > 0.15:
+					heading_changed_after_motion = true
+			var wrapper: Node3D = view.get("prototype_visual_views").get(vehicle_id, null)
+			var previous_position: Vector2 = start_positions[vehicle_id]
+			if wrapper != null and motion.length() > 0.02:
+				var visual_forward := Vector2(-wrapper.global_basis.z.x, -wrapper.global_basis.z.z).normalized()
+				var movement_direction := motion.normalized()
+				minimum_hull_alignment = minf(minimum_hull_alignment, visual_forward.dot(movement_direction))
+				hull_alignment_samples += 1
+			start_positions[vehicle_id] = current_position
+		if tick == 160:
+			_focus_camera_on_position(view, group_center + Vector2(45.0, 8.0), 35.0)
+			await _capture_checkpoint(view, "vehicles_turning")
+		if tick > 500:
+			var all_settled := true
+			for vehicle_id in group_ids:
+				var steering: PackedFloat32Array = extension.call("get_unit_steering_state", vehicle_id)
+				all_settled = all_settled and steering.size() >= 3 and absf(steering[2]) < 0.001
+			if all_settled:
+				settled = true
+				break
+	_check(max_speed > 1.0, "vehicle.accelerates", "Vehicles accelerate to measurable travel speed", {"max_speed_mps": max_speed})
+	_check(heading_changed_after_motion, "vehicle.hull_follows_travel", "Vehicle hull headings change while vehicles are moving, not only at rest")
+	_check(hull_alignment_samples > 0 and minimum_hull_alignment >= 0.98, "vehicle.rendered_hulls_follow_motion", "Rendered hull forward vectors remain aligned with authoritative travel", {"minimum_alignment": minimum_hull_alignment, "samples": hull_alignment_samples})
+	_check(settled, "vehicle.arrives_and_settles", "All vehicles stop without sustained arrival jitter", {"tick_limit": 2200})
+	var mean_distance := 0.0
+	for vehicle_id in group_ids:
+		mean_distance += _entity_position(view, vehicle_id).distance_to(destination)
+	mean_distance /= float(group_ids.size())
+	_check(mean_distance <= 12.0, "vehicle.formation_arrives", "Formation slots arrive around the ordered destination", {"mean_distance_m": mean_distance})
+	_focus_camera_on_position(view, destination, 35.0)
+	await _capture_checkpoint(view, "vehicles_arrived")
+	await _destroy_skirmish(view)
+	_check(true, "scenario.completed", "Vehicle movement smoke scenario completed")
 
 
 func _scenario_strategic_zoom_transition() -> void:
@@ -354,7 +456,7 @@ func _scenario_airfield_fighter_ferry() -> void:
 	if fighter_id > 0:
 		var fighter_view: Node = view.get("prototype_visual_views").get(fighter_id)
 		var fighter_definition: Dictionary = fighter_view.get("_definition") if fighter_view != null else {}
-		var player_owned := view.get("player_entity_ids").has(fighter_id)
+		var player_owned: bool = view.get("player_entity_ids").has(fighter_id)
 		_check(player_owned and String(fighter_definition.get("visual_id", "")) == "visual.industrial.fighter.f15c.prototype", "air.default_faction_uses_f15c", "The default faction's fighter uses the imported F-15C visual", {"player_owned": player_owned, "visual_id": String(fighter_definition.get("visual_id", "")), "source_asset_id": String(fighter_definition.get("source_asset_id", ""))})
 		_check(fighter_entry.x < -20000.0, "air.fighter_enters_from_off_map", "The fighter is created beyond the tactical map edge", {"entry": _vec2(fighter_entry)})
 		var inside_position := fighter_entry
@@ -481,6 +583,26 @@ func _send_mouse_button(view: Node, button: MouseButton, position: Vector2) -> v
 	released.button_index = button
 	released.position = position
 	released.global_position = position
+	released.pressed = false
+	view.call("_unhandled_input", released)
+
+
+func _drag_select(view: Node, start: Vector2, finish: Vector2) -> void:
+	var pressed := InputEventMouseButton.new()
+	pressed.button_index = MOUSE_BUTTON_LEFT
+	pressed.position = start
+	pressed.global_position = start
+	pressed.pressed = true
+	view.call("_unhandled_input", pressed)
+	var motion := InputEventMouseMotion.new()
+	motion.position = finish
+	motion.global_position = finish
+	motion.relative = finish - start
+	view.call("_unhandled_input", motion)
+	var released := InputEventMouseButton.new()
+	released.button_index = MOUSE_BUTTON_LEFT
+	released.position = finish
+	released.global_position = finish
 	released.pressed = false
 	view.call("_unhandled_input", released)
 

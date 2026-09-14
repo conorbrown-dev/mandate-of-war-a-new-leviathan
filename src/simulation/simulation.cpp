@@ -7,6 +7,7 @@
 #include <iostream>
 
 #include "simulation/simulation.hpp"
+#include "simulation/movement_tuning.hpp"
 #include "network/types.hpp"
 #include "network/buffer.hpp"
 #include "network/network_manager.hpp"
@@ -314,7 +315,7 @@ void Simulation::move_units_formation(
     float center_y,
     float spacing) {
     if (entities.empty() || !std::isfinite(center_x) || !std::isfinite(center_y) ||
-        !std::isfinite(spacing) || spacing <= 0.0f) {
+        !std::isfinite(spacing) || spacing < movement::kMinimumFormationSpacingMeters) {
         return;
     }
 
@@ -734,7 +735,8 @@ size_t Simulation::issue_commands(const std::vector<EntityId>& entities, Faction
 
 size_t Simulation::issue_move_commands(const std::vector<EntityId>& ids, FactionId player,
                                       float x, float y, float spacing) {
-    if (!std::isfinite(spacing) || spacing <= 0 || spacing > 100) return 0;
+    if (!std::isfinite(spacing) || spacing < movement::kMinimumFormationSpacingMeters ||
+        spacing > movement::kMaximumFormationSpacingMeters) return 0;
     return issue_commands(ids, player, CommandType::MOVE, x, y,
                           static_cast<uint32_t>(std::round(spacing * command_position_scale_)));
 }
@@ -837,7 +839,19 @@ void Simulation::prediction_phase(float delta_ms) {
                     // Wheeled vehicles retain a crawl speed through a sharp turn,
                     // causing an arc rather than a stationary center-axis spin.
                     const float maneuver_speed = steering->can_pivot_turn ? 0.0f : maximum_speed * 0.18f;
-                    const float desired_speed = direction * std::max(maneuver_speed, maximum_speed * alignment);
+                    // Begin braking before the arrival radius. This keeps the
+                    // kinematic vehicle from teleporting onto its final slot.
+                    const float stopping_speed = std::sqrt(std::max(
+                        0.0f,
+                        2.0f * steering->deceleration *
+                            std::max(distance - movement::kArrivalRadiusMeters, 0.0f)
+                    ));
+                    const float travel_speed = std::min(maximum_speed * alignment, stopping_speed);
+                    // The turn crawl is only needed while there is braking
+                    // room. Cap it near the slot so it cannot create an
+                    // endless low-speed orbit around the destination.
+                    const float turn_crawl_speed = std::min(maneuver_speed, stopping_speed);
+                    const float desired_speed = direction * std::max(turn_crawl_speed, travel_speed);
                     const float rate = desired_speed > steering->current_speed ? steering->acceleration : steering->deceleration;
                     steering->current_speed += std::clamp(
                         desired_speed - steering->current_speed,
@@ -859,11 +873,12 @@ void Simulation::prediction_phase(float delta_ms) {
                 }
             };
 
-            if (distance <= max_step || distance < 0.001f) {
-                pos->x = target->second.arrival.x;
-                pos->y = target->second.arrival.y;
+            if (distance <= movement::kArrivalRadiusMeters) {
                 vel->x = 0.0f;
                 vel->y = 0.0f;
+                if (auto* steering = component_manager_.get_component<GroundSteering>(entity_id)) {
+                    steering->current_speed = 0.0f;
+                }
                 move_targets_.erase(target);
             } else {
                 if (navigation.has_line_of_sight(

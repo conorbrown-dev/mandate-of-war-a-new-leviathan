@@ -1,5 +1,6 @@
 #include "test_framework.hpp"
 #include "simulation/simulation.hpp"
+#include "simulation/movement_tuning.hpp"
 #include "simulation/economy_api.h"
 #include <cmath>
 #include <limits>
@@ -69,7 +70,8 @@ TEST(commands_formation_and_stop_behavior) {
     auto a = s.create_unit(0, 0).id, b = s.create_unit(0, 2).id;
     check(s.issue_move_commands({a,b}, FactionId::ELITE_PRECISION, 10, 0, 4) == 2, "formation accepted");
     for (int i = 0; i < 30; ++i) s.update(50);
-    if (!(std::abs(s.get_unit_x(a) - 8) < 0.01f && std::abs(s.get_unit_x(b) - 12) < 0.01f))
+    if (!(std::abs(s.get_unit_x(a) - 8) <= movement::kArrivalRadiusMeters &&
+          std::abs(s.get_unit_x(b) - 12) <= movement::kArrivalRadiusMeters))
         throw std::runtime_error("formation positions: " + std::to_string(s.get_unit_x(a)) + ", " + std::to_string(s.get_unit_x(b)));
     check(s.issue_move_commands({a}, FactionId::ELITE_PRECISION, 40, 0, 3) == 1, "second order accepted");
     s.update(50);
@@ -130,6 +132,46 @@ TEST(commands_ground_vehicle_profiles_are_authored_per_prototype) {
               mbt->second.steering_can_pivot_turn && !engineer->second.steering_can_pivot_turn &&
               mbt->second.steering_minimum_turn_radius < engineer->second.steering_minimum_turn_radius,
           "ground chassis steering profiles are authored per prototype rather than inferred from unit type");
+}
+
+TEST(commands_ground_vehicles_brake_inside_arrival_radius_without_snapping) {
+    Simulation s; s.start();
+    const int id = s.create_unit_with_type(0, 0, UnitType::ELITE_MAIN_BATTLE_TANK,
+                                           FactionId::ELITE_PRECISION);
+    check(id >= 0, "ground tank spawns");
+    check(s.issue_move_commands({static_cast<EntityId>(id)}, FactionId::ELITE_PRECISION,
+                                8.0f, 0.0f, 3.0f) == 1,
+          "ground tank accepts a valid move order");
+    s.update(50.0f); // Commands enter the deterministic queue for the next tick.
+    s.update(50.0f);
+    const float first_step = std::hypot(s.get_unit_x(id), s.get_unit_y(id));
+    check(first_step > 0.0f && first_step < 8.0f,
+          "vehicle begins kinematic travel instead of snapping to its destination");
+    for (int tick = 0; tick < 240; ++tick) s.update(50.0f);
+    const float settled_x = s.get_unit_x(id);
+    const auto* steering = s.component_manager().get_component<GroundSteering>(static_cast<EntityId>(id));
+    check(std::abs(8.0f - settled_x) <= movement::kArrivalRadiusMeters && steering &&
+              std::abs(steering->current_speed) < 0.0001f,
+          "vehicle settles inside the documented arrival radius at zero speed");
+    s.update(250.0f);
+    check(std::abs(s.get_unit_x(id) - settled_x) < 0.0001f,
+          "settled vehicle does not endlessly jitter after arrival");
+}
+
+TEST(commands_wheeled_tank_turns_while_advancing_not_by_pivoting) {
+    Simulation s; s.start();
+    const int id = s.create_unit_with_type(0, 0, UnitType::INDUSTRIAL_MBT,
+                                           FactionId::INDUSTRIAL_EXPERIMENTAL);
+    check(id >= 0, "wheeled tank spawns");
+    check(s.issue_move_commands({static_cast<EntityId>(id)}, FactionId::INDUSTRIAL_EXPERIMENTAL,
+                                30.0f, 0.0f, 3.0f) == 1,
+          "wheeled tank accepts a lateral move order");
+    s.update(50.0f); // Queue command.
+    s.update(50.0f); // Begin the turn arc.
+    const auto* steering = s.component_manager().get_component<GroundSteering>(static_cast<EntityId>(id));
+    check(steering && !steering->can_pivot_turn && std::abs(steering->heading) > 0.0001f &&
+              std::hypot(s.get_unit_x(id), s.get_unit_y(id)) > 0.0001f,
+          "wheeled tank changes heading only while advancing through its turn arc");
 }
 
 TEST(theater_spawn_rules_keep_ground_units_out_of_water) {
