@@ -21,7 +21,7 @@ The visual language is restrained tactical tooling: dark blue-black surfaces, th
 
 Use `theme_type_variation` and tokens first. Components may update only when bound data changes; do not add per-frame UI polling or shadow gameplay state in GDScript.
 
-Icons are semantic and compact: resources use their existing wrench/bolt/research meaning; commands and unit roles should use distinct simple silhouettes with text tooltips. Faction identity is intentionally data-driven: map faction color and emblem assets through a single future faction presentation resolver, rather than baking faction-specific colors into components.
+Icons are semantic and compact. Use `UiIconRegistry.get_icon(&"namespace.id")` for tintable command/UI icons, such as `resource.material` and `order.move`; do not couple controls to generated SVG filenames. Use `UiIconRegistry.get_nato_symbol(&"fighter", &"friendly")` only where affiliation-aware military identification is useful. The registry reads generated indexes once, caches textures, and returns `null` after one warning for a missing ID so presentation remains usable. Faction identity remains data-driven; do not bake faction-specific colors into components.
 
 ## Showcase and validation
 

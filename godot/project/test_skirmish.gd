@@ -1,5 +1,7 @@
 extends SceneTree
 
+const UiIconRegistry = preload("res://ui/icons/ui_icon_registry.gd")
+
 var checks := 0
 var failures := 0
 
@@ -68,7 +70,7 @@ func _run() -> void:
 	check(bool(view.extension.call("validate_structure_placement", 0, -16500.0, -1500.0)), "native structure validator accepts a clear land footprint")
 	check(not bool(view.extension.call("validate_structure_placement", 0, 0.0, 0.0)), "native structure validator rejects the theater water channel")
 	check(view.command_hud.visible, "tactical command HUD appears after the skirmish starts")
-	check(view.command_hud.RESOURCE_ICON_KINDS == ["wrench", "bolt", "research"], "resource HUD uses a shared scalable wrench, bolt, and future-ready research icon set")
+	check(UiIconRegistry.get_icon_path(&"resource.material") == "res://assets/ui/icons/resources/material.svg", "resource HUD uses the semantic material icon")
 	check(view.command_hud.snapshot.get("hover_title", "") == "TACTICAL INSPECT", "bottom inspection strip has a stable tactical empty state")
 	check(not view.territory_debug_label.visible, "centered territory diagnostic is hidden from the tactical battlefield")
 	check(not view.debug_panel.visible and not view.help_label.visible, "legacy debug and help overlays do not crowd the tactical HUD")

@@ -676,6 +676,12 @@ public:
                 rts::runtime_simulation()->territorial_control_manager().has_active_installation(faction, rts::InstallationType::AIRFIELD);
             entry["available"] = line != rts::INVALID_ENTITY && airfield_ready && production.can_queue_unit(line, faction, type);
             entry["is_structure"] = false;
+            entry["nato_symbol_id"] = type == rts::UnitType::INDUSTRIAL_ENGINEERING ? String("combat_engineer") :
+                type == rts::UnitType::ELITE_T1_FIGHTER || type == rts::UnitType::ELITE_T1_VTOL ? String("fighter") :
+                type == rts::UnitType::ELITE_PATROL_BOAT ? String("patrol_boat") :
+                type == rts::UnitType::ELITE_LONG_RANGE_ARTILLERY ? String("artillery") :
+                type == rts::UnitType::ELITE_ANTI_AIR || type == rts::UnitType::MASS_ANTI_AIR ? String("air_defense") :
+                type == rts::UnitType::INDUSTRIAL_MISSILE_PLATFORM ? String("rocket_artillery") : String("medium_armor");
             catalog.append(entry);
         }
         for (uint8_t structure = 0; structure < 4; ++structure) {
@@ -689,6 +695,7 @@ public:
             entry["research"] = structure == 0 ? 0.0 : structure == 1 ? 100.0 : structure == 2 ? 150.0 : 80.0;
             entry["build_seconds"] = structure == 0 ? 20.0 : structure == 1 ? 28.0 : structure == 2 ? 36.0 : 24.0;
             entry["available"] = line != rts::INVALID_ENTITY && production.can_queue_structure(line, faction, structure);
+            entry["icon_id"] = structure == 0 ? String("construction.fortification") : structure == 1 ? String("intel.radar") : structure == 2 ? String("infrastructure.airbase") : String("intel.sensors");
             catalog.append(entry);
         }
         return catalog;

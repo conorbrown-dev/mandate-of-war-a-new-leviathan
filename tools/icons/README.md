@@ -8,7 +8,7 @@ npm install
 npm run generate-icons
 ```
 
-Output is deterministic under `assets/ui/symbols/nato/<affiliation>/<category>/`, with `index.json` for future Godot lookup tooling. Icons are 96px-equivalent SVGs with transparent backgrounds, consistent frames, and affiliation-standard frames. Use `npm run generate-icons -- --clean` to rebuild the generated output, or `npm run validate-manifest` to validate only.
+Output is deterministic under `godot/project/assets/ui/symbols/nato/<affiliation>/<category>/`, with `index.json` for Godot lookup tooling. Icons are 96px-equivalent SVGs with transparent backgrounds, consistent frames, and affiliation-standard frames. Use `npm run generate-icons -- --clean` to rebuild the generated output, or `npm run validate-manifest` to validate only.
 
 Add a snake_case object to `milsymbol-manifest.json`. It supplies the role, category, label, closest standard SIDC, and a documented mapping. The generator validates IDs, duplicate entries, and `milsymbol` SIDC support, then replaces the SIDC affiliation character to emit friendly, hostile, neutral, and unknown frames. It logs every generated file, warns once for each documented approximation, and writes a summary with total, generated, skipped, and warning counts.
 
@@ -65,3 +65,14 @@ To add an icon, add one manifest object with `id`, `category`, `label`,
 `npm run validate-command-icons` before generating. Keep output paths stable:
 they are `godot/project/assets/ui/icons/<category>/<last-id-segment>.svg` and the index maps
 the content ID to the `res://` path.
+
+## Godot usage
+
+Use semantic IDs rather than generated filenames. `UiIconRegistry` reads each generated index once, resolves the corresponding `res://` path, and caches loaded textures:
+
+```gdscript
+var move_icon := UiIconRegistry.get_icon(&"order.move")
+var friendly_fighter := UiIconRegistry.get_nato_symbol(&"fighter", &"friendly")
+```
+
+`get_icon()` is for the white, tintable command/UI set. `get_nato_symbol()` is for affiliation-aware identification and retains the rendered symbol color. Missing IDs log one warning and return `null`, so callers can keep their control usable with a small fallback. Keep semantic IDs stable as content API: add, deprecate, or alias IDs deliberately instead of coupling Godot code to generated SVG paths.

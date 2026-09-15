@@ -17,8 +17,8 @@ const AMBER := MandateTokens.WARNING
 const RED := MandateTokens.DANGER
 const GREEN := MandateTokens.SUCCESS
 const BUILD_UNIT_SHORTCUTS := ["1", "4", "5", "9", "0", "P"]
-const RESOURCE_ICON_KINDS := ["wrench", "bolt", "research"]
 const UiTypographyScript = preload("res://ui_typography.gd")
+const UiIconRegistry = preload("res://ui/icons/ui_icon_registry.gd")
 const DRAWN_FONT_SIZE_BUMP := 0
 var ui_font: Font
 
@@ -93,11 +93,11 @@ func _text(at: Vector2, value: String, font_size: int = 14, color: Color = INK, 
 	draw_string(ui_font if ui_font != null else ThemeDB.fallback_font, at, value.to_upper(), HORIZONTAL_ALIGNMENT_LEFT, -1, floor(font_size * ui_scale) + DRAWN_FONT_SIZE_BUMP, color)
 
 
-func _metric(rect: Rect2, label: String, value: String, income: String, accent: Color, icon_kind: String, ui_scale: float = 1.0) -> void:
+func _metric(rect: Rect2, label: String, value: String, income: String, accent: Color, icon_id: StringName, ui_scale: float = 1.0) -> void:
 	draw_rect(rect, Color("#0b1c27", 0.96), true)
 	draw_rect(rect, PANEL_EDGE, false, 1.0)
 	draw_rect(Rect2(rect.position, Vector2(3, rect.size.y)), accent, true)
-	_draw_resource_icon(rect.position + Vector2(9, 7), icon_kind, 12.0, accent)
+	_draw_ui_icon(Rect2(rect.position + Vector2(9, 7), Vector2(12, 12)), icon_id, accent)
 	_text(rect.position + Vector2(28, 15), label, 9, MUTED, ui_scale)
 	_text(rect.position + Vector2(9, 34), value, 16, INK, ui_scale)
 	if not income.is_empty():
@@ -114,10 +114,10 @@ func _command_cell(rect: Rect2, key: String, title: String, detail: String, acce
 	_text(rect.position + Vector2(32, 16), title, 9, INK, ui_scale)
 	_text(rect.position + Vector2(32, 30), detail, 8, MUTED, ui_scale)
 
-func _command_icon(rect: Rect2, icon: String, tooltip: String, accent: Color, ui_scale: float = 1.0) -> void:
+func _command_icon(rect: Rect2, icon_id: StringName, tooltip: String, accent: Color, ui_scale: float = 1.0) -> void:
 	draw_rect(rect, Color("#0b1c27", 0.96), true)
 	draw_rect(rect, PANEL_EDGE, false, 1.0)
-	_text(rect.position + Vector2(rect.size.x * 0.5 - 5.0, rect.size.y * 0.5 + 6.0), icon, 18, accent, ui_scale)
+	_draw_ui_icon(Rect2(rect.position + Vector2(5, 4), Vector2(16, 16)), icon_id, accent)
 
 
 func _build_cell(rect: Rect2, entry: Dictionary, key: String, ui_scale: float = 1.0) -> void:
@@ -126,91 +126,39 @@ func _build_cell(rect: Rect2, entry: Dictionary, key: String, ui_scale: float = 
 	draw_rect(rect, Color("#0b1c27", 0.96), true)
 	draw_rect(rect, accent, false, 1.0)
 	var icon_rect := Rect2(rect.position + Vector2(6, 6), Vector2(25, 25))
-	_draw_build_icon(icon_rect, int(entry.get("type", -1)), bool(entry.get("is_structure", false)), accent)
+	var nato_symbol_id := StringName(String(entry.get("nato_symbol_id", "")))
+	if not nato_symbol_id.is_empty():
+		_draw_nato_symbol(icon_rect, nato_symbol_id, &"friendly")
+	else:
+		_draw_ui_icon(icon_rect, StringName(String(entry.get("icon_id", "construction.build"))), accent)
 	draw_rect(Rect2(rect.position + Vector2(35, 5), Vector2(16, 14)), accent, true)
 	_text(rect.position + Vector2(39, 16), key, 8, PANEL, ui_scale)
-	_draw_wrench(rect.position + Vector2(58, 11), 8.0, Color("#47b9ff") if available else MUTED)
+	_draw_ui_icon(Rect2(rect.position + Vector2(58, 5), Vector2(12, 12)), &"resource.material", Color("#47b9ff") if available else MUTED)
 	_text(rect.position + Vector2(69, 17), "%.0f" % float(entry.get("material", 0.0)), 9, INK if available else MUTED, ui_scale)
-	_draw_bolt(rect.position + Vector2(58, 25), 9.0, Color("#ff9a3d") if available else MUTED)
+	_draw_ui_icon(Rect2(rect.position + Vector2(58, 19), Vector2(12, 12)), &"resource.energy", Color("#ff9a3d") if available else MUTED)
 	_text(rect.position + Vector2(69, 31), "%.0f" % float(entry.get("energy", 0.0)), 9, INK if available else MUTED, ui_scale)
 
 
-func _draw_wrench(at: Vector2, size: float, color: Color) -> void:
-	# Shared vector geometry: a compact open-jaw wrench remains readable at
-	# both 8 px build-card scale and 12 px economy-strip scale.
-	var handle_start := at + Vector2(size * 0.18, size * 0.82)
-	var handle_end := at + Vector2(size * 0.67, size * 0.33)
-	draw_line(handle_start, handle_end, color, maxf(2.0, size * 0.20), true)
-	draw_circle(handle_start, size * 0.19, color, true)
-	draw_circle(handle_start, size * 0.08, PANEL, true)
-	var jaw_center := at + Vector2(size * 0.75, size * 0.24)
-	draw_arc(jaw_center, size * 0.27, -PI * 0.82, PI * 0.18, 8, color, maxf(1.6, size * 0.14), true)
-	draw_line(jaw_center, jaw_center + Vector2(size * 0.22, -size * 0.08), color, maxf(1.6, size * 0.14), true)
-
-
-func _draw_bolt(at: Vector2, size: float, color: Color) -> void:
-	var bolt := PackedVector2Array([
-		at + Vector2(size * 0.58, 0),
-		at + Vector2(size * 0.12, size * 0.54),
-		at + Vector2(size * 0.46, size * 0.54),
-		at + Vector2(size * 0.30, size),
-		at + Vector2(size, size * 0.34),
-		at + Vector2(size * 0.60, size * 0.34),
-	])
-	draw_colored_polygon(bolt, color)
-	draw_polyline(PackedVector2Array([bolt[0], bolt[1], bolt[2], bolt[3], bolt[4], bolt[5], bolt[0]]), color.darkened(0.22), maxf(0.7, size * 0.06), true)
-
-
-func _draw_research(at: Vector2, size: float, color: Color) -> void:
-	var center := at + Vector2(size * 0.5, size * 0.5)
-	var points := PackedVector2Array()
-	for index in range(6):
-		var angle := -PI * 0.5 + float(index) * TAU / 6.0
-		points.append(center + Vector2(cos(angle), sin(angle)) * size * 0.43)
-	draw_colored_polygon(points, color)
-	draw_circle(center, size * 0.14, PANEL, true)
-
-
-func _draw_resource_icon(at: Vector2, kind: String, size: float, color: Color) -> void:
-	match kind:
-		"wrench":
-			_draw_wrench(at, size, color)
-		"bolt":
-			_draw_bolt(at, size, color)
-		"research":
-			_draw_research(at, size, color)
-
-
-func _draw_build_icon(rect: Rect2, type: int, is_structure: bool, color: Color) -> void:
-	var center := rect.get_center()
-	if is_structure:
-		match type:
-			100: # forward outpost
-				draw_rect(Rect2(center - Vector2(8, 7), Vector2(16, 14)), color, false, 2.0)
-				draw_line(center + Vector2(-4, 0), center + Vector2(4, 0), color, 2.0)
-			101: # radar mast
-				draw_line(center + Vector2(0, 9), center + Vector2(0, -8), color, 2.0)
-				draw_arc(center + Vector2(0, -4), 7, PI, TAU, 10, color, 1.6)
-			102: # airfield
-				draw_rect(Rect2(center - Vector2(3, 10), Vector2(6, 20)), color, false, 1.8)
-				draw_line(center + Vector2(0, -8), center + Vector2(0, 8), color, 1.3)
-			103: # floodlight
-				draw_line(center + Vector2(0, 9), center + Vector2(0, -3), color, 2.0)
-				draw_circle(center + Vector2(0, -5), 3.0, color)
-				draw_arc(center + Vector2(0, -5), 7.0, 0, TAU, 12, color, 1.2)
+func _draw_ui_icon(rect: Rect2, icon_id: StringName, color: Color) -> void:
+	var texture := UiIconRegistry.get_icon(icon_id)
+	if texture != null:
+		draw_texture_rect(texture, rect, false, color)
 		return
-	match type:
-		9: # fighter: acute triangle
-			draw_colored_polygon(PackedVector2Array([center + Vector2(0, -11), center + Vector2(-8, 9), center + Vector2(8, 9)]), color)
-		13: # bomber: obtuse triangle
-			draw_colored_polygon(PackedVector2Array([center + Vector2(-11, -6), center + Vector2(11, -6), center + Vector2(0, 10)]), color)
-		8: # engineer: hexagonal strategic marker
-			draw_arc(center, 9.0, 0, TAU, 6, color, 2.3)
-		11: # patrol boat
-			draw_colored_polygon(PackedVector2Array([center + Vector2(-11, 5), center + Vector2(11, 5), center + Vector2(6, 10), center + Vector2(-6, 10)]), color)
-		_: # armored ground unit
-			draw_rect(Rect2(center - Vector2(9, 6), Vector2(18, 12)), color, false, 2.2)
-			draw_line(center + Vector2(0, -6), center + Vector2(0, 6), color, 1.8)
+	_draw_missing_icon(rect, color)
+
+
+func _draw_nato_symbol(rect: Rect2, symbol_id: StringName, affiliation: StringName) -> void:
+	var texture := UiIconRegistry.get_nato_symbol(symbol_id, affiliation)
+	if texture != null:
+		draw_texture_rect(texture, rect, false, Color.WHITE)
+		return
+	_draw_missing_icon(rect, MUTED)
+
+
+func _draw_missing_icon(rect: Rect2, color: Color) -> void:
+	draw_rect(rect.grow(-1.0), color, false, 1.0)
+	draw_line(rect.position + Vector2(2, 2), rect.end - Vector2(2, 2), color, 1.0)
+	draw_line(Vector2(rect.end.x - 2, rect.position.y + 2), Vector2(rect.position.x + 2, rect.end.y - 2), color, 1.0)
 
 
 func _draw_hover_strip(width: float, height: float, ui_scale: float = 1.0) -> void:
@@ -255,9 +203,9 @@ func _draw() -> void:
 	var economy_width := 374.0
 	var economy := Rect2(w - economy_width - 14.0, 12, economy_width, 56)
 	_panel(economy, GREEN)
-	_metric(Rect2(economy.position + Vector2(6, 5), Vector2(114, 46)), "MATERIAL", str(snapshot.get("material", "--")), String(snapshot.get("material_income", "")), Color("#47b9ff"), "wrench", ui_scale)
-	_metric(Rect2(economy.position + Vector2(126, 5), Vector2(114, 46)), "ENERGY", str(snapshot.get("energy", "--")), String(snapshot.get("energy_income", "")), Color("#ff9a3d"), "bolt", ui_scale)
-	_metric(Rect2(economy.position + Vector2(246, 5), Vector2(122, 46)), "RESEARCH", str(snapshot.get("research", "--")), String(snapshot.get("research_income", "")), GREEN, "research", ui_scale)
+	_metric(Rect2(economy.position + Vector2(6, 5), Vector2(114, 46)), "MATERIAL", str(snapshot.get("material", "--")), String(snapshot.get("material_income", "")), Color("#47b9ff"), &"resource.material", ui_scale)
+	_metric(Rect2(economy.position + Vector2(126, 5), Vector2(114, 46)), "ENERGY", str(snapshot.get("energy", "--")), String(snapshot.get("energy_income", "")), Color("#ff9a3d"), &"resource.energy", ui_scale)
+	_metric(Rect2(economy.position + Vector2(246, 5), Vector2(122, 46)), "RESEARCH", str(snapshot.get("research", "--")), String(snapshot.get("research_income", "")), GREEN, &"resource.research", ui_scale)
 
 	var selected_count := int(snapshot.get("selected", 0))
 	# Selection has no empty-state card; it appears only when it contains facts.
@@ -293,7 +241,7 @@ func _draw() -> void:
 		var commands := Rect2(14, 68, 260, 78)
 		_panel(commands, CYAN)
 		_text(commands.position + Vector2(10, 14), "ORDERS", 9, CYAN, ui_scale)
-		var icons := [["➜", "MOVE — right-click terrain", CYAN], ["✦", "ATTACK — Ctrl + right-click enemy", RED], ["■", "STOP — X", AMBER], ["⌑", "BUILD — blueprint / ROAD: R", GREEN], ["◇", "CLAIM — 2 then right-click facility", CYAN], ["×", "DEMOLISH — 3 then right-click facility", RED]]
+		var icons := [[&"order.move", "MOVE — right-click terrain", CYAN], [&"combat.attack", "ATTACK — Ctrl + right-click enemy", RED], [&"order.stop", "STOP — X", AMBER], [&"construction.build", "BUILD — blueprint / ROAD: R", GREEN], [&"system.capture", "CLAIM — 2 then right-click facility", CYAN], [&"construction.demolish", "DEMOLISH — 3 then right-click facility", RED]]
 		for index in range(6):
 			var column := index % 3
 			var row := index / 3

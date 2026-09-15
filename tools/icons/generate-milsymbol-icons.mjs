@@ -5,7 +5,7 @@ import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const here = dirname(fileURLToPath(import.meta.url));
-const outputRoot = resolve(here, "../../assets/ui/symbols/nato");
+const outputRoot = resolve(here, "../../godot/project/assets/ui/symbols/nato");
 const manifestPath = resolve(here, "milsymbol-manifest.json");
 const affiliations = { friendly: "F", hostile: "H", neutral: "N", unknown: "U" };
 
@@ -48,7 +48,7 @@ for (const entry of manifest) {
       const destination = resolve(outputRoot, path);
       await mkdir(dirname(destination), { recursive: true });
       await writeFile(destination, svg(sidc), "utf8");
-      index.push({ id: entry.id, category: entry.category, affiliation, relativePath: path, label: entry.label, role: entry.role, symbolType: entry.symbolType, sidc, mapping: entry.mapping });
+      index.push({ id: entry.id, category: entry.category, affiliation, relativePath: path, path: `res://assets/ui/symbols/nato/${path}`, label: entry.label, role: entry.role, symbolType: entry.symbolType, sidc, mapping: entry.mapping });
       console.log(`generated ${path}`);
     } catch (error) { warnings.push(`${entry.id}/${affiliation}: ${error.message}`); }
   }
