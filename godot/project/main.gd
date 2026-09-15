@@ -35,6 +35,7 @@ const VisualSpawnBridgeScript = preload("res://visual_spawn_bridge.gd")
 const VisualPresentationPolicyScript = preload("res://visual_presentation_policy.gd")
 const VisualPackCompatibilityScript = preload("res://visual_pack_compatibility.gd")
 const UiTypographyScript = preload("res://ui_typography.gd")
+const ResponsiveUiScript = preload("res://ui/responsive_ui.gd")
 const StrategicUnitIconScript = preload("res://strategic_unit_icon.gd")
 const MESH_BASE_PATH := "res://scenarios/meshes/"
 const TERRAIN_SAMPLE_WIDTH := 320
@@ -66,26 +67,27 @@ const MATERIAL_SITES := [
 @onready var civilian_buildings: Node3D = $CivilianBuildings
 @onready var west_landmass: MeshInstance3D = $WestLandmass
 @onready var east_landmass: MeshInstance3D = $EastLandmass
-@onready var debug_label: Label = $HUD/DebugPanel/DebugLabel
-@onready var selection_rect: ColorRect = $HUD/SelectionRect
-@onready var debug_panel: ColorRect = $HUD/DebugPanel
-@onready var help_label: Label = $HUD/HelpLabel
-@onready var command_hud: Control = $HUD/CommandHUD
-@onready var strategic_icon_overlay: Control = $HUD/StrategicIconOverlay
+@onready var ui_root: Control = $HUD/UIRoot
+@onready var debug_label: Label = $HUD/UIRoot/DebugPanel/DebugLabel
+@onready var selection_rect: ColorRect = $HUD/UIRoot/SelectionRect
+@onready var debug_panel: ColorRect = $HUD/UIRoot/DebugPanel
+@onready var help_label: Label = $HUD/UIRoot/HelpLabel
+@onready var command_hud: Control = $HUD/UIRoot/CommandHUD
+@onready var strategic_icon_overlay: Control = $HUD/UIRoot/StrategicIconOverlay
 @onready var hud_layer: CanvasLayer = $HUD
-@onready var startup_overlay: ColorRect = $HUD/StartupOverlay
-@onready var scenario_title: Label = $HUD/StartupOverlay/Panel/VBox/ScenarioTitle
-@onready var scenario_description: Label = $HUD/StartupOverlay/Panel/VBox/ScenarioDescription
-@onready var scenario_status: Label = $HUD/StartupOverlay/Panel/VBox/ScenarioStatus
-@onready var start_button: Button = $HUD/StartupOverlay/Panel/VBox/StartButton
-@onready var native_skirmish_button: Button = $HUD/StartupOverlay/Panel/VBox/NativeSkirmishButton
-@onready var territory_debug_label: Label = $HUD/TerritoryDebugLabel
+@onready var startup_overlay: ColorRect = $HUD/UIRoot/StartupOverlay
+@onready var scenario_title: Label = $HUD/UIRoot/StartupOverlay/Panel/VBox/ScenarioTitle
+@onready var scenario_description: Label = $HUD/UIRoot/StartupOverlay/Panel/VBox/ScenarioDescription
+@onready var scenario_status: Label = $HUD/UIRoot/StartupOverlay/Panel/VBox/ScenarioStatus
+@onready var start_button: Button = $HUD/UIRoot/StartupOverlay/Panel/VBox/StartButton
+@onready var native_skirmish_button: Button = $HUD/UIRoot/StartupOverlay/Panel/VBox/NativeSkirmishButton
+@onready var territory_debug_label: Label = $HUD/UIRoot/TerritoryDebugLabel
 @onready var territory_material: ShaderMaterial = $Ocean.material_override
 @onready var battlefield_environment: WorldEnvironment = $WorldEnvironment
 @onready var battlefield_light: DirectionalLight3D = $DirectionalLight3D
 @onready var moon_light: DirectionalLight3D = $MoonLight3D
 @onready var hotkey_manager: Node = get_node_or_null("HotkeyManager")
-@onready var hotkey_display: Control = get_node_or_null("HUD/HotkeyDisplay") as Control
+@onready var hotkey_display: Control = get_node_or_null("HUD/UIRoot/HotkeyDisplay") as Control
 
 var extension: Object
 var unit_multimesh: MultiMesh
@@ -477,7 +479,7 @@ func _setup_strategic_command_view() -> void:
 	strategic_command_view.select_delivery_zone.connect(_on_strategic_command_select_zone)
 	strategic_command_view.request_package.connect(_on_strategic_command_request_package)
 	strategic_command_view.dismissed.connect(_close_strategic_command)
-	hud_layer.add_child(strategic_command_view)
+	ui_root.add_child(strategic_command_view)
 
 
 func _toggle_strategic_command() -> void:
@@ -2687,10 +2689,9 @@ func _cancel_tactical_modes() -> void:
 
 func _blueprint_at_screen(pos: Vector2) -> int:
 	var size := get_viewport().get_visible_rect().size
-	var ui_scale := clampf(minf(size.x / 1920.0, size.y / 1080.0), 0.62, 1.0)
+	var ui_scale := ResponsiveUiScript.layout_scale(size)
 	var logical := pos / ui_scale
-	var logical_size := size / ui_scale
-	var origin := Vector2((logical_size.x - 540.0) * 0.5, 12.0)
+	var origin := ResponsiveUiScript.centered_origin(size, ResponsiveUiScript.PANEL_MAX_WIDTH)
 	if logical.x < origin.x or logical.x > origin.x + 540.0 or logical.y < origin.y + 30.0 or logical.y > origin.y + 156.0: return -1
 	var col := int(clampf((logical.x - origin.x - 8.0) / 132.0, 0.0, 3.0))
 	if logical.y < origin.y + 70.0:

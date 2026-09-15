@@ -24,6 +24,11 @@ func _initialize() -> void:
 	check(hostile_fighter_path == "res://assets/ui/symbols/nato/hostile/air/fighter.svg", "NATO affiliation selects a distinct generated symbol")
 	check(UiIconRegistryScript.get_icon(&"order.move") != null, "command icon is imported as a drawable Godot texture")
 	check(UiIconRegistryScript.get_nato_symbol(&"fighter", &"friendly") != null, "NATO symbol is imported as a drawable Godot texture")
+	for icon_id in [&"order.stop", &"combat.attack", &"construction.build", &"construction.demolish", &"resource.energy", &"resource.research"]:
+		check(UiIconRegistryScript.get_icon(icon_id) != null, "HUD semantic icon loads as a drawable texture: %s" % icon_id)
+	check(UiIconRegistryScript.get_nato_symbol(&"medium_armor", &"friendly") != null, "NATO land symbol is imported as a drawable Godot texture")
+	check(UiIconRegistryScript.get_nato_symbol(&"patrol_boat", &"friendly") != null, "NATO naval symbol is imported as a drawable Godot texture")
+	check(UiIconRegistryScript.get_icon(&"order.move") == UiIconRegistryScript.get_icon(&"order.move"), "repeated semantic lookup returns the cached command texture")
 	check(UiIconRegistryScript.get_icon_path(&"missing.icon").is_empty(), "missing command IDs degrade to an empty path")
 	check(UiIconRegistryScript.get_nato_symbol_path(&"fighter", &"unsupported").is_empty(), "missing affiliations degrade to an empty path")
 	check(UiIconRegistryScript.get_index_errors().is_empty(), "generated command and NATO indexes parse without registry errors")

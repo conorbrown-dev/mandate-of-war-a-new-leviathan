@@ -431,7 +431,7 @@ func _scenario_reinforcement_delivery_smoke() -> void:
 	strategic_hotkey.pressed = true
 	strategic_hotkey.keycode = KEY_G
 	view.call("_unhandled_input", strategic_hotkey)
-	var strategic_command: Control = view.get_node_or_null("HUD/StrategicCommand") as Control
+	var strategic_command: Control = view.get_node_or_null("HUD/UIRoot/StrategicCommand") as Control
 	_check(strategic_command != null and strategic_command.visible, "reinforcement.strategic_command_open", "G opens the playable Strategic Command delivery panel")
 	await _capture_checkpoint(view, "strategic_command_open")
 	if strategic_command != null:

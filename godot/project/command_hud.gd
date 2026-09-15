@@ -19,6 +19,7 @@ const GREEN := MandateTokens.SUCCESS
 const BUILD_UNIT_SHORTCUTS := ["1", "4", "5", "9", "0", "P"]
 const UiTypographyScript = preload("res://ui_typography.gd")
 const UiIconRegistry = preload("res://ui/icons/ui_icon_registry.gd")
+const ResponsiveUiScript = preload("res://ui/responsive_ui.gd")
 const DRAWN_FONT_SIZE_BUMP := 0
 var ui_font: Font
 
@@ -34,21 +35,21 @@ func refresh(next_snapshot: Dictionary) -> void:
 
 
 func get_build_hover_context() -> Dictionary:
-	var ui_scale := clampf(minf(size.x / 1920.0, size.y / 1080.0), 0.62, 1.0)
+	var ui_scale := ResponsiveUiScript.layout_scale(size)
 	return get_build_hover_context_at(get_local_mouse_position() / ui_scale)
 
 
 func get_build_hover_context_at(pointer: Vector2) -> Dictionary:
 	if snapshot.is_empty() or not bool(snapshot.get("can_build", false)):
 		return {}
-	var ui_scale := clampf(minf(size.x / 1920.0, size.y / 1080.0), 0.62, 1.0)
+	var ui_scale := ResponsiveUiScript.layout_scale(size)
 	var ui_size := size / ui_scale
 	if ui_size.x < 700.0 or ui_size.y < 420.0:
 		return {}
 	var build_catalog: Array = snapshot.get("build_catalog", [])
 	if build_catalog.is_empty():
 		return {}
-	var build_origin := Vector2((ui_size.x - 540.0) * 0.5, 12.0)
+	var build_origin := ResponsiveUiScript.centered_origin(size, ResponsiveUiScript.PANEL_MAX_WIDTH)
 	var units: Array = build_catalog.filter(func(item): return not bool(item.get("is_structure", false)) and not bool(item.get("is_aircraft", false)))
 	units.sort_custom(func(left, right): return int(left.get("type", -1)) < int(right.get("type", -1)))
 	var structures: Array = build_catalog.filter(func(item): return bool(item.get("is_structure", false)))
@@ -176,7 +177,7 @@ func _draw() -> void:
 	if snapshot.is_empty():
 		return
 
-	var ui_scale := clampf(minf(size.x / 1920.0, size.y / 1080.0), 0.62, 1.0)
+	var ui_scale := ResponsiveUiScript.layout_scale(size)
 	draw_set_transform(Vector2.ZERO, 0.0, Vector2(ui_scale, ui_scale))
 	var w := size.x / ui_scale
 	var h := size.y / ui_scale
