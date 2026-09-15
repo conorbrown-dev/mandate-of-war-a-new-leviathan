@@ -7,14 +7,15 @@ extends Control
 
 var snapshot: Dictionary = {}
 
-const INK := Color("#d9edf3")
-const MUTED := Color("#7f9ba8")
-const PANEL := Color("#07131d", 0.90)
-const PANEL_EDGE := Color("#1f5266", 0.96)
-const CYAN := Color("#47d9ff")
-const AMBER := Color("#ffbd52")
-const RED := Color("#ff6d65")
-const GREEN := Color("#7ad99b")
+const MandateTokens = preload("res://ui/theme/ui_tokens.gd")
+const INK := MandateTokens.TEXT_PRIMARY
+const MUTED := MandateTokens.TEXT_SECONDARY
+const PANEL := Color(MandateTokens.SURFACE_BASE, 0.90)
+const PANEL_EDGE := Color(MandateTokens.BORDER_DEFAULT, 0.96)
+const CYAN := MandateTokens.ACCENT
+const AMBER := MandateTokens.WARNING
+const RED := MandateTokens.DANGER
+const GREEN := MandateTokens.SUCCESS
 const BUILD_UNIT_SHORTCUTS := ["1", "4", "5", "9", "0", "P"]
 const RESOURCE_ICON_KINDS := ["wrench", "bolt", "research"]
 const UiTypographyScript = preload("res://ui_typography.gd")
@@ -48,7 +49,7 @@ func get_build_hover_context_at(pointer: Vector2) -> Dictionary:
 	if build_catalog.is_empty():
 		return {}
 	var build_origin := Vector2((ui_size.x - 540.0) * 0.5, 12.0)
-	var units: Array = build_catalog.filter(func(item): return not bool(item.get("is_structure", false)))
+	var units: Array = build_catalog.filter(func(item): return not bool(item.get("is_structure", false)) and not bool(item.get("is_aircraft", false)))
 	units.sort_custom(func(left, right): return int(left.get("type", -1)) < int(right.get("type", -1)))
 	var structures: Array = build_catalog.filter(func(item): return bool(item.get("is_structure", false)))
 	for index in range(mini(4, units.size())):
@@ -305,7 +306,7 @@ func _draw() -> void:
 		var build_menu := Rect2((w - 540.0) * 0.5, 12.0, 540.0, 158.0)
 		_panel(build_menu, GREEN)
 		_text(build_menu.position + Vector2(10, 15), "FIELD ENGINEER // BUILD MENU", 9, GREEN, ui_scale)
-		var units: Array = build_catalog.filter(func(item): return not bool(item.get("is_structure", false)))
+		var units: Array = build_catalog.filter(func(item): return not bool(item.get("is_structure", false)) and not bool(item.get("is_aircraft", false)))
 		units.sort_custom(func(left, right): return int(left.get("type", -1)) < int(right.get("type", -1)))
 		var structures: Array = build_catalog.filter(func(item): return bool(item.get("is_structure", false)))
 		_text(build_menu.position + Vector2(10, 29), "UNITS", 8, MUTED, ui_scale)

@@ -166,12 +166,22 @@ TEST(reinforcement_delivery_deducts_once_rejects_invalid_and_spawns_on_completio
     Simulation s; s.start();
     s.create_faction_base(FactionId::ELITE_PRECISION, 0.0f, 0.0f);
     s.set_reinforcement_resources(FactionId::ELITE_PRECISION, 600.0f, 400.0f);
-    check(s.configure_reinforcement_delivery(20.0f, 0.0f, 20.0f, FactionId::ELITE_PRECISION), "delivery configures a friendly zone");
+    check(!s.configure_reinforcement_delivery(20.0f, 0.0f, 20.0f, FactionId::ELITE_PRECISION), "delivery rejects configuration before an airfield is active");
+    s.territorial_control_manager().add_installation(
+        20.0f, 0.0f, InstallationType::AIRFIELD, FactionId::ELITE_PRECISION);
+    check(s.configure_reinforcement_delivery(-999.0f, 0.0f, 20.0f, FactionId::ELITE_PRECISION), "delivery configures against the active airfield");
+    check(s.reinforcement_delivery().state() == ReinforcementDeliveryState::SELECTED,
+          "a single airfield is selected automatically without a terrain click");
     const auto line = s.production_manager().faction_line(FactionId::ELITE_PRECISION);
     const float material_before = s.production_manager().storages().at(line).metal_storage;
-    check(!s.select_reinforcement_delivery_zone(FactionId::ELITE_PRECISION, 80.0f, 0.0f), "outside zone is rejected");
-    check(s.production_manager().storages().at(line).metal_storage == material_before, "invalid selection spends nothing");
-    check(s.select_reinforcement_delivery_zone(FactionId::ELITE_PRECISION, 20.0f, 0.0f), "valid zone selects");
+    s.territorial_control_manager().add_installation(
+        2000.0f, 0.0f, InstallationType::AIRFIELD, FactionId::ELITE_PRECISION);
+    check(s.configure_reinforcement_delivery(0.0f, 0.0f, 20.0f, FactionId::ELITE_PRECISION), "delivery accepts multiple active airfields");
+    check(s.reinforcement_delivery().state() == ReinforcementDeliveryState::READY,
+          "multiple airfields require an explicit airfield selection");
+    check(!s.select_reinforcement_delivery_zone(FactionId::ELITE_PRECISION, 5000.0f, 0.0f), "non-airfield map click is rejected");
+    check(s.production_manager().storages().at(line).metal_storage == material_before, "invalid airfield selection spends nothing");
+    check(s.select_reinforcement_delivery_zone(FactionId::ELITE_PRECISION, 2000.0f, 0.0f), "clicked active airfield selects delivery anchor");
     check(s.request_reinforcement_delivery(FactionId::ELITE_PRECISION), "funded request accepted once");
     check(s.production_manager().storages().at(line).metal_storage == material_before - 260.0f, "successful request deducts exact material once");
     check(!s.request_reinforcement_delivery(FactionId::ELITE_PRECISION), "duplicate request rejected while incoming");

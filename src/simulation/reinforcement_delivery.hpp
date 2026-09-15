@@ -19,16 +19,20 @@ struct ReinforcementPackage {
 class ReinforcementDelivery {
 public:
     bool configure(float zone_x, float zone_y, float zone_radius, FactionId owner);
-    bool select_zone(float x, float y, bool is_land, bool is_blocked);
+    bool select_airfield(float x, float y);
+    void require_airfield_selection();
     bool request(bool has_resources);
     bool update(float delta_ms);
     void reset();
+    void reject(const std::string& reason);
 
     ReinforcementDeliveryState state() const { return state_; }
     const std::string& reason() const { return reason_; }
     float zone_x() const { return zone_x_; }
     float zone_y() const { return zone_y_; }
     float zone_radius() const { return zone_radius_; }
+    float selected_x() const { return selected_x_; }
+    float selected_y() const { return selected_y_; }
     FactionId owner() const { return owner_; }
     const ReinforcementPackage& package() const { return package_; }
     float elapsed_ms() const { return elapsed_ms_; }

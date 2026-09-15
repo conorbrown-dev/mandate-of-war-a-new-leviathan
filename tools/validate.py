@@ -30,6 +30,7 @@ GAMEPLAY_SCENARIOS = {
     "oak_grove_showcase",
     "airfield_fighter_ferry",
     "road_construction",
+    "ui_design_system_showcase",
 }
 PERFORMANCE_SCENARIOS = {"simulation_scale_1000", "combat_benchmark_2000"}
 CONTRACT_SCENARIOS = {
@@ -156,7 +157,7 @@ def run_gameplay(args: argparse.Namespace, artifact_dir: Path, started_at: str) 
         "--script",
         "res://validation/validation_runner.gd",
         "--resolution",
-        "1280x720",
+        args.resolution,
         "--fixed-fps",
         "30",
         "--log-file",
@@ -578,6 +579,7 @@ def main() -> int:
     parser.add_argument("--list", action="store_true", help="list scenario IDs")
     parser.add_argument("--seed", type=int, default=640640)
     parser.add_argument("--record", action="store_true", help="record fixed-step video; requires a graphical display")
+    parser.add_argument("--resolution", default="1280x720", help="render resolution WIDTHxHEIGHT for a gameplay scenario")
     parser.add_argument("--rendered", action="store_true", help="run with the active graphical display and capture screenshot checkpoints")
     parser.add_argument("--require-screenshots", action="store_true", help="fail if rendered screenshots cannot be captured")
     parser.add_argument("--update-baseline", action="store_true", help="explicitly replace visual baselines from this successful run")
@@ -588,6 +590,8 @@ def main() -> int:
     scenarios = sorted(GAMEPLAY_SCENARIOS | PERFORMANCE_SCENARIOS | CONTRACT_SCENARIOS.keys())
     if not math.isfinite(args.timeout) or args.timeout <= 0:
         parser.error("--timeout must be positive and finite")
+    if not re.fullmatch(r"[1-9]\d{2,4}x[1-9]\d{2,4}", args.resolution):
+        parser.error("--resolution must be WIDTHxHEIGHT, with each dimension between 100 and 99999")
     if args.list:
         print("\n".join(scenarios))
         return 0

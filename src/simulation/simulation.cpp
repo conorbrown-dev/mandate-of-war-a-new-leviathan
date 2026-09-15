@@ -1112,8 +1112,14 @@ void Simulation::environment_phase(float delta_ms) {
     }
     if (reinforcement_delivery_.update(delta_ms)) {
         const auto& package = reinforcement_delivery_.package();
-        create_unit_with_type(reinforcement_delivery_.zone_x(), reinforcement_delivery_.zone_y(),
-                              package.unit_type, reinforcement_delivery_.owner());
+        // Aircraft land at the selected airfield. Ground cargo deploys at a
+        // deterministic egress point just beyond its runway footprint.
+        float deploy_x = reinforcement_delivery_.selected_x();
+        float deploy_y = reinforcement_delivery_.selected_y() + 1000.0f;
+        if (!pathfinding_.is_walkable(pathfinding_.to_grid_x(deploy_x), pathfinding_.to_grid_y(deploy_y))) {
+            deploy_y = reinforcement_delivery_.selected_y() - 1000.0f;
+        }
+        create_unit_with_type(deploy_x, deploy_y, package.unit_type, reinforcement_delivery_.owner());
     }
 }
 
@@ -1123,14 +1129,29 @@ bool Simulation::begin_control_point_battle(const std::vector<ControlPointDefini
 }
 
 bool Simulation::configure_reinforcement_delivery(float x, float y, float radius, FactionId owner) {
-    return reinforcement_delivery_.configure(x, y, radius, owner);
+    float airfield_x = 0.0f;
+    float airfield_y = 0.0f;
+    const size_t airfield_count = territorial_control_.active_installation_count(owner, InstallationType::AIRFIELD);
+    if (airfield_count == 0 || !territorial_control_.get_active_installation_position(owner, InstallationType::AIRFIELD, airfield_x, airfield_y)) {
+        reinforcement_delivery_.reject("AIRFIELD REQUIRED FOR REINFORCEMENTS");
+        return false;
+    }
+    if (!reinforcement_delivery_.configure(airfield_x, airfield_y, radius, owner)) return false;
+    if (airfield_count == 1) return reinforcement_delivery_.select_airfield(airfield_x, airfield_y);
+    reinforcement_delivery_.require_airfield_selection();
+    return true;
 }
 
 bool Simulation::select_reinforcement_delivery_zone(FactionId player, float x, float y) {
     if (player != reinforcement_delivery_.owner()) return false;
-    const bool land = is_land_position(x, y);
-    const bool blocked = !pathfinding_.is_walkable(pathfinding_.to_grid_x(x), pathfinding_.to_grid_y(y));
-    return reinforcement_delivery_.select_zone(x, y, land, blocked);
+    float airfield_x = 0.0f;
+    float airfield_y = 0.0f;
+    if (!territorial_control_.get_active_installation_position_near(player, InstallationType::AIRFIELD,
+                                                                     x, y, 1000.0f, airfield_x, airfield_y)) {
+        reinforcement_delivery_.require_airfield_selection();
+        return false;
+    }
+    return reinforcement_delivery_.select_airfield(airfield_x, airfield_y);
 }
 
 bool Simulation::request_reinforcement_delivery(FactionId player) {

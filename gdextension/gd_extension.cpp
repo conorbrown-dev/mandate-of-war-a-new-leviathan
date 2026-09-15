@@ -367,6 +367,7 @@ protected:
         state["state"] = static_cast<int>(delivery.state());
         state["reason"] = String(delivery.reason().c_str());
         state["x"] = delivery.zone_x(); state["y"] = delivery.zone_y(); state["radius"] = delivery.zone_radius();
+        state["delivery_x"] = delivery.selected_x(); state["delivery_y"] = delivery.selected_y();
         state["elapsed_ms"] = delivery.elapsed_ms(); state["duration_ms"] = delivery.package().delivery_duration_ms;
         state["material_cost"] = delivery.package().material_cost; state["energy_cost"] = delivery.package().energy_cost;
         state["unit_type"] = static_cast<int>(delivery.package().unit_type);
@@ -670,6 +671,7 @@ public:
             entry["energy"] = production.get_unit_energy_cost(faction, type);
             entry["research"] = production.get_unit_research_cost(faction, type);
             entry["build_seconds"] = prototype.build_time_seconds;
+            entry["is_aircraft"] = prototype.is_aircraft;
             const bool airfield_ready = !prototype.is_aircraft || !prototype.requires_runway ||
                 rts::runtime_simulation()->territorial_control_manager().has_active_installation(faction, rts::InstallationType::AIRFIELD);
             entry["available"] = line != rts::INVALID_ENTITY && airfield_ready && production.can_queue_unit(line, faction, type);

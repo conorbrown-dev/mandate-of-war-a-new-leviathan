@@ -1,0 +1,2654 @@
+{
+  "order.move": {
+    "id": "order.move",
+    "label": "Move",
+    "category": "orders",
+    "description": "Issue a movement order",
+    "source": "fontawesome",
+    "sourceIcon": "location-arrow",
+    "path": "res://assets/ui/icons/orders/move.svg",
+    "aliases": []
+  },
+  "order.attack_move": {
+    "id": "order.attack_move",
+    "label": "Attack Move",
+    "category": "orders",
+    "description": "Advance while engaging targets",
+    "source": "composite",
+    "sourceIcon": "location-arrow + crosshairs",
+    "path": "res://assets/ui/icons/orders/attack_move.svg",
+    "aliases": []
+  },
+  "order.patrol": {
+    "id": "order.patrol",
+    "label": "Patrol",
+    "category": "orders",
+    "description": "Patrol between assigned points",
+    "source": "fontawesome",
+    "sourceIcon": "arrows-rotate",
+    "path": "res://assets/ui/icons/orders/patrol.svg",
+    "aliases": []
+  },
+  "order.waypoint": {
+    "id": "order.waypoint",
+    "label": "Waypoint",
+    "category": "orders",
+    "description": "Place an intermediate movement point",
+    "source": "fontawesome",
+    "sourceIcon": "location-dot",
+    "path": "res://assets/ui/icons/orders/waypoint.svg",
+    "aliases": []
+  },
+  "order.reverse": {
+    "id": "order.reverse",
+    "label": "Reverse",
+    "category": "orders",
+    "description": "Reverse while maintaining facing",
+    "source": "fontawesome",
+    "sourceIcon": "backward",
+    "path": "res://assets/ui/icons/orders/reverse.svg",
+    "aliases": []
+  },
+  "order.advance": {
+    "id": "order.advance",
+    "label": "Advance",
+    "category": "orders",
+    "description": "Advance forward",
+    "source": "fontawesome",
+    "sourceIcon": "arrow-up",
+    "path": "res://assets/ui/icons/orders/advance.svg",
+    "aliases": []
+  },
+  "order.retreat": {
+    "id": "order.retreat",
+    "label": "Retreat",
+    "category": "orders",
+    "description": "Retreat from contact",
+    "source": "fontawesome",
+    "sourceIcon": "arrow-down",
+    "path": "res://assets/ui/icons/orders/retreat.svg",
+    "aliases": []
+  },
+  "order.hold_position": {
+    "id": "order.hold_position",
+    "label": "Hold Position",
+    "category": "orders",
+    "description": "Hold current ground",
+    "source": "fontawesome",
+    "sourceIcon": "anchor",
+    "path": "res://assets/ui/icons/orders/hold_position.svg",
+    "aliases": []
+  },
+  "order.stop": {
+    "id": "order.stop",
+    "label": "Stop",
+    "category": "orders",
+    "description": "Immediately stop selected orders",
+    "source": "fontawesome",
+    "sourceIcon": "stop",
+    "path": "res://assets/ui/icons/orders/stop.svg",
+    "aliases": []
+  },
+  "order.cancel": {
+    "id": "order.cancel",
+    "label": "Cancel Order",
+    "category": "orders",
+    "description": "Cancel the current order",
+    "source": "fontawesome",
+    "sourceIcon": "xmark",
+    "path": "res://assets/ui/icons/orders/cancel.svg",
+    "aliases": []
+  },
+  "order.queue": {
+    "id": "order.queue",
+    "label": "Queue Order",
+    "category": "orders",
+    "description": "Queue an order after existing orders",
+    "source": "fontawesome",
+    "sourceIcon": "list-ol",
+    "path": "res://assets/ui/icons/orders/queue.svg",
+    "aliases": []
+  },
+  "order.clear": {
+    "id": "order.clear",
+    "label": "Clear Orders",
+    "category": "orders",
+    "description": "Clear queued orders",
+    "source": "fontawesome",
+    "sourceIcon": "eraser",
+    "path": "res://assets/ui/icons/orders/clear.svg",
+    "aliases": []
+  },
+  "order.guard": {
+    "id": "order.guard",
+    "label": "Guard",
+    "category": "orders",
+    "description": "Guard a selected unit or location",
+    "source": "fontawesome",
+    "sourceIcon": "shield-halved",
+    "path": "res://assets/ui/icons/orders/guard.svg",
+    "aliases": []
+  },
+  "order.escort": {
+    "id": "order.escort",
+    "label": "Escort",
+    "category": "orders",
+    "description": "Escort a selected unit",
+    "source": "fontawesome",
+    "sourceIcon": "people-group",
+    "path": "res://assets/ui/icons/orders/escort.svg",
+    "aliases": []
+  },
+  "order.defend": {
+    "id": "order.defend",
+    "label": "Defend",
+    "category": "orders",
+    "description": "Defend the assigned area",
+    "source": "fontawesome",
+    "sourceIcon": "shield",
+    "path": "res://assets/ui/icons/orders/defend.svg",
+    "aliases": []
+  },
+  "order.garrison": {
+    "id": "order.garrison",
+    "label": "Garrison",
+    "category": "orders",
+    "description": "Enter and defend a structure",
+    "source": "fontawesome",
+    "sourceIcon": "building-shield",
+    "path": "res://assets/ui/icons/orders/garrison.svg",
+    "aliases": []
+  },
+  "order.deploy": {
+    "id": "order.deploy",
+    "label": "Deploy",
+    "category": "orders",
+    "description": "Deploy into operational position",
+    "source": "fontawesome",
+    "sourceIcon": "arrow-up-right-dots",
+    "path": "res://assets/ui/icons/orders/deploy.svg",
+    "aliases": []
+  },
+  "order.undeploy": {
+    "id": "order.undeploy",
+    "label": "Undeploy",
+    "category": "orders",
+    "description": "Pack up from deployed position",
+    "source": "fontawesome",
+    "sourceIcon": "arrows-down-to-line",
+    "path": "res://assets/ui/icons/orders/undeploy.svg",
+    "aliases": []
+  },
+  "order.dig_in": {
+    "id": "order.dig_in",
+    "label": "Dig In",
+    "category": "orders",
+    "description": "Prepare defensive earthworks",
+    "source": "fontawesome",
+    "sourceIcon": "trowel",
+    "path": "res://assets/ui/icons/orders/dig_in.svg",
+    "aliases": []
+  },
+  "order.formation": {
+    "id": "order.formation",
+    "label": "Formation",
+    "category": "orders",
+    "description": "Choose unit formation",
+    "source": "fontawesome",
+    "sourceIcon": "people-group",
+    "path": "res://assets/ui/icons/orders/formation.svg",
+    "aliases": []
+  },
+  "order.spread_formation": {
+    "id": "order.spread_formation",
+    "label": "Spread Formation",
+    "category": "orders",
+    "description": "Increase formation spacing",
+    "source": "fontawesome",
+    "sourceIcon": "arrows-up-down-left-right",
+    "path": "res://assets/ui/icons/orders/spread_formation.svg",
+    "aliases": []
+  },
+  "order.tighten_formation": {
+    "id": "order.tighten_formation",
+    "label": "Tighten Formation",
+    "category": "orders",
+    "description": "Reduce formation spacing",
+    "source": "fontawesome",
+    "sourceIcon": "compress",
+    "path": "res://assets/ui/icons/orders/tighten_formation.svg",
+    "aliases": []
+  },
+  "order.stance_aggressive": {
+    "id": "order.stance_aggressive",
+    "label": "Aggressive Stance",
+    "category": "orders",
+    "description": "Prioritize aggressive engagement",
+    "source": "fontawesome",
+    "sourceIcon": "angles-up",
+    "path": "res://assets/ui/icons/orders/stance_aggressive.svg",
+    "aliases": []
+  },
+  "order.stance_defensive": {
+    "id": "order.stance_defensive",
+    "label": "Defensive Stance",
+    "category": "orders",
+    "description": "Prioritize defensive engagement",
+    "source": "fontawesome",
+    "sourceIcon": "shield-halved",
+    "path": "res://assets/ui/icons/orders/stance_defensive.svg",
+    "aliases": []
+  },
+  "order.stance_passive": {
+    "id": "order.stance_passive",
+    "label": "Passive Stance",
+    "category": "orders",
+    "description": "Avoid discretionary engagement",
+    "source": "fontawesome",
+    "sourceIcon": "hand",
+    "path": "res://assets/ui/icons/orders/stance_passive.svg",
+    "aliases": []
+  },
+  "combat.attack": {
+    "id": "combat.attack",
+    "label": "Attack",
+    "category": "combat",
+    "description": "Attack a target",
+    "source": "fontawesome",
+    "sourceIcon": "crosshairs",
+    "path": "res://assets/ui/icons/combat/attack.svg",
+    "aliases": []
+  },
+  "combat.attack_ground": {
+    "id": "combat.attack_ground",
+    "label": "Attack Ground",
+    "category": "combat",
+    "description": "Attack a ground position",
+    "source": "fontawesome",
+    "sourceIcon": "bullseye",
+    "path": "res://assets/ui/icons/combat/attack_ground.svg",
+    "aliases": []
+  },
+  "combat.bombard": {
+    "id": "combat.bombard",
+    "label": "Bombard",
+    "category": "combat",
+    "description": "Bombard an area",
+    "source": "fontawesome",
+    "sourceIcon": "explosion",
+    "path": "res://assets/ui/icons/combat/bombard.svg",
+    "aliases": []
+  },
+  "combat.suppress": {
+    "id": "combat.suppress",
+    "label": "Suppress",
+    "category": "combat",
+    "description": "Suppress enemy forces",
+    "source": "fontawesome",
+    "sourceIcon": "burst",
+    "path": "res://assets/ui/icons/combat/suppress.svg",
+    "aliases": []
+  },
+  "combat.focus_fire": {
+    "id": "combat.focus_fire",
+    "label": "Focus Fire",
+    "category": "combat",
+    "description": "Concentrate fire on one target",
+    "source": "fontawesome",
+    "sourceIcon": "bullseye",
+    "path": "res://assets/ui/icons/combat/focus_fire.svg",
+    "aliases": []
+  },
+  "combat.cease_fire": {
+    "id": "combat.cease_fire",
+    "label": "Cease Fire",
+    "category": "combat",
+    "description": "Cease all fire",
+    "source": "fontawesome",
+    "sourceIcon": "ban",
+    "path": "res://assets/ui/icons/combat/cease_fire.svg",
+    "aliases": []
+  },
+  "combat.hold_fire": {
+    "id": "combat.hold_fire",
+    "label": "Hold Fire",
+    "category": "combat",
+    "description": "Hold fire until ordered",
+    "source": "fontawesome",
+    "sourceIcon": "hand",
+    "path": "res://assets/ui/icons/combat/hold_fire.svg",
+    "aliases": []
+  },
+  "combat.return_fire": {
+    "id": "combat.return_fire",
+    "label": "Return Fire",
+    "category": "combat",
+    "description": "Fire only when attacked",
+    "source": "fontawesome",
+    "sourceIcon": "arrow-rotate-left",
+    "path": "res://assets/ui/icons/combat/return_fire.svg",
+    "aliases": []
+  },
+  "combat.fire_at_will": {
+    "id": "combat.fire_at_will",
+    "label": "Fire at Will",
+    "category": "combat",
+    "description": "Engage eligible targets freely",
+    "source": "fontawesome",
+    "sourceIcon": "crosshairs",
+    "path": "res://assets/ui/icons/combat/fire_at_will.svg",
+    "aliases": []
+  },
+  "combat.target": {
+    "id": "combat.target",
+    "label": "Target",
+    "category": "combat",
+    "description": "Assign a target",
+    "source": "fontawesome",
+    "sourceIcon": "crosshairs",
+    "path": "res://assets/ui/icons/combat/target.svg",
+    "aliases": []
+  },
+  "combat.target_priority": {
+    "id": "combat.target_priority",
+    "label": "Target Priority",
+    "category": "combat",
+    "description": "Set target priority",
+    "source": "fontawesome",
+    "sourceIcon": "bullseye",
+    "path": "res://assets/ui/icons/combat/target_priority.svg",
+    "aliases": []
+  },
+  "combat.missile_attack": {
+    "id": "combat.missile_attack",
+    "label": "Missile Attack",
+    "category": "combat",
+    "description": "Launch a missile attack",
+    "source": "fontawesome",
+    "sourceIcon": "rocket",
+    "path": "res://assets/ui/icons/combat/missile_attack.svg",
+    "aliases": []
+  },
+  "combat.artillery_attack": {
+    "id": "combat.artillery_attack",
+    "label": "Artillery Attack",
+    "category": "combat",
+    "description": "Conduct artillery fire",
+    "source": "fontawesome",
+    "sourceIcon": "explosion",
+    "path": "res://assets/ui/icons/combat/artillery_attack.svg",
+    "aliases": []
+  },
+  "combat.air_strike": {
+    "id": "combat.air_strike",
+    "label": "Air Strike",
+    "category": "combat",
+    "description": "Conduct an air strike",
+    "source": "fontawesome",
+    "sourceIcon": "jet-fighter",
+    "path": "res://assets/ui/icons/combat/air_strike.svg",
+    "aliases": []
+  },
+  "combat.naval_strike": {
+    "id": "combat.naval_strike",
+    "label": "Naval Strike",
+    "category": "combat",
+    "description": "Conduct a naval strike",
+    "source": "fontawesome",
+    "sourceIcon": "ship",
+    "path": "res://assets/ui/icons/combat/naval_strike.svg",
+    "aliases": []
+  },
+  "construction.build": {
+    "id": "construction.build",
+    "label": "Build",
+    "category": "construction",
+    "description": "Open construction options",
+    "source": "fontawesome",
+    "sourceIcon": "hammer",
+    "path": "res://assets/ui/icons/construction/build.svg",
+    "aliases": [
+      "construction.construct"
+    ]
+  },
+  "construction.construct": {
+    "id": "construction.construct",
+    "label": "Construct",
+    "category": "construction",
+    "description": "Construct a selected blueprint",
+    "source": "fontawesome",
+    "sourceIcon": "screwdriver-wrench",
+    "path": "res://assets/ui/icons/construction/construct.svg",
+    "aliases": []
+  },
+  "construction.cancel": {
+    "id": "construction.cancel",
+    "label": "Cancel Construction",
+    "category": "construction",
+    "description": "Cancel construction",
+    "source": "fontawesome",
+    "sourceIcon": "ban",
+    "path": "res://assets/ui/icons/construction/cancel.svg",
+    "aliases": []
+  },
+  "construction.pause": {
+    "id": "construction.pause",
+    "label": "Pause Construction",
+    "category": "construction",
+    "description": "Pause construction",
+    "source": "fontawesome",
+    "sourceIcon": "pause",
+    "path": "res://assets/ui/icons/construction/pause.svg",
+    "aliases": []
+  },
+  "construction.resume": {
+    "id": "construction.resume",
+    "label": "Resume Construction",
+    "category": "construction",
+    "description": "Resume construction",
+    "source": "fontawesome",
+    "sourceIcon": "play",
+    "path": "res://assets/ui/icons/construction/resume.svg",
+    "aliases": []
+  },
+  "construction.repair": {
+    "id": "construction.repair",
+    "label": "Repair",
+    "category": "construction",
+    "description": "Repair a unit or structure",
+    "source": "fontawesome",
+    "sourceIcon": "wrench",
+    "path": "res://assets/ui/icons/construction/repair.svg",
+    "aliases": []
+  },
+  "construction.salvage": {
+    "id": "construction.salvage",
+    "label": "Salvage",
+    "category": "construction",
+    "description": "Recover useful materials",
+    "source": "fontawesome",
+    "sourceIcon": "recycle",
+    "path": "res://assets/ui/icons/construction/salvage.svg",
+    "aliases": []
+  },
+  "construction.reclaim": {
+    "id": "construction.reclaim",
+    "label": "Reclaim",
+    "category": "construction",
+    "description": "Reclaim a dismantled asset",
+    "source": "fontawesome",
+    "sourceIcon": "trash-arrow-up",
+    "path": "res://assets/ui/icons/construction/reclaim.svg",
+    "aliases": []
+  },
+  "construction.demolish": {
+    "id": "construction.demolish",
+    "label": "Demolish",
+    "category": "construction",
+    "description": "Demolish a structure",
+    "source": "fontawesome",
+    "sourceIcon": "hammer",
+    "path": "res://assets/ui/icons/construction/demolish.svg",
+    "aliases": []
+  },
+  "construction.upgrade": {
+    "id": "construction.upgrade",
+    "label": "Upgrade",
+    "category": "construction",
+    "description": "Upgrade a unit or structure",
+    "source": "fontawesome",
+    "sourceIcon": "arrow-up-right-dots",
+    "path": "res://assets/ui/icons/construction/upgrade.svg",
+    "aliases": []
+  },
+  "construction.reinforce": {
+    "id": "construction.reinforce",
+    "label": "Reinforce",
+    "category": "construction",
+    "description": "Reinforce defenses",
+    "source": "fontawesome",
+    "sourceIcon": "shield",
+    "path": "res://assets/ui/icons/construction/reinforce.svg",
+    "aliases": []
+  },
+  "construction.fortify": {
+    "id": "construction.fortify",
+    "label": "Fortify",
+    "category": "construction",
+    "description": "Build defensive fortifications",
+    "source": "custom",
+    "sourceIcon": "fortification",
+    "path": "res://assets/ui/icons/construction/fortify.svg",
+    "aliases": []
+  },
+  "construction.road": {
+    "id": "construction.road",
+    "label": "Build Road",
+    "category": "construction",
+    "description": "Build a road",
+    "source": "composite",
+    "sourceIcon": "road + hammer",
+    "path": "res://assets/ui/icons/construction/road.svg",
+    "aliases": []
+  },
+  "construction.railway": {
+    "id": "construction.railway",
+    "label": "Build Railway",
+    "category": "construction",
+    "description": "Build a railway",
+    "source": "composite",
+    "sourceIcon": "railway + hammer",
+    "path": "res://assets/ui/icons/construction/railway.svg",
+    "aliases": []
+  },
+  "construction.bridge": {
+    "id": "construction.bridge",
+    "label": "Build Bridge",
+    "category": "construction",
+    "description": "Build a bridge",
+    "source": "composite",
+    "sourceIcon": "bridge + hammer",
+    "path": "res://assets/ui/icons/construction/bridge.svg",
+    "aliases": []
+  },
+  "construction.airstrip": {
+    "id": "construction.airstrip",
+    "label": "Build Airstrip",
+    "category": "construction",
+    "description": "Build an airstrip",
+    "source": "composite",
+    "sourceIcon": "runway + hammer",
+    "path": "res://assets/ui/icons/construction/airstrip.svg",
+    "aliases": []
+  },
+  "construction.airbase": {
+    "id": "construction.airbase",
+    "label": "Build Airbase",
+    "category": "construction",
+    "description": "Build an airbase",
+    "source": "fontawesome",
+    "sourceIcon": "tower-observation",
+    "path": "res://assets/ui/icons/construction/airbase.svg",
+    "aliases": []
+  },
+  "construction.port": {
+    "id": "construction.port",
+    "label": "Build Port",
+    "category": "construction",
+    "description": "Build a port",
+    "source": "fontawesome",
+    "sourceIcon": "anchor",
+    "path": "res://assets/ui/icons/construction/port.svg",
+    "aliases": []
+  },
+  "construction.naval_base": {
+    "id": "construction.naval_base",
+    "label": "Build Naval Base",
+    "category": "construction",
+    "description": "Build a naval base",
+    "source": "fontawesome",
+    "sourceIcon": "ship",
+    "path": "res://assets/ui/icons/construction/naval_base.svg",
+    "aliases": []
+  },
+  "construction.factory": {
+    "id": "construction.factory",
+    "label": "Build Factory",
+    "category": "construction",
+    "description": "Build a factory",
+    "source": "fontawesome",
+    "sourceIcon": "industry",
+    "path": "res://assets/ui/icons/construction/factory.svg",
+    "aliases": []
+  },
+  "construction.power": {
+    "id": "construction.power",
+    "label": "Build Power",
+    "category": "construction",
+    "description": "Build power infrastructure",
+    "source": "fontawesome",
+    "sourceIcon": "bolt",
+    "path": "res://assets/ui/icons/construction/power.svg",
+    "aliases": []
+  },
+  "construction.radar": {
+    "id": "construction.radar",
+    "label": "Build Radar",
+    "category": "construction",
+    "description": "Build radar infrastructure",
+    "source": "fontawesome",
+    "sourceIcon": "satellite-dish",
+    "path": "res://assets/ui/icons/construction/radar.svg",
+    "aliases": []
+  },
+  "construction.sam_site": {
+    "id": "construction.sam_site",
+    "label": "Build SAM Site",
+    "category": "construction",
+    "description": "Build a surface-to-air missile site",
+    "source": "fontawesome",
+    "sourceIcon": "rocket",
+    "path": "res://assets/ui/icons/construction/sam_site.svg",
+    "aliases": []
+  },
+  "construction.supply_depot": {
+    "id": "construction.supply_depot",
+    "label": "Build Supply Depot",
+    "category": "construction",
+    "description": "Build a supply depot",
+    "source": "fontawesome",
+    "sourceIcon": "warehouse",
+    "path": "res://assets/ui/icons/construction/supply_depot.svg",
+    "aliases": []
+  },
+  "construction.fuel_depot": {
+    "id": "construction.fuel_depot",
+    "label": "Build Fuel Depot",
+    "category": "construction",
+    "description": "Build a fuel depot",
+    "source": "fontawesome",
+    "sourceIcon": "gas-pump",
+    "path": "res://assets/ui/icons/construction/fuel_depot.svg",
+    "aliases": []
+  },
+  "construction.ammo_depot": {
+    "id": "construction.ammo_depot",
+    "label": "Build Ammunition Depot",
+    "category": "construction",
+    "description": "Build an ammunition depot",
+    "source": "custom",
+    "sourceIcon": "ammo",
+    "path": "res://assets/ui/icons/construction/ammo_depot.svg",
+    "aliases": []
+  },
+  "construction.research_facility": {
+    "id": "construction.research_facility",
+    "label": "Build Research Facility",
+    "category": "construction",
+    "description": "Build a research facility",
+    "source": "fontawesome",
+    "sourceIcon": "flask",
+    "path": "res://assets/ui/icons/construction/research_facility.svg",
+    "aliases": []
+  },
+  "construction.fortification": {
+    "id": "construction.fortification",
+    "label": "Build Fortification",
+    "category": "construction",
+    "description": "Build a fortification",
+    "source": "custom",
+    "sourceIcon": "fortification",
+    "path": "res://assets/ui/icons/construction/fortification.svg",
+    "aliases": []
+  },
+  "construction.checkpoint": {
+    "id": "construction.checkpoint",
+    "label": "Build Checkpoint",
+    "category": "construction",
+    "description": "Build a checkpoint",
+    "source": "fontawesome",
+    "sourceIcon": "road-barrier",
+    "path": "res://assets/ui/icons/construction/checkpoint.svg",
+    "aliases": []
+  },
+  "logistics.logistics": {
+    "id": "logistics.logistics",
+    "label": "Logistics",
+    "category": "logistics",
+    "description": "Manage logistics",
+    "source": "fontawesome",
+    "sourceIcon": "truck-fast",
+    "path": "res://assets/ui/icons/logistics/logistics.svg",
+    "aliases": []
+  },
+  "logistics.supply": {
+    "id": "logistics.supply",
+    "label": "Supply",
+    "category": "logistics",
+    "description": "Show supply",
+    "source": "fontawesome",
+    "sourceIcon": "boxes-stacked",
+    "path": "res://assets/ui/icons/logistics/supply.svg",
+    "aliases": []
+  },
+  "logistics.resupply": {
+    "id": "logistics.resupply",
+    "label": "Resupply",
+    "category": "logistics",
+    "description": "Deliver supplies",
+    "source": "fontawesome",
+    "sourceIcon": "truck-ramp-box",
+    "path": "res://assets/ui/icons/logistics/resupply.svg",
+    "aliases": []
+  },
+  "logistics.supply_route": {
+    "id": "logistics.supply_route",
+    "label": "Supply Route",
+    "category": "logistics",
+    "description": "Plan a supply route",
+    "source": "fontawesome",
+    "sourceIcon": "route",
+    "path": "res://assets/ui/icons/logistics/supply_route.svg",
+    "aliases": []
+  },
+  "logistics.convoy": {
+    "id": "logistics.convoy",
+    "label": "Convoy",
+    "category": "logistics",
+    "description": "Assign a convoy",
+    "source": "fontawesome",
+    "sourceIcon": "truck",
+    "path": "res://assets/ui/icons/logistics/convoy.svg",
+    "aliases": []
+  },
+  "logistics.cargo": {
+    "id": "logistics.cargo",
+    "label": "Cargo",
+    "category": "logistics",
+    "description": "Show cargo",
+    "source": "fontawesome",
+    "sourceIcon": "box",
+    "path": "res://assets/ui/icons/logistics/cargo.svg",
+    "aliases": []
+  },
+  "logistics.load": {
+    "id": "logistics.load",
+    "label": "Load",
+    "category": "logistics",
+    "description": "Load cargo or personnel",
+    "source": "fontawesome",
+    "sourceIcon": "arrow-right-to-bracket",
+    "path": "res://assets/ui/icons/logistics/load.svg",
+    "aliases": []
+  },
+  "logistics.unload": {
+    "id": "logistics.unload",
+    "label": "Unload",
+    "category": "logistics",
+    "description": "Unload cargo or personnel",
+    "source": "fontawesome",
+    "sourceIcon": "arrow-right-from-bracket",
+    "path": "res://assets/ui/icons/logistics/unload.svg",
+    "aliases": []
+  },
+  "logistics.embark": {
+    "id": "logistics.embark",
+    "label": "Embark",
+    "category": "logistics",
+    "description": "Embark a transport",
+    "source": "fontawesome",
+    "sourceIcon": "person-walking-arrow-right",
+    "path": "res://assets/ui/icons/logistics/embark.svg",
+    "aliases": []
+  },
+  "logistics.disembark": {
+    "id": "logistics.disembark",
+    "label": "Disembark",
+    "category": "logistics",
+    "description": "Disembark a transport",
+    "source": "fontawesome",
+    "sourceIcon": "person-walking-arrow-loop-left",
+    "path": "res://assets/ui/icons/logistics/disembark.svg",
+    "aliases": []
+  },
+  "logistics.transport": {
+    "id": "logistics.transport",
+    "label": "Transport",
+    "category": "logistics",
+    "description": "Transport units",
+    "source": "fontawesome",
+    "sourceIcon": "truck",
+    "path": "res://assets/ui/icons/logistics/transport.svg",
+    "aliases": []
+  },
+  "logistics.airlift": {
+    "id": "logistics.airlift",
+    "label": "Airlift",
+    "category": "logistics",
+    "description": "Transport by air",
+    "source": "fontawesome",
+    "sourceIcon": "plane-up",
+    "path": "res://assets/ui/icons/logistics/airlift.svg",
+    "aliases": []
+  },
+  "logistics.sealift": {
+    "id": "logistics.sealift",
+    "label": "Sealift",
+    "category": "logistics",
+    "description": "Transport by sea",
+    "source": "fontawesome",
+    "sourceIcon": "ship",
+    "path": "res://assets/ui/icons/logistics/sealift.svg",
+    "aliases": []
+  },
+  "logistics.rail_transport": {
+    "id": "logistics.rail_transport",
+    "label": "Rail Transport",
+    "category": "logistics",
+    "description": "Transport by rail",
+    "source": "fontawesome",
+    "sourceIcon": "train",
+    "path": "res://assets/ui/icons/logistics/rail_transport.svg",
+    "aliases": []
+  },
+  "logistics.ground_transport": {
+    "id": "logistics.ground_transport",
+    "label": "Ground Transport",
+    "category": "logistics",
+    "description": "Transport over ground",
+    "source": "fontawesome",
+    "sourceIcon": "truck",
+    "path": "res://assets/ui/icons/logistics/ground_transport.svg",
+    "aliases": []
+  },
+  "logistics.staging_area": {
+    "id": "logistics.staging_area",
+    "label": "Staging Area",
+    "category": "logistics",
+    "description": "Stage units before an operation",
+    "source": "fontawesome",
+    "sourceIcon": "people-roof",
+    "path": "res://assets/ui/icons/logistics/staging_area.svg",
+    "aliases": []
+  },
+  "logistics.forward_base": {
+    "id": "logistics.forward_base",
+    "label": "Forward Base",
+    "category": "logistics",
+    "description": "Show a forward operating base",
+    "source": "fontawesome",
+    "sourceIcon": "tent",
+    "path": "res://assets/ui/icons/logistics/forward_base.svg",
+    "aliases": []
+  },
+  "logistics.depot": {
+    "id": "logistics.depot",
+    "label": "Depot",
+    "category": "logistics",
+    "description": "Show a depot",
+    "source": "fontawesome",
+    "sourceIcon": "warehouse",
+    "path": "res://assets/ui/icons/logistics/depot.svg",
+    "aliases": []
+  },
+  "logistics.warehouse": {
+    "id": "logistics.warehouse",
+    "label": "Warehouse",
+    "category": "logistics",
+    "description": "Show a warehouse",
+    "source": "fontawesome",
+    "sourceIcon": "warehouse",
+    "path": "res://assets/ui/icons/logistics/warehouse.svg",
+    "aliases": []
+  },
+  "logistics.fuel": {
+    "id": "logistics.fuel",
+    "label": "Fuel",
+    "category": "logistics",
+    "description": "Fuel resource",
+    "source": "fontawesome",
+    "sourceIcon": "gas-pump",
+    "path": "res://assets/ui/icons/logistics/fuel.svg",
+    "aliases": []
+  },
+  "logistics.ammunition": {
+    "id": "logistics.ammunition",
+    "label": "Ammunition",
+    "category": "logistics",
+    "description": "Ammunition resource",
+    "source": "custom",
+    "sourceIcon": "ammo",
+    "path": "res://assets/ui/icons/logistics/ammunition.svg",
+    "aliases": []
+  },
+  "logistics.spare_parts": {
+    "id": "logistics.spare_parts",
+    "label": "Spare Parts",
+    "category": "logistics",
+    "description": "Spare parts resource",
+    "source": "fontawesome",
+    "sourceIcon": "gears",
+    "path": "res://assets/ui/icons/logistics/spare_parts.svg",
+    "aliases": []
+  },
+  "logistics.personnel": {
+    "id": "logistics.personnel",
+    "label": "Personnel",
+    "category": "logistics",
+    "description": "Personnel resource",
+    "source": "fontawesome",
+    "sourceIcon": "users",
+    "path": "res://assets/ui/icons/logistics/personnel.svg",
+    "aliases": []
+  },
+  "status.low_supply": {
+    "id": "status.low_supply",
+    "label": "Low Supply",
+    "category": "status",
+    "description": "Supply is low",
+    "source": "fontawesome",
+    "sourceIcon": "triangle-exclamation",
+    "path": "res://assets/ui/icons/status/low_supply.svg",
+    "aliases": []
+  },
+  "status.out_of_supply": {
+    "id": "status.out_of_supply",
+    "label": "Out of Supply",
+    "category": "status",
+    "description": "Supply is exhausted",
+    "source": "fontawesome",
+    "sourceIcon": "boxes-packing",
+    "path": "res://assets/ui/icons/status/out_of_supply.svg",
+    "aliases": []
+  },
+  "status.low_fuel": {
+    "id": "status.low_fuel",
+    "label": "Low Fuel",
+    "category": "status",
+    "description": "Fuel is low",
+    "source": "composite",
+    "sourceIcon": "gas-pump + triangle-exclamation",
+    "path": "res://assets/ui/icons/status/low_fuel.svg",
+    "aliases": []
+  },
+  "status.out_of_fuel": {
+    "id": "status.out_of_fuel",
+    "label": "Out of Fuel",
+    "category": "status",
+    "description": "Fuel is exhausted",
+    "source": "fontawesome",
+    "sourceIcon": "gas-pump",
+    "path": "res://assets/ui/icons/status/out_of_fuel.svg",
+    "aliases": []
+  },
+  "status.low_ammo": {
+    "id": "status.low_ammo",
+    "label": "Low Ammunition",
+    "category": "status",
+    "description": "Ammunition is low",
+    "source": "composite",
+    "sourceIcon": "ammo + triangle-exclamation",
+    "path": "res://assets/ui/icons/status/low_ammo.svg",
+    "aliases": []
+  },
+  "status.out_of_ammo": {
+    "id": "status.out_of_ammo",
+    "label": "Out of Ammunition",
+    "category": "status",
+    "description": "Ammunition is exhausted",
+    "source": "fontawesome",
+    "sourceIcon": "ban",
+    "path": "res://assets/ui/icons/status/out_of_ammo.svg",
+    "aliases": []
+  },
+  "status.resupplying": {
+    "id": "status.resupplying",
+    "label": "Resupplying",
+    "category": "status",
+    "description": "Unit is receiving supply",
+    "source": "fontawesome",
+    "sourceIcon": "truck-ramp-box",
+    "path": "res://assets/ui/icons/status/resupplying.svg",
+    "aliases": []
+  },
+  "status.refueling": {
+    "id": "status.refueling",
+    "label": "Refueling",
+    "category": "status",
+    "description": "Unit is refueling",
+    "source": "fontawesome",
+    "sourceIcon": "gas-pump",
+    "path": "res://assets/ui/icons/status/refueling.svg",
+    "aliases": []
+  },
+  "status.rearming": {
+    "id": "status.rearming",
+    "label": "Rearming",
+    "category": "status",
+    "description": "Unit is rearming",
+    "source": "custom",
+    "sourceIcon": "ammo",
+    "path": "res://assets/ui/icons/status/rearming.svg",
+    "aliases": []
+  },
+  "status.repairing": {
+    "id": "status.repairing",
+    "label": "Repairing",
+    "category": "status",
+    "description": "Unit is being repaired",
+    "source": "fontawesome",
+    "sourceIcon": "wrench",
+    "path": "res://assets/ui/icons/status/repairing.svg",
+    "aliases": []
+  },
+  "resource.material": {
+    "id": "resource.material",
+    "label": "Material",
+    "category": "resources",
+    "description": "Industrial construction material",
+    "source": "custom",
+    "sourceIcon": "material",
+    "path": "res://assets/ui/icons/resources/material.svg",
+    "aliases": []
+  },
+  "resource.energy": {
+    "id": "resource.energy",
+    "label": "Energy",
+    "category": "resources",
+    "description": "Electrical energy resource",
+    "source": "fontawesome",
+    "sourceIcon": "bolt",
+    "path": "res://assets/ui/icons/resources/energy.svg",
+    "aliases": []
+  },
+  "resource.research": {
+    "id": "resource.research",
+    "label": "Research",
+    "category": "resources",
+    "description": "Research resource",
+    "source": "fontawesome",
+    "sourceIcon": "flask",
+    "path": "res://assets/ui/icons/resources/research.svg",
+    "aliases": []
+  },
+  "economy.income": {
+    "id": "economy.income",
+    "label": "Resource Income",
+    "category": "economy",
+    "description": "Incoming resource flow",
+    "source": "fontawesome",
+    "sourceIcon": "arrow-trend-up",
+    "path": "res://assets/ui/icons/economy/income.svg",
+    "aliases": []
+  },
+  "economy.expense": {
+    "id": "economy.expense",
+    "label": "Resource Expense",
+    "category": "economy",
+    "description": "Outgoing resource flow",
+    "source": "fontawesome",
+    "sourceIcon": "arrow-trend-down",
+    "path": "res://assets/ui/icons/economy/expense.svg",
+    "aliases": []
+  },
+  "economy.storage": {
+    "id": "economy.storage",
+    "label": "Storage",
+    "category": "economy",
+    "description": "Resource storage",
+    "source": "fontawesome",
+    "sourceIcon": "warehouse",
+    "path": "res://assets/ui/icons/economy/storage.svg",
+    "aliases": []
+  },
+  "economy.storage_full": {
+    "id": "economy.storage_full",
+    "label": "Storage Full",
+    "category": "economy",
+    "description": "Storage capacity is full",
+    "source": "fontawesome",
+    "sourceIcon": "box-archive",
+    "path": "res://assets/ui/icons/economy/storage_full.svg",
+    "aliases": []
+  },
+  "economy.production": {
+    "id": "economy.production",
+    "label": "Production",
+    "category": "economy",
+    "description": "Active production",
+    "source": "fontawesome",
+    "sourceIcon": "industry",
+    "path": "res://assets/ui/icons/economy/production.svg",
+    "aliases": []
+  },
+  "economy.production_paused": {
+    "id": "economy.production_paused",
+    "label": "Production Paused",
+    "category": "economy",
+    "description": "Paused production",
+    "source": "fontawesome",
+    "sourceIcon": "pause",
+    "path": "res://assets/ui/icons/economy/production_paused.svg",
+    "aliases": []
+  },
+  "economy.efficiency": {
+    "id": "economy.efficiency",
+    "label": "Efficiency",
+    "category": "economy",
+    "description": "Production efficiency",
+    "source": "fontawesome",
+    "sourceIcon": "gauge-high",
+    "path": "res://assets/ui/icons/economy/efficiency.svg",
+    "aliases": []
+  },
+  "economy.shortage": {
+    "id": "economy.shortage",
+    "label": "Shortage",
+    "category": "economy",
+    "description": "Resource shortage",
+    "source": "fontawesome",
+    "sourceIcon": "triangle-exclamation",
+    "path": "res://assets/ui/icons/economy/shortage.svg",
+    "aliases": []
+  },
+  "economy.surplus": {
+    "id": "economy.surplus",
+    "label": "Surplus",
+    "category": "economy",
+    "description": "Resource surplus",
+    "source": "fontawesome",
+    "sourceIcon": "plus",
+    "path": "res://assets/ui/icons/economy/surplus.svg",
+    "aliases": []
+  },
+  "air.launch": {
+    "id": "air.launch",
+    "label": "Launch Aircraft",
+    "category": "air",
+    "description": "Launch aircraft",
+    "source": "fontawesome",
+    "sourceIcon": "plane-up",
+    "path": "res://assets/ui/icons/air/launch.svg",
+    "aliases": []
+  },
+  "air.recover": {
+    "id": "air.recover",
+    "label": "Recover Aircraft",
+    "category": "air",
+    "description": "Recover aircraft",
+    "source": "fontawesome",
+    "sourceIcon": "plane-arrival",
+    "path": "res://assets/ui/icons/air/recover.svg",
+    "aliases": []
+  },
+  "air.return_to_base": {
+    "id": "air.return_to_base",
+    "label": "Return to Base",
+    "category": "air",
+    "description": "Return aircraft to base",
+    "source": "fontawesome",
+    "sourceIcon": "plane-arrival",
+    "path": "res://assets/ui/icons/air/return_to_base.svg",
+    "aliases": []
+  },
+  "air.divert": {
+    "id": "air.divert",
+    "label": "Divert",
+    "category": "air",
+    "description": "Divert aircraft",
+    "source": "fontawesome",
+    "sourceIcon": "arrow-right-arrow-left",
+    "path": "res://assets/ui/icons/air/divert.svg",
+    "aliases": []
+  },
+  "air.refuel": {
+    "id": "air.refuel",
+    "label": "Refuel Aircraft",
+    "category": "air",
+    "description": "Refuel aircraft",
+    "source": "fontawesome",
+    "sourceIcon": "gas-pump",
+    "path": "res://assets/ui/icons/air/refuel.svg",
+    "aliases": []
+  },
+  "air.rearm": {
+    "id": "air.rearm",
+    "label": "Rearm Aircraft",
+    "category": "air",
+    "description": "Rearm aircraft",
+    "source": "custom",
+    "sourceIcon": "ammo",
+    "path": "res://assets/ui/icons/air/rearm.svg",
+    "aliases": []
+  },
+  "air.ready": {
+    "id": "air.ready",
+    "label": "Aircraft Ready",
+    "category": "air",
+    "description": "Aircraft is ready",
+    "source": "fontawesome",
+    "sourceIcon": "plane-circle-check",
+    "path": "res://assets/ui/icons/air/ready.svg",
+    "aliases": []
+  },
+  "air.grounded": {
+    "id": "air.grounded",
+    "label": "Aircraft Grounded",
+    "category": "air",
+    "description": "Aircraft cannot fly",
+    "source": "fontawesome",
+    "sourceIcon": "plane-circle-xmark",
+    "path": "res://assets/ui/icons/air/grounded.svg",
+    "aliases": []
+  },
+  "air.sortie": {
+    "id": "air.sortie",
+    "label": "Sortie",
+    "category": "air",
+    "description": "Launch a sortie",
+    "source": "fontawesome",
+    "sourceIcon": "jet-fighter",
+    "path": "res://assets/ui/icons/air/sortie.svg",
+    "aliases": []
+  },
+  "air.scramble": {
+    "id": "air.scramble",
+    "label": "Scramble",
+    "category": "air",
+    "description": "Scramble aircraft",
+    "source": "fontawesome",
+    "sourceIcon": "jet-fighter-up",
+    "path": "res://assets/ui/icons/air/scramble.svg",
+    "aliases": []
+  },
+  "air.intercept": {
+    "id": "air.intercept",
+    "label": "Intercept",
+    "category": "air",
+    "description": "Intercept incoming aircraft",
+    "source": "fontawesome",
+    "sourceIcon": "crosshairs",
+    "path": "res://assets/ui/icons/air/intercept.svg",
+    "aliases": []
+  },
+  "air.combat_air_patrol": {
+    "id": "air.combat_air_patrol",
+    "label": "Combat Air Patrol",
+    "category": "air",
+    "description": "Fly combat air patrol",
+    "source": "fontawesome",
+    "sourceIcon": "arrows-rotate",
+    "path": "res://assets/ui/icons/air/combat_air_patrol.svg",
+    "aliases": []
+  },
+  "air.close_air_support": {
+    "id": "air.close_air_support",
+    "label": "Close Air Support",
+    "category": "air",
+    "description": "Conduct close air support",
+    "source": "fontawesome",
+    "sourceIcon": "jet-fighter",
+    "path": "res://assets/ui/icons/air/close_air_support.svg",
+    "aliases": []
+  },
+  "air.strike_mission": {
+    "id": "air.strike_mission",
+    "label": "Strike Mission",
+    "category": "air",
+    "description": "Conduct a strike mission",
+    "source": "fontawesome",
+    "sourceIcon": "jet-fighter",
+    "path": "res://assets/ui/icons/air/strike_mission.svg",
+    "aliases": []
+  },
+  "air.recon_mission": {
+    "id": "air.recon_mission",
+    "label": "Recon Mission",
+    "category": "air",
+    "description": "Conduct aerial reconnaissance",
+    "source": "fontawesome",
+    "sourceIcon": "binoculars",
+    "path": "res://assets/ui/icons/air/recon_mission.svg",
+    "aliases": []
+  },
+  "air.airlift_mission": {
+    "id": "air.airlift_mission",
+    "label": "Airlift Mission",
+    "category": "air",
+    "description": "Conduct an airlift",
+    "source": "fontawesome",
+    "sourceIcon": "plane-up",
+    "path": "res://assets/ui/icons/air/airlift_mission.svg",
+    "aliases": []
+  },
+  "air.tanker_mission": {
+    "id": "air.tanker_mission",
+    "label": "Tanker Mission",
+    "category": "air",
+    "description": "Conduct aerial refueling",
+    "source": "fontawesome",
+    "sourceIcon": "gas-pump",
+    "path": "res://assets/ui/icons/air/tanker_mission.svg",
+    "aliases": []
+  },
+  "infrastructure.runway": {
+    "id": "infrastructure.runway",
+    "label": "Runway",
+    "category": "infrastructure",
+    "description": "Aircraft runway",
+    "source": "custom",
+    "sourceIcon": "runway",
+    "path": "res://assets/ui/icons/infrastructure/runway.svg",
+    "aliases": []
+  },
+  "infrastructure.airstrip": {
+    "id": "infrastructure.airstrip",
+    "label": "Airstrip",
+    "category": "infrastructure",
+    "description": "Forward airstrip",
+    "source": "custom",
+    "sourceIcon": "runway",
+    "path": "res://assets/ui/icons/infrastructure/airstrip.svg",
+    "aliases": []
+  },
+  "infrastructure.airbase": {
+    "id": "infrastructure.airbase",
+    "label": "Airbase",
+    "category": "infrastructure",
+    "description": "Air operations base",
+    "source": "fontawesome",
+    "sourceIcon": "tower-observation",
+    "path": "res://assets/ui/icons/infrastructure/airbase.svg",
+    "aliases": []
+  },
+  "infrastructure.carrier": {
+    "id": "infrastructure.carrier",
+    "label": "Carrier",
+    "category": "infrastructure",
+    "description": "Aircraft carrier",
+    "source": "fontawesome",
+    "sourceIcon": "ship",
+    "path": "res://assets/ui/icons/infrastructure/carrier.svg",
+    "aliases": []
+  },
+  "infrastructure.vtol_pad": {
+    "id": "infrastructure.vtol_pad",
+    "label": "VTOL Pad",
+    "category": "infrastructure",
+    "description": "Vertical landing pad",
+    "source": "fontawesome",
+    "sourceIcon": "helicopter",
+    "path": "res://assets/ui/icons/infrastructure/vtol_pad.svg",
+    "aliases": []
+  },
+  "infrastructure.hangar": {
+    "id": "infrastructure.hangar",
+    "label": "Hangar",
+    "category": "infrastructure",
+    "description": "Aircraft hangar",
+    "source": "fontawesome",
+    "sourceIcon": "warehouse",
+    "path": "res://assets/ui/icons/infrastructure/hangar.svg",
+    "aliases": []
+  },
+  "status.insufficient_range": {
+    "id": "status.insufficient_range",
+    "label": "Insufficient Range",
+    "category": "status",
+    "description": "Target is beyond operational range",
+    "source": "fontawesome",
+    "sourceIcon": "arrows-left-right-to-line",
+    "path": "res://assets/ui/icons/status/insufficient_range.svg",
+    "aliases": []
+  },
+  "status.no_recovery_point": {
+    "id": "status.no_recovery_point",
+    "label": "No Recovery Point",
+    "category": "status",
+    "description": "No valid aircraft recovery point",
+    "source": "fontawesome",
+    "sourceIcon": "plane-circle-xmark",
+    "path": "res://assets/ui/icons/status/no_recovery_point.svg",
+    "aliases": []
+  },
+  "status.endurance_low": {
+    "id": "status.endurance_low",
+    "label": "Endurance Low",
+    "category": "status",
+    "description": "Operational endurance is low",
+    "source": "fontawesome",
+    "sourceIcon": "battery-quarter",
+    "path": "res://assets/ui/icons/status/endurance_low.svg",
+    "aliases": []
+  },
+  "status.endurance_critical": {
+    "id": "status.endurance_critical",
+    "label": "Endurance Critical",
+    "category": "status",
+    "description": "Operational endurance is critical",
+    "source": "fontawesome",
+    "sourceIcon": "battery-empty",
+    "path": "res://assets/ui/icons/status/endurance_critical.svg",
+    "aliases": []
+  },
+  "status.runway_unavailable": {
+    "id": "status.runway_unavailable",
+    "label": "Runway Unavailable",
+    "category": "status",
+    "description": "Runway is unavailable",
+    "source": "fontawesome",
+    "sourceIcon": "plane-circle-xmark",
+    "path": "res://assets/ui/icons/status/runway_unavailable.svg",
+    "aliases": []
+  },
+  "status.carrier_unavailable": {
+    "id": "status.carrier_unavailable",
+    "label": "Carrier Unavailable",
+    "category": "status",
+    "description": "Carrier is unavailable",
+    "source": "fontawesome",
+    "sourceIcon": "ship",
+    "path": "res://assets/ui/icons/status/carrier_unavailable.svg",
+    "aliases": []
+  },
+  "naval.move": {
+    "id": "naval.move",
+    "label": "Naval Move",
+    "category": "naval",
+    "description": "Move naval units",
+    "source": "fontawesome",
+    "sourceIcon": "ship",
+    "path": "res://assets/ui/icons/naval/move.svg",
+    "aliases": []
+  },
+  "naval.patrol": {
+    "id": "naval.patrol",
+    "label": "Naval Patrol",
+    "category": "naval",
+    "description": "Patrol with naval units",
+    "source": "fontawesome",
+    "sourceIcon": "arrows-rotate",
+    "path": "res://assets/ui/icons/naval/patrol.svg",
+    "aliases": []
+  },
+  "naval.attack": {
+    "id": "naval.attack",
+    "label": "Naval Attack",
+    "category": "naval",
+    "description": "Attack with naval units",
+    "source": "fontawesome",
+    "sourceIcon": "ship",
+    "path": "res://assets/ui/icons/naval/attack.svg",
+    "aliases": []
+  },
+  "naval.shore_bombardment": {
+    "id": "naval.shore_bombardment",
+    "label": "Shore Bombardment",
+    "category": "naval",
+    "description": "Bombard the shore",
+    "source": "fontawesome",
+    "sourceIcon": "explosion",
+    "path": "res://assets/ui/icons/naval/shore_bombardment.svg",
+    "aliases": []
+  },
+  "naval.blockade": {
+    "id": "naval.blockade",
+    "label": "Blockade",
+    "category": "naval",
+    "description": "Blockade a route or port",
+    "source": "fontawesome",
+    "sourceIcon": "anchor-lock",
+    "path": "res://assets/ui/icons/naval/blockade.svg",
+    "aliases": []
+  },
+  "naval.escort": {
+    "id": "naval.escort",
+    "label": "Escort Ship",
+    "category": "naval",
+    "description": "Escort a ship",
+    "source": "fontawesome",
+    "sourceIcon": "shield",
+    "path": "res://assets/ui/icons/naval/escort.svg",
+    "aliases": []
+  },
+  "naval.convoy_escort": {
+    "id": "naval.convoy_escort",
+    "label": "Convoy Escort",
+    "category": "naval",
+    "description": "Escort a convoy",
+    "source": "fontawesome",
+    "sourceIcon": "shield-halved",
+    "path": "res://assets/ui/icons/naval/convoy_escort.svg",
+    "aliases": []
+  },
+  "naval.amphibious_assault": {
+    "id": "naval.amphibious_assault",
+    "label": "Amphibious Assault",
+    "category": "naval",
+    "description": "Conduct an amphibious assault",
+    "source": "fontawesome",
+    "sourceIcon": "person-military-pointing",
+    "path": "res://assets/ui/icons/naval/amphibious_assault.svg",
+    "aliases": []
+  },
+  "naval.landing_operation": {
+    "id": "naval.landing_operation",
+    "label": "Landing Operation",
+    "category": "naval",
+    "description": "Conduct a landing operation",
+    "source": "fontawesome",
+    "sourceIcon": "ship",
+    "path": "res://assets/ui/icons/naval/landing_operation.svg",
+    "aliases": []
+  },
+  "naval.embark": {
+    "id": "naval.embark",
+    "label": "Embark Ship",
+    "category": "naval",
+    "description": "Embark a ship",
+    "source": "fontawesome",
+    "sourceIcon": "person-walking-arrow-right",
+    "path": "res://assets/ui/icons/naval/embark.svg",
+    "aliases": []
+  },
+  "naval.disembark": {
+    "id": "naval.disembark",
+    "label": "Disembark Ship",
+    "category": "naval",
+    "description": "Disembark a ship",
+    "source": "fontawesome",
+    "sourceIcon": "person-walking-arrow-loop-left",
+    "path": "res://assets/ui/icons/naval/disembark.svg",
+    "aliases": []
+  },
+  "naval.resupply": {
+    "id": "naval.resupply",
+    "label": "Naval Resupply",
+    "category": "naval",
+    "description": "Resupply at sea",
+    "source": "fontawesome",
+    "sourceIcon": "truck-ramp-box",
+    "path": "res://assets/ui/icons/naval/resupply.svg",
+    "aliases": []
+  },
+  "naval.refuel": {
+    "id": "naval.refuel",
+    "label": "Refuel Ship",
+    "category": "naval",
+    "description": "Refuel a ship",
+    "source": "fontawesome",
+    "sourceIcon": "gas-pump",
+    "path": "res://assets/ui/icons/naval/refuel.svg",
+    "aliases": []
+  },
+  "naval.repair": {
+    "id": "naval.repair",
+    "label": "Repair Ship",
+    "category": "naval",
+    "description": "Repair a ship",
+    "source": "fontawesome",
+    "sourceIcon": "wrench",
+    "path": "res://assets/ui/icons/naval/repair.svg",
+    "aliases": []
+  },
+  "naval.return_to_port": {
+    "id": "naval.return_to_port",
+    "label": "Return to Port",
+    "category": "naval",
+    "description": "Return to port",
+    "source": "fontawesome",
+    "sourceIcon": "anchor",
+    "path": "res://assets/ui/icons/naval/return_to_port.svg",
+    "aliases": []
+  },
+  "status.endurance_empty": {
+    "id": "status.endurance_empty",
+    "label": "Endurance Empty",
+    "category": "status",
+    "description": "Endurance is exhausted",
+    "source": "fontawesome",
+    "sourceIcon": "battery-empty",
+    "path": "res://assets/ui/icons/status/endurance_empty.svg",
+    "aliases": []
+  },
+  "status.stranded": {
+    "id": "status.stranded",
+    "label": "Stranded",
+    "category": "status",
+    "description": "Unit is stranded",
+    "source": "fontawesome",
+    "sourceIcon": "anchor",
+    "path": "res://assets/ui/icons/status/stranded.svg",
+    "aliases": []
+  },
+  "status.damaged_engine": {
+    "id": "status.damaged_engine",
+    "label": "Damaged Engine",
+    "category": "status",
+    "description": "Engine is damaged",
+    "source": "fontawesome",
+    "sourceIcon": "gears",
+    "path": "res://assets/ui/icons/status/damaged_engine.svg",
+    "aliases": []
+  },
+  "status.port_required": {
+    "id": "status.port_required",
+    "label": "Port Required",
+    "category": "status",
+    "description": "A port is required",
+    "source": "fontawesome",
+    "sourceIcon": "anchor-circle-exclamation",
+    "path": "res://assets/ui/icons/status/port_required.svg",
+    "aliases": []
+  },
+  "infrastructure.port": {
+    "id": "infrastructure.port",
+    "label": "Port",
+    "category": "infrastructure",
+    "description": "Port infrastructure",
+    "source": "fontawesome",
+    "sourceIcon": "anchor",
+    "path": "res://assets/ui/icons/infrastructure/port.svg",
+    "aliases": []
+  },
+  "infrastructure.naval_base": {
+    "id": "infrastructure.naval_base",
+    "label": "Naval Base",
+    "category": "infrastructure",
+    "description": "Naval base infrastructure",
+    "source": "fontawesome",
+    "sourceIcon": "ship",
+    "path": "res://assets/ui/icons/infrastructure/naval_base.svg",
+    "aliases": []
+  },
+  "infrastructure.shipyard": {
+    "id": "infrastructure.shipyard",
+    "label": "Shipyard",
+    "category": "infrastructure",
+    "description": "Shipyard infrastructure",
+    "source": "fontawesome",
+    "sourceIcon": "industry",
+    "path": "res://assets/ui/icons/infrastructure/shipyard.svg",
+    "aliases": []
+  },
+  "infrastructure.drydock": {
+    "id": "infrastructure.drydock",
+    "label": "Drydock",
+    "category": "infrastructure",
+    "description": "Drydock infrastructure",
+    "source": "custom",
+    "sourceIcon": "drydock",
+    "path": "res://assets/ui/icons/infrastructure/drydock.svg",
+    "aliases": []
+  },
+  "infrastructure.replenishment_point": {
+    "id": "infrastructure.replenishment_point",
+    "label": "Replenishment Point",
+    "category": "infrastructure",
+    "description": "Naval replenishment point",
+    "source": "fontawesome",
+    "sourceIcon": "boxes-stacked",
+    "path": "res://assets/ui/icons/infrastructure/replenishment_point.svg",
+    "aliases": []
+  },
+  "intel.recon": {
+    "id": "intel.recon",
+    "label": "Recon",
+    "category": "intel",
+    "description": "Reconnaissance",
+    "source": "fontawesome",
+    "sourceIcon": "binoculars",
+    "path": "res://assets/ui/icons/intel/recon.svg",
+    "aliases": []
+  },
+  "intel.scout": {
+    "id": "intel.scout",
+    "label": "Scout",
+    "category": "intel",
+    "description": "Scout an area",
+    "source": "fontawesome",
+    "sourceIcon": "binoculars",
+    "path": "res://assets/ui/icons/intel/scout.svg",
+    "aliases": []
+  },
+  "intel.observe": {
+    "id": "intel.observe",
+    "label": "Observe",
+    "category": "intel",
+    "description": "Observe a contact",
+    "source": "fontawesome",
+    "sourceIcon": "eye",
+    "path": "res://assets/ui/icons/intel/observe.svg",
+    "aliases": []
+  },
+  "intel.radar": {
+    "id": "intel.radar",
+    "label": "Radar",
+    "category": "intel",
+    "description": "Radar intelligence",
+    "source": "fontawesome",
+    "sourceIcon": "satellite-dish",
+    "path": "res://assets/ui/icons/intel/radar.svg",
+    "aliases": []
+  },
+  "intel.sonar": {
+    "id": "intel.sonar",
+    "label": "Sonar",
+    "category": "intel",
+    "description": "Sonar intelligence",
+    "source": "fontawesome",
+    "sourceIcon": "water",
+    "path": "res://assets/ui/icons/intel/sonar.svg",
+    "aliases": []
+  },
+  "intel.satellite": {
+    "id": "intel.satellite",
+    "label": "Satellite",
+    "category": "intel",
+    "description": "Satellite intelligence",
+    "source": "fontawesome",
+    "sourceIcon": "satellite",
+    "path": "res://assets/ui/icons/intel/satellite.svg",
+    "aliases": []
+  },
+  "intel.sensors": {
+    "id": "intel.sensors",
+    "label": "Sensors",
+    "category": "intel",
+    "description": "Sensor network",
+    "source": "fontawesome",
+    "sourceIcon": "tower-broadcast",
+    "path": "res://assets/ui/icons/intel/sensors.svg",
+    "aliases": []
+  },
+  "intel.scan": {
+    "id": "intel.scan",
+    "label": "Scan",
+    "category": "intel",
+    "description": "Scan an area",
+    "source": "fontawesome",
+    "sourceIcon": "magnifying-glass",
+    "path": "res://assets/ui/icons/intel/scan.svg",
+    "aliases": []
+  },
+  "intel.electronic_warfare": {
+    "id": "intel.electronic_warfare",
+    "label": "Electronic Warfare",
+    "category": "intel",
+    "description": "Electronic warfare",
+    "source": "fontawesome",
+    "sourceIcon": "tower-broadcast",
+    "path": "res://assets/ui/icons/intel/electronic_warfare.svg",
+    "aliases": []
+  },
+  "intel.jam": {
+    "id": "intel.jam",
+    "label": "Jam",
+    "category": "intel",
+    "description": "Jam enemy systems",
+    "source": "fontawesome",
+    "sourceIcon": "tower-cell",
+    "path": "res://assets/ui/icons/intel/jam.svg",
+    "aliases": []
+  },
+  "intel.counter_jam": {
+    "id": "intel.counter_jam",
+    "label": "Counter Jam",
+    "category": "intel",
+    "description": "Counter electronic jamming",
+    "source": "fontawesome",
+    "sourceIcon": "shield",
+    "path": "res://assets/ui/icons/intel/counter_jam.svg",
+    "aliases": []
+  },
+  "intel.stealth": {
+    "id": "intel.stealth",
+    "label": "Stealth",
+    "category": "intel",
+    "description": "Stealth state",
+    "source": "fontawesome",
+    "sourceIcon": "user-secret",
+    "path": "res://assets/ui/icons/intel/stealth.svg",
+    "aliases": []
+  },
+  "intel.detected": {
+    "id": "intel.detected",
+    "label": "Detected",
+    "category": "intel",
+    "description": "Contact has been detected",
+    "source": "fontawesome",
+    "sourceIcon": "eye",
+    "path": "res://assets/ui/icons/intel/detected.svg",
+    "aliases": []
+  },
+  "intel.hidden": {
+    "id": "intel.hidden",
+    "label": "Hidden",
+    "category": "intel",
+    "description": "Contact is hidden",
+    "source": "fontawesome",
+    "sourceIcon": "eye-slash",
+    "path": "res://assets/ui/icons/intel/hidden.svg",
+    "aliases": []
+  },
+  "intel.unknown_contact": {
+    "id": "intel.unknown_contact",
+    "label": "Unknown Contact",
+    "category": "intel",
+    "description": "Unknown contact",
+    "source": "fontawesome",
+    "sourceIcon": "circle-question",
+    "path": "res://assets/ui/icons/intel/unknown_contact.svg",
+    "aliases": []
+  },
+  "intel.identified_contact": {
+    "id": "intel.identified_contact",
+    "label": "Identified Contact",
+    "category": "intel",
+    "description": "Identified contact",
+    "source": "fontawesome",
+    "sourceIcon": "circle-check",
+    "path": "res://assets/ui/icons/intel/identified_contact.svg",
+    "aliases": []
+  },
+  "intel.stale": {
+    "id": "intel.stale",
+    "label": "Stale Intelligence",
+    "category": "intel",
+    "description": "Intelligence has aged beyond current observation",
+    "source": "custom",
+    "sourceIcon": "stale_intel",
+    "path": "res://assets/ui/icons/intel/stale.svg",
+    "aliases": []
+  },
+  "intel.historical": {
+    "id": "intel.historical",
+    "label": "Historical Intelligence",
+    "category": "intel",
+    "description": "Historical knowledge, not current observation",
+    "source": "custom",
+    "sourceIcon": "historical_intel",
+    "path": "res://assets/ui/icons/intel/historical.svg",
+    "aliases": []
+  },
+  "intel.current": {
+    "id": "intel.current",
+    "label": "Current Intelligence",
+    "category": "intel",
+    "description": "Current direct observation",
+    "source": "fontawesome",
+    "sourceIcon": "eye",
+    "path": "res://assets/ui/icons/intel/current.svg",
+    "aliases": []
+  },
+  "intel.update": {
+    "id": "intel.update",
+    "label": "Intelligence Update",
+    "category": "intel",
+    "description": "New intelligence update",
+    "source": "fontawesome",
+    "sourceIcon": "rotate",
+    "path": "res://assets/ui/icons/intel/update.svg",
+    "aliases": []
+  },
+  "infrastructure.road": {
+    "id": "infrastructure.road",
+    "label": "Road",
+    "category": "infrastructure",
+    "description": "Road infrastructure",
+    "source": "custom",
+    "sourceIcon": "road",
+    "path": "res://assets/ui/icons/infrastructure/road.svg",
+    "aliases": []
+  },
+  "infrastructure.damaged_road": {
+    "id": "infrastructure.damaged_road",
+    "label": "Damaged Road",
+    "category": "infrastructure",
+    "description": "Damaged road infrastructure",
+    "source": "fontawesome",
+    "sourceIcon": "road-circle-exclamation",
+    "path": "res://assets/ui/icons/infrastructure/damaged_road.svg",
+    "aliases": []
+  },
+  "infrastructure.road_blocked": {
+    "id": "infrastructure.road_blocked",
+    "label": "Road Blocked",
+    "category": "infrastructure",
+    "description": "Blocked road infrastructure",
+    "source": "fontawesome",
+    "sourceIcon": "road-barrier",
+    "path": "res://assets/ui/icons/infrastructure/road_blocked.svg",
+    "aliases": []
+  },
+  "infrastructure.road_upgrade": {
+    "id": "infrastructure.road_upgrade",
+    "label": "Road Upgrade",
+    "category": "infrastructure",
+    "description": "Upgrade road infrastructure",
+    "source": "fontawesome",
+    "sourceIcon": "road-circle-check",
+    "path": "res://assets/ui/icons/infrastructure/road_upgrade.svg",
+    "aliases": []
+  },
+  "infrastructure.railway": {
+    "id": "infrastructure.railway",
+    "label": "Railway",
+    "category": "infrastructure",
+    "description": "Railway infrastructure",
+    "source": "custom",
+    "sourceIcon": "railway",
+    "path": "res://assets/ui/icons/infrastructure/railway.svg",
+    "aliases": []
+  },
+  "infrastructure.rail_station": {
+    "id": "infrastructure.rail_station",
+    "label": "Rail Station",
+    "category": "infrastructure",
+    "description": "Rail station infrastructure",
+    "source": "custom",
+    "sourceIcon": "rail_station",
+    "path": "res://assets/ui/icons/infrastructure/rail_station.svg",
+    "aliases": []
+  },
+  "infrastructure.rail_depot": {
+    "id": "infrastructure.rail_depot",
+    "label": "Rail Depot",
+    "category": "infrastructure",
+    "description": "Rail depot infrastructure",
+    "source": "fontawesome",
+    "sourceIcon": "warehouse",
+    "path": "res://assets/ui/icons/infrastructure/rail_depot.svg",
+    "aliases": []
+  },
+  "infrastructure.damaged_railway": {
+    "id": "infrastructure.damaged_railway",
+    "label": "Damaged Railway",
+    "category": "infrastructure",
+    "description": "Damaged railway infrastructure",
+    "source": "fontawesome",
+    "sourceIcon": "train-subway",
+    "path": "res://assets/ui/icons/infrastructure/damaged_railway.svg",
+    "aliases": []
+  },
+  "infrastructure.railway_blocked": {
+    "id": "infrastructure.railway_blocked",
+    "label": "Railway Blocked",
+    "category": "infrastructure",
+    "description": "Blocked railway infrastructure",
+    "source": "fontawesome",
+    "sourceIcon": "ban",
+    "path": "res://assets/ui/icons/infrastructure/railway_blocked.svg",
+    "aliases": []
+  },
+  "infrastructure.bridge": {
+    "id": "infrastructure.bridge",
+    "label": "Bridge",
+    "category": "infrastructure",
+    "description": "Bridge infrastructure",
+    "source": "custom",
+    "sourceIcon": "bridge",
+    "path": "res://assets/ui/icons/infrastructure/bridge.svg",
+    "aliases": []
+  },
+  "infrastructure.damaged_bridge": {
+    "id": "infrastructure.damaged_bridge",
+    "label": "Damaged Bridge",
+    "category": "infrastructure",
+    "description": "Damaged bridge infrastructure",
+    "source": "fontawesome",
+    "sourceIcon": "bridge-circle-exclamation",
+    "path": "res://assets/ui/icons/infrastructure/damaged_bridge.svg",
+    "aliases": []
+  },
+  "infrastructure.destroyed_bridge": {
+    "id": "infrastructure.destroyed_bridge",
+    "label": "Destroyed Bridge",
+    "category": "infrastructure",
+    "description": "Destroyed bridge infrastructure",
+    "source": "fontawesome",
+    "sourceIcon": "bridge-circle-xmark",
+    "path": "res://assets/ui/icons/infrastructure/destroyed_bridge.svg",
+    "aliases": []
+  },
+  "system.territory": {
+    "id": "system.territory",
+    "label": "Territory",
+    "category": "system",
+    "description": "Strategic territory",
+    "source": "fontawesome",
+    "sourceIcon": "map",
+    "path": "res://assets/ui/icons/system/territory.svg",
+    "aliases": []
+  },
+  "system.capture": {
+    "id": "system.capture",
+    "label": "Capture",
+    "category": "system",
+    "description": "Capture a territory",
+    "source": "fontawesome",
+    "sourceIcon": "flag",
+    "path": "res://assets/ui/icons/system/capture.svg",
+    "aliases": []
+  },
+  "system.contest": {
+    "id": "system.contest",
+    "label": "Contest",
+    "category": "system",
+    "description": "Contested territory",
+    "source": "fontawesome",
+    "sourceIcon": "flag",
+    "path": "res://assets/ui/icons/system/contest.svg",
+    "aliases": []
+  },
+  "system.defend_region": {
+    "id": "system.defend_region",
+    "label": "Defend Region",
+    "category": "system",
+    "description": "Defend a strategic region",
+    "source": "fontawesome",
+    "sourceIcon": "shield",
+    "path": "res://assets/ui/icons/system/defend_region.svg",
+    "aliases": []
+  },
+  "system.attack_region": {
+    "id": "system.attack_region",
+    "label": "Attack Region",
+    "category": "system",
+    "description": "Attack a strategic region",
+    "source": "fontawesome",
+    "sourceIcon": "crosshairs",
+    "path": "res://assets/ui/icons/system/attack_region.svg",
+    "aliases": []
+  },
+  "system.objective": {
+    "id": "system.objective",
+    "label": "Objective",
+    "category": "system",
+    "description": "Strategic objective",
+    "source": "fontawesome",
+    "sourceIcon": "bullseye",
+    "path": "res://assets/ui/icons/system/objective.svg",
+    "aliases": []
+  },
+  "system.primary_objective": {
+    "id": "system.primary_objective",
+    "label": "Primary Objective",
+    "category": "system",
+    "description": "Primary objective",
+    "source": "fontawesome",
+    "sourceIcon": "star",
+    "path": "res://assets/ui/icons/system/primary_objective.svg",
+    "aliases": []
+  },
+  "system.secondary_objective": {
+    "id": "system.secondary_objective",
+    "label": "Secondary Objective",
+    "category": "system",
+    "description": "Secondary objective",
+    "source": "fontawesome",
+    "sourceIcon": "star-half-stroke",
+    "path": "res://assets/ui/icons/system/secondary_objective.svg",
+    "aliases": []
+  },
+  "system.rally_point": {
+    "id": "system.rally_point",
+    "label": "Rally Point",
+    "category": "system",
+    "description": "Unit rally point",
+    "source": "fontawesome",
+    "sourceIcon": "location-dot",
+    "path": "res://assets/ui/icons/system/rally_point.svg",
+    "aliases": []
+  },
+  "system.front_line": {
+    "id": "system.front_line",
+    "label": "Front Line",
+    "category": "system",
+    "description": "Active front line",
+    "source": "custom",
+    "sourceIcon": "front_line",
+    "path": "res://assets/ui/icons/system/front_line.svg",
+    "aliases": []
+  },
+  "system.fallback_line": {
+    "id": "system.fallback_line",
+    "label": "Fallback Line",
+    "category": "system",
+    "description": "Fallback line",
+    "source": "fontawesome",
+    "sourceIcon": "arrow-down",
+    "path": "res://assets/ui/icons/system/fallback_line.svg",
+    "aliases": []
+  },
+  "system.invasion": {
+    "id": "system.invasion",
+    "label": "Invasion",
+    "category": "system",
+    "description": "Strategic invasion",
+    "source": "fontawesome",
+    "sourceIcon": "person-military-pointing",
+    "path": "res://assets/ui/icons/system/invasion.svg",
+    "aliases": []
+  },
+  "system.beachhead": {
+    "id": "system.beachhead",
+    "label": "Beachhead",
+    "category": "system",
+    "description": "Established beachhead",
+    "source": "fontawesome",
+    "sourceIcon": "anchor",
+    "path": "res://assets/ui/icons/system/beachhead.svg",
+    "aliases": []
+  },
+  "system.deployment_zone": {
+    "id": "system.deployment_zone",
+    "label": "Deployment Zone",
+    "category": "system",
+    "description": "Deployment zone",
+    "source": "fontawesome",
+    "sourceIcon": "draw-polygon",
+    "path": "res://assets/ui/icons/system/deployment_zone.svg",
+    "aliases": []
+  },
+  "system.reinforcement_point": {
+    "id": "system.reinforcement_point",
+    "label": "Reinforcement Point",
+    "category": "system",
+    "description": "Reinforcement delivery point",
+    "source": "fontawesome",
+    "sourceIcon": "person-military-rifle",
+    "path": "res://assets/ui/icons/system/reinforcement_point.svg",
+    "aliases": []
+  },
+  "controls.select": {
+    "id": "controls.select",
+    "label": "Select",
+    "category": "controls",
+    "description": "Select an item",
+    "source": "fontawesome",
+    "sourceIcon": "arrow-pointer",
+    "path": "res://assets/ui/icons/controls/select.svg",
+    "aliases": []
+  },
+  "controls.select_all": {
+    "id": "controls.select_all",
+    "label": "Select All",
+    "category": "controls",
+    "description": "Select all eligible units",
+    "source": "fontawesome",
+    "sourceIcon": "object-group",
+    "path": "res://assets/ui/icons/controls/select_all.svg",
+    "aliases": []
+  },
+  "controls.select_similar": {
+    "id": "controls.select_similar",
+    "label": "Select Similar",
+    "category": "controls",
+    "description": "Select similar units",
+    "source": "fontawesome",
+    "sourceIcon": "layer-group",
+    "path": "res://assets/ui/icons/controls/select_similar.svg",
+    "aliases": []
+  },
+  "controls.deselect": {
+    "id": "controls.deselect",
+    "label": "Deselect",
+    "category": "controls",
+    "description": "Deselect current units",
+    "source": "fontawesome",
+    "sourceIcon": "xmark",
+    "path": "res://assets/ui/icons/controls/deselect.svg",
+    "aliases": []
+  },
+  "controls.group": {
+    "id": "controls.group",
+    "label": "Group",
+    "category": "controls",
+    "description": "Create a selection group",
+    "source": "fontawesome",
+    "sourceIcon": "users",
+    "path": "res://assets/ui/icons/controls/group.svg",
+    "aliases": []
+  },
+  "controls.ungroup": {
+    "id": "controls.ungroup",
+    "label": "Ungroup",
+    "category": "controls",
+    "description": "Remove a selection group",
+    "source": "fontawesome",
+    "sourceIcon": "users-slash",
+    "path": "res://assets/ui/icons/controls/ungroup.svg",
+    "aliases": []
+  },
+  "controls.control_group": {
+    "id": "controls.control_group",
+    "label": "Control Group",
+    "category": "controls",
+    "description": "Assign a control group",
+    "source": "fontawesome",
+    "sourceIcon": "hashtag",
+    "path": "res://assets/ui/icons/controls/control_group.svg",
+    "aliases": []
+  },
+  "controls.commander": {
+    "id": "controls.commander",
+    "label": "Commander",
+    "category": "controls",
+    "description": "Commander unit or panel",
+    "source": "fontawesome",
+    "sourceIcon": "user-tie",
+    "path": "res://assets/ui/icons/controls/commander.svg",
+    "aliases": []
+  },
+  "controls.army": {
+    "id": "controls.army",
+    "label": "Army",
+    "category": "controls",
+    "description": "Army group",
+    "source": "fontawesome",
+    "sourceIcon": "users",
+    "path": "res://assets/ui/icons/controls/army.svg",
+    "aliases": []
+  },
+  "controls.fleet": {
+    "id": "controls.fleet",
+    "label": "Fleet",
+    "category": "controls",
+    "description": "Fleet group",
+    "source": "fontawesome",
+    "sourceIcon": "ship",
+    "path": "res://assets/ui/icons/controls/fleet.svg",
+    "aliases": []
+  },
+  "controls.air_group": {
+    "id": "controls.air_group",
+    "label": "Air Group",
+    "category": "controls",
+    "description": "Air group",
+    "source": "fontawesome",
+    "sourceIcon": "plane",
+    "path": "res://assets/ui/icons/controls/air_group.svg",
+    "aliases": []
+  },
+  "controls.search": {
+    "id": "controls.search",
+    "label": "Search",
+    "category": "controls",
+    "description": "Search interface content",
+    "source": "fontawesome",
+    "sourceIcon": "magnifying-glass",
+    "path": "res://assets/ui/icons/controls/search.svg",
+    "aliases": []
+  },
+  "controls.filter": {
+    "id": "controls.filter",
+    "label": "Filter",
+    "category": "controls",
+    "description": "Filter interface content",
+    "source": "fontawesome",
+    "sourceIcon": "filter",
+    "path": "res://assets/ui/icons/controls/filter.svg",
+    "aliases": []
+  },
+  "controls.sort": {
+    "id": "controls.sort",
+    "label": "Sort",
+    "category": "controls",
+    "description": "Sort interface content",
+    "source": "fontawesome",
+    "sourceIcon": "arrow-down-a-z",
+    "path": "res://assets/ui/icons/controls/sort.svg",
+    "aliases": []
+  },
+  "controls.expand": {
+    "id": "controls.expand",
+    "label": "Expand",
+    "category": "controls",
+    "description": "Expand an interface panel",
+    "source": "fontawesome",
+    "sourceIcon": "chevron-down",
+    "path": "res://assets/ui/icons/controls/expand.svg",
+    "aliases": []
+  },
+  "controls.collapse": {
+    "id": "controls.collapse",
+    "label": "Collapse",
+    "category": "controls",
+    "description": "Collapse an interface panel",
+    "source": "fontawesome",
+    "sourceIcon": "chevron-up",
+    "path": "res://assets/ui/icons/controls/collapse.svg",
+    "aliases": []
+  },
+  "controls.previous": {
+    "id": "controls.previous",
+    "label": "Previous",
+    "category": "controls",
+    "description": "Previous item",
+    "source": "fontawesome",
+    "sourceIcon": "chevron-left",
+    "path": "res://assets/ui/icons/controls/previous.svg",
+    "aliases": []
+  },
+  "controls.next": {
+    "id": "controls.next",
+    "label": "Next",
+    "category": "controls",
+    "description": "Next item",
+    "source": "fontawesome",
+    "sourceIcon": "chevron-right",
+    "path": "res://assets/ui/icons/controls/next.svg",
+    "aliases": []
+  },
+  "controls.close": {
+    "id": "controls.close",
+    "label": "Close",
+    "category": "controls",
+    "description": "Close interface panel",
+    "source": "fontawesome",
+    "sourceIcon": "xmark",
+    "path": "res://assets/ui/icons/controls/close.svg",
+    "aliases": []
+  },
+  "controls.confirm": {
+    "id": "controls.confirm",
+    "label": "Confirm",
+    "category": "controls",
+    "description": "Confirm action",
+    "source": "fontawesome",
+    "sourceIcon": "check",
+    "path": "res://assets/ui/icons/controls/confirm.svg",
+    "aliases": []
+  },
+  "controls.warning": {
+    "id": "controls.warning",
+    "label": "Warning",
+    "category": "controls",
+    "description": "Warning state",
+    "source": "fontawesome",
+    "sourceIcon": "triangle-exclamation",
+    "path": "res://assets/ui/icons/controls/warning.svg",
+    "aliases": []
+  },
+  "controls.error": {
+    "id": "controls.error",
+    "label": "Error",
+    "category": "controls",
+    "description": "Error state",
+    "source": "fontawesome",
+    "sourceIcon": "circle-xmark",
+    "path": "res://assets/ui/icons/controls/error.svg",
+    "aliases": []
+  },
+  "controls.info": {
+    "id": "controls.info",
+    "label": "Info",
+    "category": "controls",
+    "description": "Information",
+    "source": "fontawesome",
+    "sourceIcon": "circle-info",
+    "path": "res://assets/ui/icons/controls/info.svg",
+    "aliases": []
+  },
+  "controls.help": {
+    "id": "controls.help",
+    "label": "Help",
+    "category": "controls",
+    "description": "Help",
+    "source": "fontawesome",
+    "sourceIcon": "circle-question",
+    "path": "res://assets/ui/icons/controls/help.svg",
+    "aliases": []
+  },
+  "controls.settings": {
+    "id": "controls.settings",
+    "label": "Settings",
+    "category": "controls",
+    "description": "Settings",
+    "source": "fontawesome",
+    "sourceIcon": "gear",
+    "path": "res://assets/ui/icons/controls/settings.svg",
+    "aliases": []
+  },
+  "controls.pause": {
+    "id": "controls.pause",
+    "label": "Pause",
+    "category": "controls",
+    "description": "Pause game",
+    "source": "fontawesome",
+    "sourceIcon": "pause",
+    "path": "res://assets/ui/icons/controls/pause.svg",
+    "aliases": []
+  },
+  "controls.play": {
+    "id": "controls.play",
+    "label": "Play",
+    "category": "controls",
+    "description": "Resume game",
+    "source": "fontawesome",
+    "sourceIcon": "play",
+    "path": "res://assets/ui/icons/controls/play.svg",
+    "aliases": []
+  },
+  "controls.speed_up": {
+    "id": "controls.speed_up",
+    "label": "Speed Up",
+    "category": "controls",
+    "description": "Increase game speed",
+    "source": "fontawesome",
+    "sourceIcon": "forward",
+    "path": "res://assets/ui/icons/controls/speed_up.svg",
+    "aliases": []
+  },
+  "controls.speed_down": {
+    "id": "controls.speed_down",
+    "label": "Speed Down",
+    "category": "controls",
+    "description": "Decrease game speed",
+    "source": "fontawesome",
+    "sourceIcon": "backward",
+    "path": "res://assets/ui/icons/controls/speed_down.svg",
+    "aliases": []
+  },
+  "controls.zoom_in": {
+    "id": "controls.zoom_in",
+    "label": "Zoom In",
+    "category": "controls",
+    "description": "Zoom strategic view in",
+    "source": "fontawesome",
+    "sourceIcon": "magnifying-glass-plus",
+    "path": "res://assets/ui/icons/controls/zoom_in.svg",
+    "aliases": []
+  },
+  "controls.zoom_out": {
+    "id": "controls.zoom_out",
+    "label": "Zoom Out",
+    "category": "controls",
+    "description": "Zoom strategic view out",
+    "source": "fontawesome",
+    "sourceIcon": "magnifying-glass-minus",
+    "path": "res://assets/ui/icons/controls/zoom_out.svg",
+    "aliases": []
+  },
+  "controls.strategic_view": {
+    "id": "controls.strategic_view",
+    "label": "Strategic View",
+    "category": "controls",
+    "description": "Switch to strategic view",
+    "source": "fontawesome",
+    "sourceIcon": "map",
+    "path": "res://assets/ui/icons/controls/strategic_view.svg",
+    "aliases": []
+  },
+  "controls.tactical_view": {
+    "id": "controls.tactical_view",
+    "label": "Tactical View",
+    "category": "controls",
+    "description": "Switch to tactical view",
+    "source": "fontawesome",
+    "sourceIcon": "crosshairs",
+    "path": "res://assets/ui/icons/controls/tactical_view.svg",
+    "aliases": []
+  },
+  "status.healthy": {
+    "id": "status.healthy",
+    "label": "Healthy",
+    "category": "status",
+    "description": "Unit is healthy",
+    "source": "fontawesome",
+    "sourceIcon": "heart",
+    "path": "res://assets/ui/icons/status/healthy.svg",
+    "aliases": []
+  },
+  "status.damaged": {
+    "id": "status.damaged",
+    "label": "Damaged",
+    "category": "status",
+    "description": "Unit is damaged",
+    "source": "fontawesome",
+    "sourceIcon": "heart-crack",
+    "path": "res://assets/ui/icons/status/damaged.svg",
+    "aliases": []
+  },
+  "status.critical_damage": {
+    "id": "status.critical_damage",
+    "label": "Critical Damage",
+    "category": "status",
+    "description": "Unit has critical damage",
+    "source": "fontawesome",
+    "sourceIcon": "triangle-exclamation",
+    "path": "res://assets/ui/icons/status/critical_damage.svg",
+    "aliases": []
+  },
+  "status.destroyed": {
+    "id": "status.destroyed",
+    "label": "Destroyed",
+    "category": "status",
+    "description": "Unit is destroyed",
+    "source": "fontawesome",
+    "sourceIcon": "skull-crossbones",
+    "path": "res://assets/ui/icons/status/destroyed.svg",
+    "aliases": []
+  },
+  "status.disabled": {
+    "id": "status.disabled",
+    "label": "Disabled",
+    "category": "status",
+    "description": "Unit is disabled",
+    "source": "fontawesome",
+    "sourceIcon": "ban",
+    "path": "res://assets/ui/icons/status/disabled.svg",
+    "aliases": []
+  },
+  "status.immobilized": {
+    "id": "status.immobilized",
+    "label": "Immobilized",
+    "category": "status",
+    "description": "Unit is immobilized",
+    "source": "fontawesome",
+    "sourceIcon": "anchor-lock",
+    "path": "res://assets/ui/icons/status/immobilized.svg",
+    "aliases": []
+  },
+  "status.suppressed": {
+    "id": "status.suppressed",
+    "label": "Suppressed",
+    "category": "status",
+    "description": "Unit is suppressed",
+    "source": "fontawesome",
+    "sourceIcon": "burst",
+    "path": "res://assets/ui/icons/status/suppressed.svg",
+    "aliases": []
+  },
+  "status.pinned": {
+    "id": "status.pinned",
+    "label": "Pinned",
+    "category": "status",
+    "description": "Unit is pinned",
+    "source": "fontawesome",
+    "sourceIcon": "thumbtack",
+    "path": "res://assets/ui/icons/status/pinned.svg",
+    "aliases": []
+  },
+  "status.retreating": {
+    "id": "status.retreating",
+    "label": "Retreating",
+    "category": "status",
+    "description": "Unit is retreating",
+    "source": "fontawesome",
+    "sourceIcon": "arrow-down",
+    "path": "res://assets/ui/icons/status/retreating.svg",
+    "aliases": []
+  },
+  "status.routing": {
+    "id": "status.routing",
+    "label": "Routing",
+    "category": "status",
+    "description": "Unit is routing",
+    "source": "fontawesome",
+    "sourceIcon": "person-running",
+    "path": "res://assets/ui/icons/status/routing.svg",
+    "aliases": []
+  },
+  "status.veterancy": {
+    "id": "status.veterancy",
+    "label": "Veterancy",
+    "category": "status",
+    "description": "Unit veterancy",
+    "source": "fontawesome",
+    "sourceIcon": "medal",
+    "path": "res://assets/ui/icons/status/veterancy.svg",
+    "aliases": []
+  },
+  "status.promoted": {
+    "id": "status.promoted",
+    "label": "Promoted",
+    "category": "status",
+    "description": "Unit promotion",
+    "source": "fontawesome",
+    "sourceIcon": "award",
+    "path": "res://assets/ui/icons/status/promoted.svg",
+    "aliases": []
+  },
+  "status.constructing": {
+    "id": "status.constructing",
+    "label": "Constructing",
+    "category": "status",
+    "description": "Construction in progress",
+    "source": "fontawesome",
+    "sourceIcon": "hammer",
+    "path": "res://assets/ui/icons/status/constructing.svg",
+    "aliases": []
+  },
+  "status.capturing": {
+    "id": "status.capturing",
+    "label": "Capturing",
+    "category": "status",
+    "description": "Capture in progress",
+    "source": "fontawesome",
+    "sourceIcon": "flag",
+    "path": "res://assets/ui/icons/status/capturing.svg",
+    "aliases": []
+  },
+  "status.contested": {
+    "id": "status.contested",
+    "label": "Contested",
+    "category": "status",
+    "description": "Location is contested",
+    "source": "fontawesome",
+    "sourceIcon": "flag",
+    "path": "res://assets/ui/icons/status/contested.svg",
+    "aliases": []
+  },
+  "status.selected": {
+    "id": "status.selected",
+    "label": "Selected",
+    "category": "status",
+    "description": "Selected state",
+    "source": "fontawesome",
+    "sourceIcon": "circle-dot",
+    "path": "res://assets/ui/icons/status/selected.svg",
+    "aliases": []
+  },
+  "status.priority": {
+    "id": "status.priority",
+    "label": "Priority",
+    "category": "status",
+    "description": "Priority state",
+    "source": "fontawesome",
+    "sourceIcon": "star",
+    "path": "res://assets/ui/icons/status/priority.svg",
+    "aliases": []
+  },
+  "status.queued": {
+    "id": "status.queued",
+    "label": "Queued",
+    "category": "status",
+    "description": "Action is queued",
+    "source": "fontawesome",
+    "sourceIcon": "list-ol",
+    "path": "res://assets/ui/icons/status/queued.svg",
+    "aliases": []
+  }
+}

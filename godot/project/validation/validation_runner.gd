@@ -1,6 +1,6 @@
 extends SceneTree
 
-const MAIN_SCENE := preload("res://main.tscn")
+const UI_SHOWCASE_SCENE := preload("res://ui/showcase/ui_design_system_showcase.tscn")
 const DEFAULT_SEED := 424242
 const SCENARIO_DESCRIPTIONS := {
 	"basic_selection_move": "Select the production Field Engineer through mouse input and move it to a terrain-picked destination.",
@@ -10,7 +10,8 @@ const SCENARIO_DESCRIPTIONS := {
 	"strategic_zoom_transition": "Zoom from the tactical model to the strategic icon through mouse-wheel input while preserving selection and cursor focus.",
 	"oak_grove_showcase": "Frame the imported oak forest at tactical and strategic distances while proving variant, cluster, and terrain-grounding contracts.",
 	"airfield_fighter_ferry": "Construct an airfield, request a runway fighter, and verify its paid off-map airborne ingress.",
-	"road_construction": "Place a road through the engineer input path, reject water, pay costs and complete a visible persistent segment."
+	"road_construction": "Place a road through the engineer input path, reject water, pay costs and complete a visible persistent segment.",
+	"ui_design_system_showcase": "Render the reusable Strategic Command UI at the requested desktop resolution."
 }
 
 var _scenario := ""
@@ -70,6 +71,8 @@ func _run() -> void:
 			await _scenario_airfield_fighter_ferry()
 		"road_construction":
 			await _scenario_road_construction()
+		"ui_design_system_showcase":
+			await _scenario_ui_design_system_showcase()
 		_:
 			_check(false, "scenario.known", "Unknown validation scenario", {"scenario": _scenario})
 	_check(_has_check("scenario.completed"), "framework.scenario_returned", "The scenario reached its explicit completion sentinel")
@@ -82,7 +85,8 @@ func _run() -> void:
 
 
 func _create_skirmish() -> Node:
-	var view := MAIN_SCENE.instantiate()
+	var main_scene: PackedScene = load("res://main.tscn")
+	var view := main_scene.instantiate()
 	root.add_child(view)
 	await process_frame
 	view.call("_on_start_skirmish_pressed")
@@ -96,6 +100,20 @@ func _destroy_skirmish(view: Node) -> void:
 	if is_instance_valid(view):
 		view.queue_free()
 		await process_frame
+
+
+func _scenario_ui_design_system_showcase() -> void:
+	var showcase := UI_SHOWCASE_SCENE.instantiate()
+	root.add_child(showcase)
+	await process_frame
+	_check(showcase.get_child_count() == 2, "ui.showcase.root_layout", "Showcase creates a backdrop and full-frame responsive layout root")
+	var layout: Control = showcase.get_node_or_null("ResponsiveMargin") as Control
+	_check(layout != null and layout.size.x > 0.0 and layout.size.y > 0.0, "ui.showcase.layout_sized", "Showcase layout receives a non-zero viewport size", {"size": layout.size})
+	_check(layout.get_child_count() == 1, "ui.showcase.command_content", "Showcase contains the Strategic Command content column")
+	await _capture_checkpoint(showcase, "strategic_command")
+	showcase.queue_free()
+	await process_frame
+	_check(true, "scenario.completed", "UI design-system showcase completed")
 
 
 func _scenario_basic_selection_move() -> void:
@@ -269,7 +287,8 @@ func _scenario_vehicle_movement_smoke() -> void:
 
 
 func _scenario_control_point_skirmish_smoke() -> void:
-	var view := MAIN_SCENE.instantiate()
+	var main_scene: PackedScene = load("res://main.tscn")
+	var view := main_scene.instantiate()
 	root.add_child(view)
 	await process_frame
 	view.call("_start_control_point_skirmish")
@@ -365,15 +384,42 @@ func _scenario_control_point_skirmish_smoke() -> void:
 
 
 func _scenario_reinforcement_delivery_smoke() -> void:
-	var view := MAIN_SCENE.instantiate()
+	var main_scene: PackedScene = load("res://main.tscn")
+	var view := main_scene.instantiate()
 	root.add_child(view)
 	await process_frame
-	view.call("_start_reinforcement_delivery_smoke")
+	view.call("_on_start_skirmish_pressed")
+	var extension: Object = view.get("extension")
+	var human_command_storage := int(view.get("commander_ids").get(0, -1))
+	var starting_funds: Array = extension.call("economy_get_storage_info", human_command_storage)
+	_check(starting_funds.size() >= 2 and float(starting_funds[0]) == 5000.0 and float(starting_funds[1]) == 5000.0,
+		"reinforcement.presentation_starting_resources", "The presentation skirmish starts with a 5,000 Materials and Energy build-test budget")
+	var engineer_catalog: Array = view.call("_build_unit_catalog")
+	var engineer_offers_aircraft := false
+	for entry in engineer_catalog:
+		if bool(entry.get("is_aircraft", false)):
+			engineer_offers_aircraft = true
+	_check(not engineer_offers_aircraft, "reinforcement.engineer_catalog_excludes_aircraft", "The Field Engineer build menu excludes airfield-only aircraft")
+	extension.call("reinforcement_delivery_set_resources", 0, 600.0, 400.0)
+	view.call("_activate_reinforcement_delivery_from_airfield")
 	view.set_process(false)
 	await process_frame
-	var extension: Object = view.get("extension")
+	_check(not bool(view.get("reinforcement_delivery_enabled")), "reinforcement.airfield_required", "Native reinforcement delivery is unavailable before an airfield is complete")
+	var airfield_position := Vector2(-12500.0, 0.0)
+	_check(bool(extension.call("validate_structure_placement", 2, airfield_position.x, airfield_position.y)), "reinforcement.airfield_pad_valid", "The validated starting pad accepts the required airfield")
+	_check(bool(view.call("_queue_commander_structure", 2, airfield_position)), "reinforcement.airfield_queued", "The player engineer queues the prerequisite airfield")
+	var airfield_ticks := 0
+	var installation: Array = []
+	while airfield_ticks < 900 and installation.size() < 6:
+		extension.call("update_simulation", 50.0)
+		view.call("_sync_new_entities")
+		installation = extension.call("territory_get_installation_info", airfield_position.x, airfield_position.y)
+		airfield_ticks += 1
+	_check(installation.size() >= 6, "reinforcement.airfield_completed", "The completed airfield becomes the native reinforcement anchor", {"ticks": airfield_ticks})
+	extension.call("reinforcement_delivery_set_resources", 0, 600.0, 400.0)
+	view.call("_update_hud")
 	var delivery: Dictionary = extension.call("reinforcement_delivery_state")
-	_check(bool(view.get("reinforcement_delivery_enabled")) and int(delivery.get("state", 0)) == 1, "reinforcement.ready", "Native delivery starts with a configured friendly zone")
+	_check(bool(view.get("reinforcement_delivery_enabled")) and int(delivery.get("state", 0)) == 2 and Vector2(float(delivery.get("x", 0.0)), float(delivery.get("y", 0.0))).distance_to(airfield_position) <= 0.01, "reinforcement.ready", "A single completed airfield automatically becomes the selected native delivery anchor")
 	var line := int(view.get("commander_ids").get(0, -1))
 	var funds_before: Array = extension.call("economy_get_storage_info", line)
 	var zone := Vector2(float(delivery.get("x", 0.0)), float(delivery.get("y", 0.0)))
@@ -381,18 +427,30 @@ func _scenario_reinforcement_delivery_smoke() -> void:
 	view.call("_update_reinforcement_presentation")
 	view.call("_update_hud")
 	await _capture_checkpoint(view, "delivery_zone_ready")
-	_check(not bool(extension.call("reinforcement_delivery_select_zone", 0, zone.x + 200.0, zone.y)), "reinforcement.invalid_zone", "Invalid delivery zone is rejected")
-	var funds_after_invalid: Array = extension.call("economy_get_storage_info", line)
-	_check(funds_after_invalid == funds_before, "reinforcement.invalid_no_cost", "Invalid request does not deduct resources")
+	var strategic_hotkey := InputEventKey.new()
+	strategic_hotkey.pressed = true
+	strategic_hotkey.keycode = KEY_G
+	view.call("_unhandled_input", strategic_hotkey)
+	var strategic_command: Control = view.get_node_or_null("HUD/StrategicCommand") as Control
+	_check(strategic_command != null and strategic_command.visible, "reinforcement.strategic_command_open", "G opens the playable Strategic Command delivery panel")
+	await _capture_checkpoint(view, "strategic_command_open")
+	if strategic_command != null:
+		strategic_command.emit_signal("request_package")
+	delivery = extension.call("reinforcement_delivery_state")
+	_check(int(delivery.get("state", 0)) == 3, "reinforcement.request", "Strategic Command requests the funded native package")
 	view.call("_update_reinforcement_presentation")
-	view.call("_update_hud")
-	await _capture_checkpoint(view, "delivery_invalid_rejected")
-	_check(bool(extension.call("reinforcement_delivery_select_zone", 0, zone.x, zone.y)), "reinforcement.valid_zone", "Friendly land zone is accepted")
-	_check(bool(extension.call("reinforcement_delivery_request", 0)), "reinforcement.request", "Funded package request is accepted")
+	var delivery_presentation: Node = view.get("reinforcement_presentation")
+	var inbound_f15: Node3D = delivery_presentation.get("transport") if delivery_presentation != null else null
+	_check(inbound_f15 != null and inbound_f15.scene_file_path.ends_with("industrial_fighter_f15c.glb"), "reinforcement.inbound_uses_f15c", "The delivery fly-in uses the registered F-15C scene", {"scene_file_path": inbound_f15.scene_file_path if inbound_f15 != null else ""})
 	var funds_after_request: Array = extension.call("economy_get_storage_info", line)
 	_check(funds_after_request.size() >= 2 and funds_before.size() >= 2 and float(funds_after_request[0]) == float(funds_before[0]) - 260.0 and float(funds_after_request[1]) == float(funds_before[1]) - 140.0, "reinforcement.cost_once", "Materials and Energy are deducted exactly once")
+	view.call("_close_strategic_command")
+	extension.call("update_simulation", 1000.0)
+	view.call("_sync_new_entities")
+	view.call("_sync_unit_transforms")
 	view.call("_update_reinforcement_presentation")
 	view.call("_update_hud")
+	_focus_camera_on_position(view, zone + Vector2(-160.0, 0.0), 60.0)
 	await _capture_checkpoint(view, "transport_inbound")
 	var count_before := int(extension.call("get_entity_count"))
 	for tick in range(80):
@@ -402,6 +460,9 @@ func _scenario_reinforcement_delivery_smoke() -> void:
 		view.call("_update_reinforcement_presentation")
 	delivery = extension.call("reinforcement_delivery_state")
 	_check(int(delivery.get("state", 0)) == 4 and int(extension.call("get_entity_count")) == count_before + 1, "reinforcement.completed", "Native delivery completion creates exactly one active unit")
+	_check(Vector2(float(delivery.get("delivery_x", 0.0)), float(delivery.get("delivery_y", 0.0))).distance_to(airfield_position) <= 0.01, "reinforcement.delivery_uses_selected_airfield", "Native delivery retains the auto-selected airfield anchor")
+	var parked_f15: Node3D = delivery_presentation.get("transport") if delivery_presentation != null else null
+	_check(parked_f15 != null and parked_f15.visible and parked_f15.position.distance_to(Vector3(airfield_position.x, float(view.call("_terrain_height_at", airfield_position.x, airfield_position.y)) + 0.15, airfield_position.y)) <= 0.01 and is_equal_approx(absf(parked_f15.rotation_degrees.y), 45.0), "reinforcement.f15c_parks_on_airfield", "The F-15C remains parked and aligned to one diagonal runway after delivery")
 	var delivered_id := -1
 	for entity_id_value in view.get("player_entity_ids"):
 		var entity_id := int(entity_id_value)
@@ -411,7 +472,7 @@ func _scenario_reinforcement_delivery_smoke() -> void:
 	if delivered_id > 0:
 		view.call("_set_selected", delivered_id, true)
 		_check(view.get("selected_ids").has(delivered_id), "reinforcement.selectable", "Delivered unit is selectable after completion")
-		var target := zone + Vector2(30.0, 0.0)
+		var target := zone + Vector2(30.0, 1000.0)
 		_check(int(extension.call("issue_move_commands", PackedInt32Array([delivered_id]), 0, target.x, target.y, 3.0)) == 1, "reinforcement.move_order", "Delivered unit accepts an authoritative move command")
 		extension.call("update_simulation", 500.0)
 		view.call("_sync_unit_transforms")

@@ -202,6 +202,47 @@ bool TerritorialControlManager::has_active_installation(FactionId faction, Insta
     return false;
 }
 
+bool TerritorialControlManager::get_active_installation_position(FactionId faction, InstallationType type, float& x, float& y) const {
+    for (const auto& inst : installations_) {
+        if (inst.faction == faction && inst.type == type && !inst.constructing) {
+            x = inst.x;
+            y = inst.y;
+            return true;
+        }
+    }
+    return false;
+}
+
+size_t TerritorialControlManager::active_installation_count(FactionId faction, InstallationType type) const {
+    size_t count = 0;
+    for (const auto& inst : installations_) {
+        if (inst.faction == faction && inst.type == type && !inst.constructing) ++count;
+    }
+    return count;
+}
+
+bool TerritorialControlManager::get_active_installation_position_near(FactionId faction, InstallationType type,
+                                                                        float query_x, float query_y, float max_distance,
+                                                                        float& x, float& y) const {
+    if (!std::isfinite(query_x) || !std::isfinite(query_y) || !std::isfinite(max_distance) || max_distance < 0.0f) return false;
+    const float max_distance_sq = max_distance * max_distance;
+    float best_distance_sq = max_distance_sq;
+    bool found = false;
+    for (const auto& inst : installations_) {
+        if (inst.faction != faction || inst.type != type || inst.constructing) continue;
+        const float dx = inst.x - query_x;
+        const float dy = inst.y - query_y;
+        const float distance_sq = dx * dx + dy * dy;
+        if (distance_sq <= best_distance_sq) {
+            best_distance_sq = distance_sq;
+            x = inst.x;
+            y = inst.y;
+            found = true;
+        }
+    }
+    return found;
+}
+
 bool TerritorialControlManager::has_capability(Entity entity, SeizureCapability capability) const {
     auto it = unit_capabilities_.find(entity.id);
     if (it == unit_capabilities_.end()) {

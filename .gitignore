@@ -57,3 +57,6 @@ godot/project/.godot/
 *.import
 __pycache__/
 *.py[cod]
+
+# Development-only dependencies for deterministic icon generation.
+tools/icons/node_modules/

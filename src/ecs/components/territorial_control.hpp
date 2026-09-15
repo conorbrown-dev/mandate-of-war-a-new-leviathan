@@ -106,6 +106,9 @@ public:
     void remove_installation(float x, float y, InstallationType type);
     InstallationState get_installation_at(float x, float y) const;
     bool has_active_installation(FactionId faction, InstallationType type) const;
+    bool get_active_installation_position(FactionId faction, InstallationType type, float& x, float& y) const;
+    size_t active_installation_count(FactionId faction, InstallationType type) const;
+    bool get_active_installation_position_near(FactionId faction, InstallationType type, float query_x, float query_y, float max_distance, float& x, float& y) const;
     
     // Unit capabilities
     bool has_capability(Entity entity, SeizureCapability capability) const;

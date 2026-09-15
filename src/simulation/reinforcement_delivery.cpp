@@ -13,28 +13,28 @@ bool ReinforcementDelivery::configure(float zone_x, float zone_y, float zone_rad
     }
     zone_x_ = zone_x; zone_y_ = zone_y; zone_radius_ = zone_radius; owner_ = owner;
     state_ = ReinforcementDeliveryState::READY;
-    reason_ = "SELECT A FRIENDLY DELIVERY ZONE";
+    reason_ = "SELECT A FRIENDLY AIRFIELD";
     return true;
 }
 
-bool ReinforcementDelivery::select_zone(float x, float y, bool is_land, bool is_blocked) {
+bool ReinforcementDelivery::select_airfield(float x, float y) {
     if (state_ != ReinforcementDeliveryState::READY && state_ != ReinforcementDeliveryState::SELECTED) return false;
-    const float dx = x - zone_x_, dy = y - zone_y_;
-    if (dx * dx + dy * dy > zone_radius_ * zone_radius_) reason_ = "ZONE IS NOT FRIENDLY";
-    else if (!is_land) reason_ = "DELIVERY REQUIRES LAND";
-    else if (is_blocked) reason_ = "DELIVERY ZONE IS BLOCKED";
-    else {
-        selected_x_ = x; selected_y_ = y;
-        state_ = ReinforcementDeliveryState::SELECTED;
-        reason_ = "ZONE SELECTED // PRESS F TO REQUEST";
-        return true;
+    selected_x_ = x;
+    selected_y_ = y;
+    state_ = ReinforcementDeliveryState::SELECTED;
+    reason_ = "AIRFIELD SELECTED";
+    return true;
+}
+
+void ReinforcementDelivery::require_airfield_selection() {
+    if (state_ == ReinforcementDeliveryState::READY || state_ == ReinforcementDeliveryState::SELECTED) {
+        state_ = ReinforcementDeliveryState::READY;
+        reason_ = "SELECT A FRIENDLY AIRFIELD";
     }
-    state_ = ReinforcementDeliveryState::READY;
-    return false;
 }
 
 bool ReinforcementDelivery::request(bool has_resources) {
-    if (state_ != ReinforcementDeliveryState::SELECTED) { reason_ = "SELECT A VALID ZONE FIRST"; return false; }
+    if (state_ != ReinforcementDeliveryState::SELECTED) { reason_ = "SELECT A FRIENDLY AIRFIELD FIRST"; return false; }
     if (!has_resources) { reason_ = "INSUFFICIENT MATERIALS OR ENERGY"; return false; }
     state_ = ReinforcementDeliveryState::INCOMING;
     elapsed_ms_ = 0.0f;
@@ -59,6 +59,12 @@ void ReinforcementDelivery::reset() {
     elapsed_ms_ = 0.0f;
     delivery_completed_ = false;
     reason_.clear();
+}
+
+void ReinforcementDelivery::reject(const std::string& reason) {
+    reset();
+    state_ = ReinforcementDeliveryState::REJECTED;
+    reason_ = reason;
 }
 
 } // namespace rts

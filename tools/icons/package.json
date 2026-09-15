@@ -1,0 +1,21 @@
+{
+  "name": "mandate-of-war-icon-tools",
+  "version": "1.0.0",
+  "description": "Development-time NATO and command SVG generation for Godot.",
+  "type": "module",
+  "scripts": {
+    "generate-icons": "npm run generate-milsymbol-icons && npm run generate-command-icons",
+    "generate-milsymbol-icons": "node generate-milsymbol-icons.mjs",
+    "generate-command-icons": "node generate-command-icons.mjs",
+    "validate-manifest": "node generate-milsymbol-icons.mjs --validate-only && node generate-command-icons.mjs --validate-only",
+    "validate-command-icons": "node generate-command-icons.mjs --validate-only"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "@fortawesome/free-solid-svg-icons": "6.7.2",
+    "@fortawesome/free-solid-svg-icons": "6.7.2",
+    "milsymbol": "^3.0.4"
+  }
+}

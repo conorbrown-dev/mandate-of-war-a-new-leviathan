@@ -89,6 +89,13 @@ If a required scenario fails, report FAIL even when the build succeeds. On failu
 
 ## Technology Stack
 
+## UI Design System
+
+For Godot presentation work, use `docs/ui-design-system.md` and the shared
+resources under `godot/project/ui/`. Prefer semantic tokens and reusable
+components over arbitrary colors, spacing, or local Theme overrides. Keep UI
+desktop-dense and presentation-only; simulation rules remain native C++.
+
 - **Simulation layer:** C++20, ECS, spatial partitioning, fixed-tick simulation
 - **Presentation layer:** Godot 4.7.2 with `godot-cpp` GDExtension
 - **Visible unit batching:** Godot `MultiMeshInstance3D`
