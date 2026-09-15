@@ -64,6 +64,8 @@ public:
     bool queue_unit(EntityId line, FactionId faction, UnitType type, float x = 0.0f, float y = 0.0f);
     bool can_queue_structure(EntityId line, FactionId faction, uint8_t structure_type) const;
     bool queue_structure(EntityId line, FactionId faction, uint8_t structure_type, float x = 0.0f, float y = 0.0f);
+    bool can_queue_requisition(EntityId line, FactionId faction, UnitType type, float x, float y) const;
+    bool queue_requisition(EntityId line, FactionId faction, UnitType type, float x, float y);
     EntityId faction_line(FactionId faction) const;
     const FactionResearch& research(FactionId faction) const;
     bool can_research(FactionId faction, const std::string& project) const;
@@ -74,7 +76,8 @@ public:
     float research_progress(FactionId faction) const;
     float get_unit_metal_cost(FactionId faction_id, UnitType unit_type) const;
     float get_unit_energy_cost(FactionId faction_id, UnitType unit_type) const;
-    float get_unit_research_cost(FactionId faction_id, UnitType unit_type) const;
+     float get_unit_research_cost(FactionId faction_id, UnitType unit_type) const;
+     float get_build_time_seconds(UnitType unit_type) const;
     
     void set_faction_research(FactionId faction_id, const FactionResearch& research);
     

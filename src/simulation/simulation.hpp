@@ -25,6 +25,7 @@
 #include "control_point_battle.hpp"
 #include "reinforcement_delivery.hpp"
 #include "ai/ai_manager.hpp"
+#include "production/requisition_manager.hpp"
 
 namespace rts {
 
@@ -74,6 +75,7 @@ public:
     void return_unit(EntityId entity);
     void build_structure(EntityId entity, float x, float y, UnitType unit_type);
     void install_fob(EntityId entity, float x, float y, InstallationType installation_type);
+    void requisition_unit(EntityId entity, float x, float y, UnitType unit_type);
     void harvest_resource(EntityId entity, float x, float y);
     bool destroy_resource_site(EntityId entity, float x, float y);
     void defend_area(EntityId entity, float x, float y);
@@ -130,6 +132,13 @@ public:
         float install_y,
         InstallationType installation_type
     );
+    size_t issue_requisition_commands(
+        const std::vector<EntityId>& entities,
+        FactionId player_id,
+        float requisition_x,
+        float requisition_y,
+        UnitType unit_type
+    );
 
     // Rendering
     void render_add_unit(float x, float y, uint32_t unit_type);
@@ -156,20 +165,21 @@ public:
     Pathfinding& naval_pathfinding() { return naval_pathfinding_; }
     Pathfinding& navigation_for(EntityId entity);
     const Pathfinding& navigation_for(EntityId entity) const;
-    LogisticsManager& logistics_manager() { return logistics_manager_; }
-    CombatManager& combat_manager() { return combat_manager_; }
-    SpatialGrid& spatial_grid() { return spatial_grid_; }
-    const SpatialGrid& spatial_grid() const { return spatial_grid_; }
-    ProductionManager& production_manager() { return production_manager_; }
-    NetworkManager& network_manager() { return network_manager_; }
-    CommandManager& command_manager() { return command_manager_; }
-    ComponentManager& component_manager() { return component_manager_; }
-    Renderer& renderer() { return renderer_; }
-    AIManager& ai_manager() { return *ai_manager_; }
-    Terrain& terrain() { return terrain_; }
-    const Terrain& terrain() const { return terrain_; }
-    TerritorialControlManager& territorial_control() { return territorial_control_; }
-    const TerritorialControlManager& territorial_control() const { return territorial_control_; }
+     LogisticsManager& logistics_manager() { return logistics_manager_; }
+     CombatManager& combat_manager() { return combat_manager_; }
+     SpatialGrid& spatial_grid() { return spatial_grid_; }
+     const SpatialGrid& spatial_grid() const { return spatial_grid_; }
+     ProductionManager& production_manager() { return production_manager_; }
+     RequisitionManager& requisition_manager() { return requisition_manager_; }
+     NetworkManager& network_manager() { return network_manager_; }
+     CommandManager& command_manager() { return command_manager_; }
+     ComponentManager& component_manager() { return component_manager_; }
+     Renderer& renderer() { return renderer_; }
+     AIManager& ai_manager() { return *ai_manager_; }
+     Terrain& terrain() { return terrain_; }
+     const Terrain& terrain() const { return terrain_; }
+     TerritorialControlManager& territorial_control() { return territorial_control_; }
+     const TerritorialControlManager& territorial_control() const { return territorial_control_; }
 
     void update_logistics(float delta_ms) { logistics_manager_.update_all(delta_ms); }
     void update_economy(float delta_ms) { production_manager_.update_all(delta_ms); }
@@ -177,14 +187,14 @@ public:
     void process_commands();
     void process_network_commands();
     void process_command_internal(const InputCommand& cmd);
-    bool is_position_visible_to(FactionId faction, float x, float y) const;
-    bool is_visible_to(FactionId faction, EntityId target) const;
-    EntityId find_nearest_visible_enemy(FactionId faction, float x, float y, float max_range = 100.0f) const;
-    bool validate_command(const InputCommand& cmd, uint32_t execution_tick) const;
-    size_t submit_commands(const std::vector<InputCommand>& commands);
-    size_t issue_commands(const std::vector<EntityId>& entities, FactionId player,
-                          CommandType type, float x = 0, float y = 0, uint32_t extra = 0);
-    static std::string research_id(uint32_t index);
+     bool is_position_visible_to(FactionId faction, float x, float y) const;
+     bool is_visible_to(FactionId faction, EntityId target) const;
+     EntityId find_nearest_visible_enemy(FactionId faction, float x, float y, float max_range = 100.0f) const;
+     bool validate_command(const InputCommand& cmd, uint32_t execution_tick) const;
+     size_t submit_commands(const std::vector<InputCommand>& commands);
+     size_t issue_commands(const std::vector<EntityId>& entities, FactionId player,
+                           CommandType type, float x = 0, float y = 0, uint32_t extra = 0);
+      static std::string research_id(uint32_t index);
     TerritorialControlManager& territorial_control_manager() { return territorial_control_; }
 
 
@@ -268,8 +278,9 @@ private:
     Terrain terrain_;
     RoadNetwork road_network_;
     TerritorialControlManager territorial_control_;
-    ControlPointBattle control_point_battle_;
-    ReinforcementDelivery reinforcement_delivery_;
+     ControlPointBattle control_point_battle_;
+     ReinforcementDelivery reinforcement_delivery_;
+     RequisitionManager requisition_manager_;
     
     std::unique_ptr<AIManager> ai_manager_;
 

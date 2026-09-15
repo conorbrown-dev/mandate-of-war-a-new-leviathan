@@ -459,6 +459,16 @@ void Simulation::install_fob(EntityId entity, float x, float y, InstallationType
     territorial_control_.add_installation(x, y, installation_type, faction->faction_id);
 }
 
+void Simulation::requisition_unit(EntityId entity, float x, float y, UnitType unit_type) {
+    auto* faction = component_manager_.get_component<Faction>(entity);
+    if (!faction) return;
+    
+    auto line_id = production_manager_.faction_line(faction->faction_id);
+    if (line_id == INVALID_ENTITY) return;
+    
+    production_manager_.queue_requisition(line_id, faction->faction_id, unit_type, x, y);
+}
+
 void Simulation::harvest_resource(EntityId entity, float x, float y) {
     EntityId extractor_id, node_id;
     if (!production_manager_.find_or_create_extractor(x, y, extractor_id, node_id)) {
@@ -772,6 +782,11 @@ size_t Simulation::issue_install_commands(const std::vector<EntityId>& ids, Fact
                           static_cast<uint32_t>(installation_type));
 }
 
+size_t Simulation::issue_requisition_commands(const std::vector<EntityId>& ids, FactionId player,
+                                             float x, float y, UnitType unit_type) {
+    return issue_commands(ids, player, CommandType::REQUISITION, x, y, static_cast<uint32_t>(unit_type));
+}
+
 void Simulation::render_add_unit(float x, float y, uint32_t unit_type) {
     renderer_.add_unit_instance(x, y, unit_type);
 }
@@ -1002,8 +1017,9 @@ void Simulation::logistics_phase(float delta_ms) {
 }
 
 void Simulation::economy_phase(float delta_ms) {
-    production_manager_.update_all(delta_ms);
-    update_harvesters(delta_ms);
+     production_manager_.update_all(delta_ms);
+     requisition_manager_.update(delta_ms, production_manager_, *this);
+     update_harvesters(delta_ms);
     
     // Spawn units for completed constructions
     auto& completed = production_manager_.get_completed_constructions();
@@ -1803,6 +1819,19 @@ extern "C" {
         return static_cast<int>(sim->issue_install_commands(entities, static_cast<rts::FactionId>(player_id), x, y,
             static_cast<rts::InstallationType>(installation_type)));
     }
+    
+    int simulation_issue_requisition_commands(const int32_t* entity_ids, int entity_count, int player_id, float x, float y, int unit_type) {
+        rts::Simulation* sim = get_simulation();
+        if (!entity_ids || entity_count <= 0 || entity_count > static_cast<int>(MAX_COMMANDS_PER_TICK) || player_id < 0 || player_id > 2) return 0;
+        std::vector<rts::EntityId> entities;
+        entities.reserve(static_cast<std::size_t>(entity_count));
+        for (int index = 0; index < entity_count; ++index) {
+            if (entity_ids[index] <= 0) return 0;
+            entities.push_back(rts::EntityId{static_cast<uint32_t>(entity_ids[index])});
+        }
+        return static_cast<int>(sim->issue_requisition_commands(entities, static_cast<rts::FactionId>(player_id), x, y,
+            static_cast<rts::UnitType>(unit_type)));
+    }
 }
 
 // ===== Faction Initialization (inside namespace rts) =====
@@ -2305,6 +2334,13 @@ void rts::Simulation::process_command_internal(const InputCommand& cmd) {
             const float install_y = static_cast<float>(cmd.target_y) / command_position_scale_;
             const InstallationType installation_type = static_cast<InstallationType>(cmd.extra);
             install_fob(static_cast<EntityId>(cmd.entity_id), install_x, install_y, installation_type);
+            break;
+        }
+        case static_cast<uint8_t>(CommandType::REQUISITION): {
+            const float requisition_x = static_cast<float>(cmd.target_x) / command_position_scale_;
+            const float requisition_y = static_cast<float>(cmd.target_y) / command_position_scale_;
+            const UnitType unit_type = static_cast<UnitType>(cmd.extra);
+            requisition_unit(static_cast<EntityId>(cmd.entity_id), requisition_x, requisition_y, unit_type);
             break;
         }
         case static_cast<uint8_t>(CommandType::HARVEST): {

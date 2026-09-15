@@ -99,6 +99,14 @@ int simulation_issue_install_commands(
     float y,
     int installation_type
 );
+int simulation_issue_requisition_commands(
+    const int32_t* entity_ids,
+    int entity_count,
+    int player_id,
+    float x,
+    float y,
+    int unit_type
+);
 void simulation_destroy_unit(int entity_id);
 int simulation_entity_count();
 float simulation_last_tick_ms();
@@ -249,6 +257,7 @@ protected:
         ClassDB::bind_method(D_METHOD("reinforcement_delivery_state"), &RtsExtension::reinforcement_delivery_state);
         ClassDB::bind_method(D_METHOD("get_build_catalog", "faction_id"), &RtsExtension::get_build_catalog);
         ClassDB::bind_method(D_METHOD("queue_faction_structure", "faction_id", "structure_type", "x", "y"), &RtsExtension::queue_faction_structure);
+        ClassDB::bind_method(D_METHOD("queue_faction_unit", "faction_id", "unit_type", "x", "y"), &RtsExtension::queue_faction_unit);
         ClassDB::bind_method(D_METHOD("get_hud_state", "faction_id", "storage_id", "selected_entity_id", "fob_x", "fob_y", "include_fob"), &RtsExtension::get_hud_state);
         ClassDB::bind_method(D_METHOD("get_unit_health", "entity_id"), &RtsExtension::get_unit_health);
         ClassDB::bind_method(D_METHOD("map_loader_load_map", "path"), &RtsExtension::map_loader_load_map);
@@ -695,6 +704,14 @@ public:
         return queue_structure(get_faction_production_line(faction_id), faction_id, structure_type, x, y);
     }
 
+    bool queue_faction_unit(int64_t faction_id, int64_t unit_type, double x, double y) const {
+        auto line_id = get_faction_production_line(faction_id);
+        if (line_id <= 0) return false;
+        if (unit_type < 0 || unit_type > 255) return false;
+        return rts::runtime_simulation()->production_manager().queue_unit(
+            static_cast<rts::EntityId>(line_id), static_cast<rts::FactionId>(faction_id), static_cast<rts::UnitType>(unit_type), static_cast<float>(x), static_cast<float>(y));
+    }
+
     bool validate_structure_placement(int64_t structure_type, double x, double y) const {
         if (structure_type < 0 || structure_type > 3) return false;
         return rts::runtime_simulation()->validate_structure_placement(
@@ -962,6 +979,13 @@ public:
         if (player_id < 0 || player_id > 2 || installation_type < 0 || installation_type > 255) return 0;
         return simulation_issue_install_commands(entity_ids.ptr(), entity_ids.size(), static_cast<int>(player_id),
                                                   static_cast<float>(x), static_cast<float>(y), static_cast<int>(installation_type));
+    }
+
+    int64_t issue_requisition_commands(const PackedInt32Array& entity_ids, int64_t player_id,
+                                       double x, double y, int64_t unit_type) const {
+        if (player_id < 0 || player_id > 2) return 0;
+        return simulation_issue_requisition_commands(entity_ids.ptr(), entity_ids.size(), static_cast<int>(player_id),
+                                                      static_cast<float>(x), static_cast<float>(y), static_cast<int>(unit_type));
     }
 
     void initialize_faction(int64_t faction_id, double x, double y) {

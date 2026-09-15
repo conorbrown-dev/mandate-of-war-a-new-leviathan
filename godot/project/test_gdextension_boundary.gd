@@ -17,7 +17,7 @@ func _init() -> void:
 			# authoritative commands, and aggregate skirmish data.
 			for method in [
 				"start_simulation", "update_simulation", "get_unit_position", "get_unit_transforms", "get_unpresented_entities",
-				"issue_move_commands", "queue_faction_structure", "get_build_catalog", "get_hud_state", "skirmish_state",
+				"issue_move_commands", "queue_faction_structure", "queue_faction_unit", "get_build_catalog", "get_hud_state", "skirmish_state",
 				"get_road_segments", "territory_get_installation_info"
 			]:
 				check(bridge.has_method(method), "required bridge method missing: %s" % method, failures)
@@ -33,7 +33,7 @@ func _init() -> void:
 				"render_get_instance_count", "set_debug_mode", "get_unit_x", "get_unit_y",
 				"get_unit_positions", "get_unit_headings", "move_unit", "initialize_faction",
 				"economy_add_extractor", "economy_enqueue_construction", "economy_update_all",
-				"queue_structure", "get_faction_production_line", "destroy_unit",
+				"queue_structure", "get_faction_production_line",
 				"issue_patrol_commands", "issue_return_commands", "issue_defend_commands",
 				"get_simulation_tick_ms", "get_unit_off_road_state", "get_unit_is_dead",
 				"apply_damage", "get_unit_faction_id", "ai_init",

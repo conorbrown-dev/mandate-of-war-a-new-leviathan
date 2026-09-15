@@ -57,7 +57,8 @@ enum class CommandType : uint8_t {
     DEFEND = 6,
     PATROL = 7,
     RESEARCH = 8,
-    INSTALL = 9
+    INSTALL = 9,
+    REQUISITION = 10
 };
 
 constexpr size_t INPUT_COMMAND_WIRE_SIZE = 20;

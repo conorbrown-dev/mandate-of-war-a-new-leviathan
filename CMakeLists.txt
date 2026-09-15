@@ -47,10 +47,11 @@ set(SIMULATION_SOURCES
     src/simulation/reinforcement_delivery.cpp
     src/simulation/tick_manager.cpp
     src/logistics/logistics.cpp
-    src/combat/projectile_manager.cpp
-    src/combat/combat_manager.cpp
-    src/production/production_manager.cpp
-    src/network/buffer.cpp
+     src/combat/projectile_manager.cpp
+     src/combat/combat_manager.cpp
+     src/production/production_manager.cpp
+     src/production/requisition_manager.cpp
+     src/network/buffer.cpp
     src/network/network_manager.cpp
     src/network/serializer.cpp
     src/network/portable_snapshot.cpp

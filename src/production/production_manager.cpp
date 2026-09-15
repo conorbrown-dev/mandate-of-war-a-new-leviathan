@@ -422,8 +422,17 @@ float ProductionManager::get_unit_research_cost(FactionId faction_id, UnitType u
     auto faction_it = faction_data.find(faction_id);
     float discount = (faction_it != faction_data.end()) ? faction_it->second.unit_cost_discount : 0.0f;
     
-    return it->second.research_cost * (1.0f + discount);
-}
+     return it->second.research_cost * (1.0f + discount);
+ }
+
+float ProductionManager::get_build_time_seconds(UnitType unit_type) const {
+     const auto& prototypes = get_unit_prototypes();
+     auto it = prototypes.find(unit_type);
+     if (it == prototypes.end()) {
+         return 0.0f;
+     }
+     return it->second.build_time_seconds;
+ }
 
 
 EntityId ProductionManager::faction_line(FactionId faction) const {
@@ -506,6 +515,46 @@ bool ProductionManager::queue_structure(EntityId line_id, FactionId faction, uin
     entry.research_per_tick = entry.total_cost_research / (entry.build_time_seconds * 20.0f);
     entry.target_x = x; entry.target_y = y;
     line.queue.push(std::move(entry));
+    return true;
+}
+bool ProductionManager::can_queue_requisition(EntityId line_id, FactionId faction, UnitType type, float x, float y) const {
+    (void)x; (void)y;
+    if (faction_line(faction) != line_id) return false;
+    auto line = production_lines_.find(line_id);
+    if (line == production_lines_.end() || line->second.queue.size() >= static_cast<size_t>(line->second.max_jobs)) return false;
+    auto proto = get_unit_prototypes().find(type);
+    if (proto == get_unit_prototypes().end() || proto->second.faction != faction) return false;
+    auto storage = storages_.find(line->second.storage_id);
+    if (storage == storages_.end()) return false;
+    const auto& funds = storage->second;
+    const auto& p = proto->second;
+    const float ferry_material = p.is_aircraft && p.requires_runway ? p.operational_material : 0.0f;
+    const float ferry_energy = p.is_aircraft && p.requires_runway ? p.operational_energy : 0.0f;
+    return funds.metal_storage >= p.material_cost + ferry_material && funds.energy_storage >= p.energy_cost + ferry_energy;
+}
+bool ProductionManager::queue_requisition(EntityId line_id, FactionId faction, UnitType type, float x, float y) {
+    if (!can_queue_requisition(line_id, faction, type, x, y)) return false;
+    auto& line = production_lines_.at(line_id);
+    auto& funds = storages_.at(line.storage_id);
+    const auto& p = get_unit_prototypes().at(type);
+    float ferry_material = 0.0f;
+    float ferry_energy = 0.0f;
+    if (p.is_aircraft && p.requires_runway) {
+        ferry_material = p.operational_material;
+        ferry_energy = p.operational_energy;
+    }
+    funds.metal_storage -= p.material_cost + ferry_material;
+    funds.energy_storage -= p.energy_cost + ferry_energy;
+    ConstructionQueueEntry entry{};
+    entry.type = ConstructionQueueEntry::Type::UNIT;
+    entry.unit_type = type;
+    entry.faction_id = faction;
+    entry.total_cost_metal = p.material_cost + ferry_material;
+    entry.total_cost_energy = p.energy_cost + ferry_energy;
+    entry.build_time_seconds = p.build_time_seconds;
+    entry.target_x = x;
+    entry.target_y = y;
+    line.queue.push(entry);
     return true;
 }
 bool ProductionManager::can_research(FactionId faction, const std::string& id) const {
