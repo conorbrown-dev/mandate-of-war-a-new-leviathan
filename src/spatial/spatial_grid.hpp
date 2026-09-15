@@ -48,6 +48,9 @@ struct GroundSteering {
     float max_reverse_speed = 0.0f;
     float reverse_preference_threshold = 2.2f;
     float steering_response = 1.0f;
+    // Maximum low-speed yaw authority in radians/second. This permits bounded
+    // maneuvering below the speed where a driving-radius-only limit is useful.
+    float maneuver_turn_rate = 0.0f;
     bool can_pivot_turn = false;
 };
 

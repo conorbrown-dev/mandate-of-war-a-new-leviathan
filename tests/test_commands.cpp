@@ -4,6 +4,9 @@
 #include "simulation/economy_api.h"
 #include <cmath>
 #include <limits>
+#include <numbers>
+#include <iostream>
+#include <string>
 #include "ecs/components/faction.hpp"
 #include "ecs/components/aircraft.hpp"
 #include "ecs/components/harvester.hpp"
@@ -16,6 +19,90 @@ InputCommand move(EntityId id, uint32_t tick = 1) {
     InputCommand c{}; c.entity_id = id; c.tick_id = tick;
     c.cmd_type = static_cast<uint8_t>(CommandType::MOVE); c.target_x = -1000;
     return c;
+}
+
+struct MovementMetrics {
+    bool arrived = false;
+    int arrival_tick = -1;
+    int negative_alignment_ticks = 0;
+    int reverse_transitions = 0;
+    float maximum_distance = 0.0f;
+    float path_length = 0.0f;
+};
+
+std::string metrics_text(const MovementMetrics& metrics) {
+    return " arrival=" + std::to_string(metrics.arrived) +
+        " tick=" + std::to_string(metrics.arrival_tick) +
+        " negative=" + std::to_string(metrics.negative_alignment_ticks) +
+        " max_distance=" + std::to_string(metrics.maximum_distance) +
+        " path=" + std::to_string(metrics.path_length) +
+        " reversals=" + std::to_string(metrics.reverse_transitions);
+}
+
+MovementMetrics run_ground_maneuver(Simulation& simulation, EntityId id, float target_x,
+                                    float target_y, int maximum_ticks, int retask_tick = -1,
+                                    float retask_x = 0.0f, float retask_y = 0.0f,
+                                    FactionId faction = FactionId::INDUSTRIAL_EXPERIMENTAL) {
+    MovementMetrics metrics;
+    float active_target_x = target_x;
+    float active_target_y = target_y;
+    float previous_x = simulation.get_unit_x(id);
+    float previous_y = simulation.get_unit_y(id);
+    float previous_speed = 0.0f;
+    bool had_signed_speed = false;
+    if (simulation.issue_move_commands({id}, faction,
+                                       target_x, target_y, 3.0f) != 1) {
+        throw std::runtime_error("ground maneuver command was rejected");
+    }
+    for (int tick = 0; tick < maximum_ticks; ++tick) {
+        if (tick == retask_tick) {
+            active_target_x = retask_x;
+            active_target_y = retask_y;
+            if (simulation.issue_move_commands({id}, faction,
+                                               retask_x, retask_y, 3.0f) != 1) {
+                throw std::runtime_error("ground maneuver retask was rejected");
+            }
+        }
+        simulation.update(50.0f);
+        const float x = simulation.get_unit_x(id);
+        const float y = simulation.get_unit_y(id);
+        const float dx = active_target_x - x;
+        const float dy = active_target_y - y;
+        const float distance = std::hypot(dx, dy);
+        const auto* velocity = simulation.component_manager().get_component<Velocity>(id);
+        const auto* steering = simulation.component_manager().get_component<GroundSteering>(id);
+        const auto* unit_data = simulation.component_manager().get_component<UnitData>(id);
+        if (!velocity || !steering || !std::isfinite(x) || !std::isfinite(y) ||
+            !std::isfinite(steering->heading) || !std::isfinite(steering->current_speed)) {
+            throw std::runtime_error("ground maneuver produced non-finite state");
+        }
+        if (!unit_data || steering->current_speed > unit_data->speed + 0.001f ||
+            steering->current_speed < -steering->max_reverse_speed - 0.001f) {
+            throw std::runtime_error("ground maneuver exceeded its authored speed limits");
+        }
+        const float velocity_length = std::hypot(velocity->x, velocity->y);
+        if (velocity_length > 0.0001f && distance > 0.0001f &&
+            (velocity->x * dx + velocity->y * dy) / (velocity_length * distance) < 0.0f) {
+            ++metrics.negative_alignment_ticks;
+        }
+        if (std::abs(steering->current_speed) > 0.01f) {
+            if (had_signed_speed && steering->current_speed * previous_speed < 0.0f) {
+                ++metrics.reverse_transitions;
+            }
+            previous_speed = steering->current_speed;
+            had_signed_speed = true;
+        }
+        metrics.maximum_distance = std::max(metrics.maximum_distance, distance);
+        metrics.path_length += std::hypot(x - previous_x, y - previous_y);
+        previous_x = x;
+        previous_y = y;
+        if (distance <= movement::kArrivalRadiusMeters && std::abs(steering->current_speed) < 0.0001f) {
+            metrics.arrived = true;
+            metrics.arrival_tick = tick;
+            return metrics;
+        }
+    }
+    return metrics;
 }
 }
 TEST(commands_reject_identity_type_tick_and_duplicates) {
@@ -122,6 +209,78 @@ TEST(commands_wheeled_units_reverse_before_center_axis_spinning) {
           "wheeled unit chooses reverse travel instead of spinning in place toward a rear destination");
     check(s.get_unit_y(id) < 0.0f,
           "wheeled unit begins a reverse maneuver toward its rear destination");
+}
+
+TEST(commands_engineering_vehicle_converges_on_off_axis_and_retasked_orders) {
+    constexpr float kPi = std::numbers::pi_v<float>;
+    const auto exercise = [&](float initial_heading, float target_x, float target_y,
+                              int retask_tick = -1, float retask_x = 0.0f, float retask_y = 0.0f,
+                              int maximum_ticks = 650, float maneuver_turn_rate = -1.0f) {
+        Simulation simulation;
+        simulation.start();
+        const auto id = static_cast<EntityId>(simulation.create_unit_with_type(
+            0.0f, 0.0f, UnitType::INDUSTRIAL_ENGINEERING, FactionId::INDUSTRIAL_EXPERIMENTAL));
+        auto* steering = simulation.component_manager().get_component<GroundSteering>(id);
+        check(id != INVALID_ENTITY && steering, "engineering vehicle spawns with ground steering");
+        steering->heading = initial_heading;
+        if (maneuver_turn_rate >= 0.0f) steering->maneuver_turn_rate = maneuver_turn_rate;
+        return run_ground_maneuver(simulation, id, target_x, target_y, maximum_ticks, retask_tick, retask_x, retask_y);
+    };
+
+    const auto radius_only = exercise(0.0f, 25.0f, 0.0f, -1, 0.0f, 0.0f, 300, 0.0f);
+    const auto perpendicular = exercise(0.0f, 25.0f, 0.0f);
+    check(!radius_only.arrived,
+          "radius-only low-speed steering reproduces the engineer's non-convergent 90-degree maneuver");
+    check(perpendicular.arrived && perpendicular.arrival_tick < 340 &&
+              perpendicular.negative_alignment_ticks < 120 && perpendicular.path_length < 45.0f,
+          ("engineering vehicle promptly converges on a 90-degree move without a giant arc:" +
+           metrics_text(perpendicular)).c_str());
+
+    const auto rear = exercise(0.0f, 0.0f, -25.0f);
+    check(rear.arrived && rear.arrival_tick < 560 && rear.reverse_transitions == 0,
+          ("engineering vehicle reverses stably to a directly-behind destination:" +
+           metrics_text(rear)).c_str());
+
+    const auto short_off_axis = exercise(kPi * 0.5f, 0.0f, 5.0f);
+    check(short_off_axis.arrived && short_off_axis.arrival_tick < 340 && short_off_axis.path_length < 12.0f,
+          ("engineering vehicle reaches a short off-axis order without orbiting:" +
+           metrics_text(short_off_axis)).c_str());
+
+    const auto retasked = exercise(0.0f, 0.0f, 25.0f, 40, -18.0f, -18.0f);
+    check(retasked.arrived && retasked.arrival_tick < 620 && retasked.path_length < 65.0f,
+          ("engineering vehicle converges after a mid-turn retask:" +
+           metrics_text(retasked)).c_str());
+    std::cout << "ENGINEER_STEERING_METRICS radius_only_90=" << metrics_text(radius_only)
+              << " corrected_90=" << metrics_text(perpendicular)
+              << " rear=" << metrics_text(rear)
+              << " short=" << metrics_text(short_off_axis)
+              << " retask=" << metrics_text(retasked) << "\n";
+
+    for (const float heading : {0.0f, kPi * 0.5f, kPi, -kPi * 0.5f}) {
+        const auto metrics = exercise(heading, 20.0f, 0.0f);
+        check(metrics.arrived && metrics.arrival_tick < 520,
+              "engineering vehicle converges from each cardinal initial heading");
+    }
+}
+
+TEST(commands_ground_steering_profiles_remain_distinct_after_low_speed_maneuvers) {
+    struct Case { UnitType type; FactionId faction; float target_x; float target_y; };
+    for (const auto& test_case : {
+             Case{UnitType::ELITE_MAIN_BATTLE_TANK, FactionId::ELITE_PRECISION, 20.0f, 0.0f},
+             Case{UnitType::INDUSTRIAL_MBT, FactionId::INDUSTRIAL_EXPERIMENTAL, 20.0f, 0.0f},
+             Case{UnitType::INDUSTRIAL_MISSILE_PLATFORM, FactionId::INDUSTRIAL_EXPERIMENTAL, 20.0f, 0.0f},
+             Case{UnitType::MASS_ASSAULT_VEHICLE, FactionId::MASS_WARFARE, 20.0f, 0.0f},
+         }) {
+        Simulation simulation;
+        simulation.start();
+        const auto id = static_cast<EntityId>(simulation.create_unit_with_type(
+            0.0f, 0.0f, test_case.type, test_case.faction));
+        check(id != INVALID_ENTITY, "representative ground vehicle spawns");
+        const auto metrics = run_ground_maneuver(simulation, id, test_case.target_x, test_case.target_y,
+                                                  360, -1, 0.0f, 0.0f, test_case.faction);
+        check(metrics.arrived && metrics.path_length < 45.0f,
+              "representative ground vehicle keeps convergent steering");
+    }
 }
 
 TEST(commands_ground_vehicle_profiles_are_authored_per_prototype) {

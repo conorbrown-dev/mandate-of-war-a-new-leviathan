@@ -150,6 +150,7 @@ public:
     float last_tick_ms() const { return last_tick_ms_; }
 
     bool get_unit_position(EntityId entity, float& x, float& y);
+    bool has_move_target(EntityId entity) const;
     float get_unit_x(EntityId entity) const;
     float get_unit_y(EntityId entity) const;
     float get_unit_heading(EntityId entity) const;

@@ -46,6 +46,8 @@ CONTRACT_SCENARIOS = {
     "visual_pack_compatibility": ("test_visual_pack_compatibility.gd", "VISUAL_PACK_COMPATIBILITY"),
     "visual_asset_validator": ("test_visual_asset_validator.gd", "VISUAL_ASSET_VALIDATOR checks="),
     "native_visual_ids": ("test_native_visual_ids.gd", "NATIVE_VISUAL_IDS"),
+    "engineer_movement_presentation": ("test_engineer_movement_presentation.gd", "ENGINEER_MOVEMENT_PRESENTATION"),
+    "order_overlay_renderer": ("test_order_overlay_renderer.gd", "order_overlay_renderer: PASS"),
     "unit_visual_root": ("test_unit_visual_root.gd", "UNIT_VISUAL_ROOT"),
     "reference_model_load": ("test_reference_model_load.gd", "REFERENCE_MODEL_LOAD checks="),
     "map_editor_model": ("test_map_editor_model.gd", "Map editor model assertions passed"),

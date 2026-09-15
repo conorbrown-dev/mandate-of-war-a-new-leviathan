@@ -89,6 +89,9 @@ struct UnitPrototype {
     float steering_max_reverse_speed = 0.0f;
     float steering_reverse_preference_threshold = 2.2f;
     float steering_response = 1.0f;
+    // Radians/second available only while slowing below normal driving speed.
+    // Zero preserves radius-only steering for legacy content.
+    float steering_maneuver_turn_rate = 0.0f;
     bool steering_can_pivot_turn = false;
 };
 

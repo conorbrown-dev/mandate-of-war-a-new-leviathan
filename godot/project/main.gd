@@ -5,7 +5,6 @@ const DEFAULT_SKIRMISH_PATH := "res://scenarios/commander_start_skirmish.json"
 const SKIRMISH_PRESENTATION_STARTING_MATERIALS := 5000.0
 const SKIRMISH_PRESENTATION_STARTING_ENERGY := 5000.0
 const UNIT_SPACING := 3.0
-const COMMAND_MARKER_DURATION_SECONDS := 4.0
 const UNIT_BASE_COLOR := Color(0.12, 0.62, 1.0, 1.0)
 const UNIT_SELECTED_COLOR := Color(1.0, 0.72, 0.08, 1.0)
 const PLAYER_FACTION_COLOR := Color(0.12, 0.62, 1.0, 1.0)
@@ -46,6 +45,7 @@ const TREE_CLUSTER_COUNT := 9
 const SkirmishConfigLoader := preload("res://skirmish_config.gd")
 const ControlPointPresentationScript := preload("res://control_point_presentation.gd")
 const ReinforcementPresentationScript := preload("res://reinforcement_delivery_presentation.gd")
+const OrderOverlayRendererScript := preload("res://order_overlay_renderer.gd")
 const StrategicCommandScene := preload("res://ui/showcase/ui_design_system_showcase.tscn")
 const ArmorTexture := preload("res://assets/units/near_future_armor_tile_v1.png")
 const MATERIAL_SITES := [
@@ -90,6 +90,7 @@ const MATERIAL_SITES := [
 @onready var hotkey_display: Control = get_node_or_null("HUD/UIRoot/HotkeyDisplay") as Control
 
 var extension: Object
+var order_overlay_renderer: Node3D
 var unit_multimesh: MultiMesh
 var demo_unit_views: Dictionary = {}
 var demo_mode := false
@@ -216,7 +217,8 @@ var blueprint_pointer_down := false
 var pending_completed_structures: Array[Dictionary] = []
 var selected_structure_view: Node3D
 var command_feedback_marker: MeshInstance3D
-var command_feedback_remaining := 0.0
+var command_feedback_pending_ids := PackedInt32Array()
+var command_feedback_waiting_for_target := false
 var civilian_building_instance_count := 0
 var civilian_building_positions: Array[Vector2] = []
 var tree_lod_distance := 5000.0
@@ -347,6 +349,7 @@ func _ready() -> void:
 		set_process(false)
 		return
 	_configure_visual_pack_handshake()
+	_order_overlay_renderer_setup()
 	var profile_frames := OS.get_environment("RTS_PROFILE_FRAMES")
 	var is_scale_profile := profile_frames.is_valid_int() and int(profile_frames) > 0
 	# User-provided reference visuals are the normal small-skirmish default
@@ -942,6 +945,8 @@ func _process(delta: float) -> void:
 	_sync_completed_roads()
 	_update_keyboard_pan(delta)
 	_update_camera(delta)
+	if order_overlay_renderer != null:
+		order_overlay_renderer.set_camera_distance(camera_distance)
 	_sync_tree_lod()
 	var sync_timings := _sync_unit_transforms()
 	_record_profile_frame(delta, simulation_call_ms, sync_timings.x, sync_timings.y)
@@ -1907,6 +1912,8 @@ func _clear_selection() -> void:
 	for entity_id in selected_ids:
 		_set_instance_color(entity_id, entity_base_colors.get(entity_id, UNIT_BASE_COLOR))
 	selected_ids.clear()
+	if order_overlay_renderer != null:
+		order_overlay_renderer.clear_order()
 	_set_selected_structure(null)
 
 
@@ -1933,6 +1940,8 @@ func _set_selected(entity_id: int, selected: bool) -> void:
 		_set_instance_color(entity_id, entity_base_colors.get(entity_id, UNIT_BASE_COLOR))
 		if prototype_visual_views.has(entity_id):
 			prototype_visual_views[entity_id].set_selected(false)
+	if not selected and order_overlay_renderer != null and command_feedback_pending_ids.has(entity_id):
+		order_overlay_renderer.clear_order()
 
 
 func _set_instance_color(entity_id: int, color: Color) -> void:
@@ -2508,33 +2517,49 @@ func _issue_move_order(screen_position: Vector2) -> void:
 
 
 func _show_command_feedback(target: Vector2) -> void:
-	if command_feedback_marker == null:
-		command_feedback_marker = MeshInstance3D.new()
-		command_feedback_marker.name = "CommandFeedbackMarker"
-		var mesh := TorusMesh.new()
-		mesh.inner_radius = 1.4
-		mesh.outer_radius = 1.7
-		mesh.rings = 16
-		mesh.ring_segments = 8
-		command_feedback_marker.mesh = mesh
-		var material := StandardMaterial3D.new()
-		material.albedo_color = Color(0.20, 0.90, 1.0, 0.92)
-		material.emission_enabled = true
-		material.emission = Color(0.08, 0.55, 1.0, 1.0)
-		material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-		command_feedback_marker.material_override = material
-		add_child(command_feedback_marker)
-	command_feedback_marker.position = Vector3(target.x, _terrain_height_at(target.x, target.y) + 0.22, target.y)
+	_order_overlay_renderer_setup()
+	var origin := Vector2.ZERO
+	var count := 0
+	for entity_id in selected_ids:
+		var unit_position: Vector3 = _entity_world_position(entity_id)
+		origin += Vector2(unit_position.x, unit_position.z)
+		count += 1
+	if count > 0:
+		origin /= float(count)
+	order_overlay_renderer.show_move_order(origin, target)
+	command_feedback_marker = order_overlay_renderer.get("destination_marker").get_child(0)
 	command_feedback_marker.visible = true
-	command_feedback_remaining = COMMAND_MARKER_DURATION_SECONDS
+	command_feedback_pending_ids = selected_ids.duplicate()
+	command_feedback_waiting_for_target = true
 
-
-func _update_command_feedback(delta: float) -> void:
-	if command_feedback_marker == null or not command_feedback_marker.visible:
+func _order_overlay_renderer_setup() -> void:
+	if order_overlay_renderer != null:
 		return
-	command_feedback_remaining -= delta
-	if command_feedback_remaining <= 0.0:
-		command_feedback_marker.visible = false
+	order_overlay_renderer = OrderOverlayRendererScript.new()
+	order_overlay_renderer.name = "OrderVisualizationRoot"
+	order_overlay_renderer.set_terrain_height_sampler(func(world_x: float, world_z: float): return _terrain_height_at(world_x, world_z))
+	add_child(order_overlay_renderer)
+	order_overlay_renderer.set_camera_distance(camera_distance)
+
+
+func _update_command_feedback(_delta: float) -> void:
+	if order_overlay_renderer == null or not order_overlay_renderer.visible:
+		return
+	var pending := false
+	for entity_id in command_feedback_pending_ids:
+		if bool(extension.call("has_unit_move_target", entity_id)):
+			pending = true
+			break
+	if pending:
+		command_feedback_waiting_for_target = false
+		return
+	if command_feedback_waiting_for_target:
+		return
+	if not pending:
+		order_overlay_renderer.clear_order()
+		if command_feedback_marker != null:
+			command_feedback_marker.visible = false
+		command_feedback_pending_ids = PackedInt32Array()
 
 
 func _issue_stop_order() -> void:
@@ -2543,6 +2568,13 @@ func _issue_stop_order() -> void:
 	var accepted_count: int = extension.call("issue_stop_commands", selected_ids, HUMAN_PLAYER_ID)
 	if accepted_count != selected_ids.size():
 		push_warning("Stop order rejected by authoritative command validation")
+		return
+	command_feedback_pending_ids = PackedInt32Array()
+	command_feedback_waiting_for_target = false
+	if command_feedback_marker != null:
+		command_feedback_marker.visible = false
+	if order_overlay_renderer != null:
+		order_overlay_renderer.clear_order()
 
 
 func _order_fob(screen_position: Vector2) -> void:

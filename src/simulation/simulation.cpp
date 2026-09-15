@@ -877,8 +877,20 @@ void Simulation::prediction_phase(float delta_ms) {
                     );
                     const float radius_rate = std::abs(steering->current_speed) /
                         std::max(steering->minimum_turn_radius, 0.001f);
+                    // At normal travel speeds the chassis follows its authored
+                    // driving radius. A radius-only limit becomes pathological
+                    // during the non-pivot turn crawl: yaw authority approaches
+                    // zero precisely when the vehicle needs to recover its
+                    // heading. Content can supply bounded low-speed maneuver
+                    // authority; it fades out as the vehicle returns to driving
+                    // speed and therefore cannot loosen normal-radius travel.
+                    const float low_speed_fraction = 1.0f - std::clamp(
+                        std::abs(steering->current_speed) / std::max(maximum_speed, 0.001f),
+                        0.0f, 1.0f
+                    );
+                    const float maneuver_rate = steering->maneuver_turn_rate * low_speed_fraction;
                     const float permitted_turn_rate = steering->can_pivot_turn
-                        ? turn_rate : std::min(turn_rate, radius_rate);
+                        ? turn_rate : std::min(turn_rate, std::max(radius_rate, maneuver_rate));
                     steering->heading += std::clamp(
                         heading_error, -permitted_turn_rate * dt, permitted_turn_rate * dt
                     );
@@ -1183,6 +1195,10 @@ float Simulation::get_unit_y(EntityId entity) const {
     return pos ? pos->y : 0.0f;
 }
 
+bool Simulation::has_move_target(EntityId entity) const {
+    return move_targets_.find(entity) != move_targets_.end();
+}
+
 float Simulation::get_unit_heading(EntityId entity) const {
     if (const auto* steering = component_manager_.get_component<GroundSteering>(entity)) {
         return steering->heading;
@@ -1328,6 +1344,10 @@ extern "C" {
 
     float simulation_get_unit_y(int entity_id) {
         return get_simulation()->get_unit_y(static_cast<EntityId>(entity_id));
+    }
+
+    int simulation_has_unit_move_target(int entity_id) {
+        return get_simulation()->has_move_target(static_cast<EntityId>(entity_id)) ? 1 : 0;
     }
 
     int simulation_get_unit_headings(const int32_t* entity_ids, int entity_count, float* headings, int heading_capacity) {
@@ -2181,6 +2201,7 @@ int rts::Simulation::create_unit_with_type(float x, float y, rts::UnitType unit_
             proto.steering_turn_rate, proto.steering_turn_rate_at_speed,
             proto.steering_minimum_turn_radius, proto.steering_max_reverse_speed,
             proto.steering_reverse_preference_threshold, proto.steering_response,
+            proto.steering_maneuver_turn_rate,
             proto.steering_can_pivot_turn
         });
         component_manager_.add_component(entity.id, OffRoadWear{0.0f, 0.0f, unit_type});

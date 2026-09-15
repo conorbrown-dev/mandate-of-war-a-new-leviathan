@@ -231,6 +231,9 @@ func _scenario_vehicle_movement_smoke() -> void:
 	await process_frame
 	var marker: MeshInstance3D = view.get("command_feedback_marker")
 	_check(marker != null and marker.visible, "vehicle.command_feedback", "Right-click creates a visible destination marker without changing movement authority")
+	var overlay: Node3D = view.get("order_overlay_renderer")
+	var ribbon: MeshInstance3D = overlay.get("arrow_mesh_instance") if overlay != null else null
+	_check(ribbon != null and ribbon.visible and ribbon.mesh != null, "vehicle.order_arrow", "A centralized ribbon arrow accompanies the grouped destination marker")
 	await _capture_checkpoint(view, "move_command_feedback")
 
 	var start_positions: Dictionary = {}
@@ -240,10 +243,12 @@ func _scenario_vehicle_movement_smoke() -> void:
 	var heading_changed_after_motion := false
 	var minimum_hull_alignment := 1.0
 	var hull_alignment_samples := 0
+	var marker_persisted_after_duration := false
 	var settled := false
 	for tick in range(2200):
 		extension.call("update_simulation", 50.0)
 		view.call("_sync_unit_transforms")
+		view.call("_update_command_feedback", 0.0)
 		for vehicle_id in group_ids:
 			var current_position := _entity_position(view, vehicle_id)
 			var motion: Vector2 = current_position - start_positions[vehicle_id]
@@ -263,6 +268,8 @@ func _scenario_vehicle_movement_smoke() -> void:
 		if tick == 160:
 			_focus_camera_on_position(view, group_center + Vector2(45.0, 8.0), 35.0)
 			await _capture_checkpoint(view, "vehicles_turning")
+		if tick == 100:
+			marker_persisted_after_duration = marker != null and marker.visible
 		if tick > 500:
 			var all_settled := true
 			for vehicle_id in group_ids:
@@ -274,12 +281,14 @@ func _scenario_vehicle_movement_smoke() -> void:
 	_check(max_speed > 1.0, "vehicle.accelerates", "Vehicles accelerate to measurable travel speed", {"max_speed_mps": max_speed})
 	_check(heading_changed_after_motion, "vehicle.hull_follows_travel", "Vehicle hull headings change while vehicles are moving, not only at rest")
 	_check(hull_alignment_samples > 0 and minimum_hull_alignment >= 0.98, "vehicle.rendered_hulls_follow_motion", "Rendered hull forward vectors remain aligned with authoritative travel", {"minimum_alignment": minimum_hull_alignment, "samples": hull_alignment_samples})
+	_check(marker_persisted_after_duration, "vehicle.command_feedback_persists", "Destination feedback remains visible beyond the legacy four-second timeout while units are moving")
 	_check(settled, "vehicle.arrives_and_settles", "All vehicles stop without sustained arrival jitter", {"tick_limit": 2200})
 	var mean_distance := 0.0
 	for vehicle_id in group_ids:
 		mean_distance += _entity_position(view, vehicle_id).distance_to(destination)
 	mean_distance /= float(group_ids.size())
 	_check(mean_distance <= 12.0, "vehicle.formation_arrives", "Formation slots arrive around the ordered destination", {"mean_distance_m": mean_distance})
+	_check(marker == null or not marker.visible, "vehicle.command_feedback_clears_on_arrival", "Destination feedback clears once every commanded unit has arrived")
 	_focus_camera_on_position(view, destination, 35.0)
 	await _capture_checkpoint(view, "vehicles_arrived")
 	await _destroy_skirmish(view)

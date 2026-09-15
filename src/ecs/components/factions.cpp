@@ -193,6 +193,13 @@ static UnitPrototype parse_unit_prototype(const rts::data::JsonValue& obj) {
         prototype.steering_max_reverse_speed = required_number("max_reverse_speed");
         prototype.steering_reverse_preference_threshold = required_number("reverse_preference_threshold");
         prototype.steering_response = required_number("steering_response");
+        if (auto maneuver_turn_rate = steering->get("maneuver_turn_rate"); maneuver_turn_rate) {
+            if (maneuver_turn_rate->type() != rts::data::JsonValue::Type::Number ||
+                !std::isfinite(maneuver_turn_rate->as_number()) || maneuver_turn_rate->as_number() < 0.0) {
+                throw std::runtime_error("Invalid ground steering field: maneuver_turn_rate");
+            }
+            prototype.steering_maneuver_turn_rate = static_cast<float>(maneuver_turn_rate->as_number());
+        }
         auto pivot = steering->get("can_pivot_turn");
         if (!pivot || pivot->type() != rts::data::JsonValue::Type::Bool) {
             throw std::runtime_error("Invalid ground steering field: can_pivot_turn");

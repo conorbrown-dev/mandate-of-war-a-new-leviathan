@@ -112,6 +112,7 @@ int simulation_entity_count();
 float simulation_last_tick_ms();
 float simulation_get_unit_x(int entity_id);
 float simulation_get_unit_y(int entity_id);
+int simulation_has_unit_move_target(int entity_id);
 int simulation_get_unit_positions(
     const int32_t* entity_ids,
     int entity_count,
@@ -233,6 +234,7 @@ protected:
         );
         ClassDB::bind_method(D_METHOD("get_entity_count"), &RtsExtension::get_entity_count);
         ClassDB::bind_method(D_METHOD("get_unit_position", "entity_id"), &RtsExtension::get_unit_position);
+        ClassDB::bind_method(D_METHOD("has_unit_move_target", "entity_id"), &RtsExtension::has_unit_move_target);
         ClassDB::bind_method(D_METHOD("get_unit_transforms", "entity_ids"), &RtsExtension::get_unit_transforms);
         ClassDB::bind_method(D_METHOD("get_unit_steering_state", "entity_id"), &RtsExtension::get_unit_steering_state);
         ClassDB::bind_method(D_METHOD("create_unit_with_type", "x", "y", "unit_type", "faction_id"), &RtsExtension::create_unit_with_type);
@@ -1172,6 +1174,10 @@ public:
             state.clear();
         }
         return state;
+    }
+
+    bool has_unit_move_target(int64_t entity_id) const {
+        return simulation_has_unit_move_target(static_cast<int>(entity_id)) != 0;
     }
 
     PackedFloat32Array get_unit_off_road_state(int64_t entity_id) const {
