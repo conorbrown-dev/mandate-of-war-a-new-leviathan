@@ -8,7 +8,7 @@ The UI system is native Godot presentation. It shares visual tokens and reusable
 - `godot/project/ui/theme/mandate_typography.gd` defines display, heading, section, body, label, and stat roles. Use roles instead of ad-hoc sizes when a component can express one.
 - `godot/project/ui/theme/mandate_theme.tres` is the project-native `Theme` resource. Its script defines `PrimaryButton`, `SecondaryButton`, `GhostButton`, `DangerButton`, `CommandPanel`, `RaisedPanel`, `InsetPanel`, `SectionHeading`, `MutedLabel`, and `StatLabel` variations.
 
-The visual language is restrained tactical tooling: dark blue-black surfaces, thin cyan/blue borders, strong title hierarchy, and amber/red only for cost pressure or destructive actions. Avoid gradients, oversized rounded cards, and generic dashboard chrome.
+The visual language is restrained tactical tooling: dark army-green surfaces, thin muted-green borders, strong title hierarchy, and cyan reserved for command/focus. Amber/red remain for cost pressure or destructive actions. Buttons, windows, and cards use square, sharp edges with no corner radius. Avoid gradients, oversized cards, and generic dashboard chrome.
 
 ## Components
 

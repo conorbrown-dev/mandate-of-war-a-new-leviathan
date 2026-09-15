@@ -1,6 +1,7 @@
 extends SceneTree
 
 const Renderer := preload("res://order_overlay_renderer.gd")
+const UiTokens := preload("res://ui/theme/ui_tokens.gd")
 
 func _init() -> void:
 	var renderer := Renderer.new()
@@ -11,6 +12,7 @@ func _init() -> void:
 	assert(renderer.visible)
 	assert(renderer.destination_marker.visible)
 	assert(renderer.arrow_mesh_instance.mesh != null)
+	assert(renderer._arrow_material.albedo_color.is_equal_approx(Color(UiTokens.ACCENT, 0.72)))
 	var arrays := renderer.arrow_mesh_instance.mesh.surface_get_arrays(0)
 	var vertices: PackedVector3Array = arrays[Mesh.ARRAY_VERTEX]
 	assert(vertices.size() >= 7)

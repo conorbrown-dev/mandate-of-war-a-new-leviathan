@@ -2,6 +2,7 @@ extends Node3D
 
 ## Centralized, presentation-only order visualization.  The simulation remains
 ## authoritative; this node only renders the latest selected move intent.
+const UiTokens := preload("res://ui/theme/ui_tokens.gd")
 const MAX_ROUTE_SAMPLES := 12
 const MIN_WIDTH := 0.65
 const MAX_WIDTH := 4.0
@@ -25,9 +26,11 @@ func _ready() -> void:
 	arrow_mesh_instance = MeshInstance3D.new()
 	arrow_mesh_instance.name = "MoveOrderRibbon"
 	_arrow_material = StandardMaterial3D.new()
-	_arrow_material.albedo_color = Color(0.16, 0.86, 1.0, 0.72)
+	var accent := UiTokens.ACCENT
+	accent.a = 0.72
+	_arrow_material.albedo_color = accent
 	_arrow_material.emission_enabled = true
-	_arrow_material.emission = Color(0.04, 0.35, 0.65, 1.0)
+	_arrow_material.emission = UiTokens.ACCENT.darkened(0.45)
 	_arrow_material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 	_arrow_material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
 	arrow_mesh_instance.material_override = _arrow_material
@@ -42,8 +45,10 @@ func _ready() -> void:
 	torus.ring_segments = 8
 	_marker_ring.mesh = torus
 	_marker_material = _arrow_material.duplicate()
-	_marker_material.albedo_color = Color(1.0, 0.74, 0.16, 0.9)
-	_marker_material.emission = Color(0.65, 0.28, 0.03, 1.0)
+	var marker_accent := UiTokens.ACCENT.lightened(0.16)
+	marker_accent.a = 0.9
+	_marker_material.albedo_color = marker_accent
+	_marker_material.emission = UiTokens.ACCENT.darkened(0.25)
 	_marker_ring.material_override = _marker_material
 	destination_marker.add_child(_marker_ring)
 	add_child(destination_marker)

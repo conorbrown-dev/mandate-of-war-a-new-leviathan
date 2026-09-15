@@ -2,6 +2,8 @@ extends SceneTree
 
 const ResponsiveUi = preload("res://ui/responsive_ui.gd")
 const CommandButton = preload("res://ui/components/command_button.gd")
+const UiTokens = preload("res://ui/theme/ui_tokens.gd")
+const MandateTheme = preload("res://ui/theme/mandate_theme.gd")
 
 var checks := 0
 var failures := 0
@@ -26,6 +28,11 @@ func _initialize() -> void:
 	check(is_equal_approx(ResponsiveUi.layout_scale(Vector2(3440, 1440)), 1.0), "ultrawide layout retains its logical panel scale")
 	check(is_equal_approx(ResponsiveUi.layout_scale(Vector2(3840, 2160)), 1.0), "4K layout retains the reference HUD geometry")
 	check(ResponsiveUi.centered_origin(Vector2(3440, 1440), ResponsiveUi.PANEL_MAX_WIDTH).x > 1000.0, "ultrawide command deck remains centered rather than stretched")
+	check(UiTokens.RADIUS_SM == 0 and UiTokens.RADIUS_MD == 0 and UiTokens.RADIUS_LG == 0 and UiTokens.SURFACE_PANEL.g > UiTokens.SURFACE_PANEL.r and UiTokens.SURFACE_PANEL.g > UiTokens.SURFACE_PANEL.b, "UI tokens use sharp-edged army-green card surfaces")
+	var theme := MandateTheme.new()
+	var primary_style := theme.get_stylebox("normal", "PrimaryButton") as StyleBoxFlat
+	var panel_style := theme.get_stylebox("panel", "CommandPanel") as StyleBoxFlat
+	check(primary_style != null and panel_style != null and primary_style.corner_radius_top_left == 0 and panel_style.corner_radius_top_left == 0, "themed buttons and windows render with square corners")
 	var view: Node3D = load("res://main.tscn").instantiate()
 	root.add_child(view)
 	await process_frame

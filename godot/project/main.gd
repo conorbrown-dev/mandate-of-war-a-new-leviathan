@@ -379,6 +379,7 @@ func _ready() -> void:
 
 	start_button.pressed.connect(_on_start_skirmish_pressed)
 	native_skirmish_button.pressed.connect(_on_native_skirmish_pressed)
+	command_hud.build_requested.connect(_begin_build_placement)
 
 	# The native map loader deliberately exposes map metadata, not the starting
 	# rosters.  The validated scenario definition is therefore the authority for

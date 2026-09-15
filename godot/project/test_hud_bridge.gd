@@ -37,6 +37,11 @@ func _run() -> void:
 	view._update_hud()
 	snapshot = view.command_hud.snapshot
 	check(snapshot.get("selected", 0) == 1 and float(snapshot.get("unit_max_health", -1.0)) > 0.0 and float(snapshot.get("off_road_speed_multiplier", -1.0)) >= 0.0, "HUD aggregate must provide selected-unit health and off-road state")
+	var build_catalog_view: Control = view.command_hud.get("build_catalog_view")
+	check(build_catalog_view != null and build_catalog_view.visible and build_catalog_view.get("_entries").size() > 0, "Engineer catalog is rendered through the themed node-based build component")
+	await process_frame
+	var viewport_width := view.get_viewport().get_visible_rect().size.x
+	check(build_catalog_view != null and build_catalog_view.size.x <= 540.0 and build_catalog_view.get_global_rect().position.x >= 0.0 and build_catalog_view.get_global_rect().end.x <= viewport_width, "Build catalog remains centered and fully inside the active viewport")
 	view.queue_free()
 	if failures > 0:
 		quit(1)

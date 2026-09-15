@@ -136,14 +136,13 @@ func _run() -> void:
 	view.tactical_camera_yaw = PI * 0.5
 	var forward_at_east := Vector2(sin(view.tactical_camera_yaw), cos(view.tactical_camera_yaw))
 	check(forward_at_east.distance_to(Vector2.RIGHT) < 0.001, "camera movement forward follows the current tactical yaw")
-	var viewport_size := view.get_viewport().get_visible_rect().size
-	var build_ui_scale := clampf(minf(viewport_size.x / 1920.0, viewport_size.y / 1080.0), 0.62, 1.0)
-	var build_origin := Vector2((viewport_size.x / build_ui_scale - 540.0) * 0.5, 12.0)
-	var floodlight_card := (build_origin + Vector2(8 + 3 * 132 + 64, 138)) * build_ui_scale
-	check(view._blueprint_at_screen(floodlight_card) == 103, "compact fourth structure card selects the Floodlight without overflowing the build deck")
-	var floodlight_hover: Dictionary = view.command_hud.get_build_hover_context_at(floodlight_card / build_ui_scale)
-	check(floodlight_hover.get("title", "") == "BUILD // FLOODLIGHT" and "620" in String(floodlight_hover.get("detail", "")), "bottom inspection strip receives Floodlight identity, costs, and readiness")
-	check(floodlight_hover.get("accent", "") == Color("#ffbd52"), "BUILD hover uses themed orange accent")
+	var build_catalog_view: Control = view.command_hud.get("build_catalog_view")
+	await process_frame
+	var catalog_entries: Array = build_catalog_view.get("_entries")
+	var representative_entry: Dictionary = catalog_entries[0] if not catalog_entries.is_empty() else {}
+	var representative_button: Button = representative_entry.get("button")
+	check(representative_button != null and representative_button.custom_minimum_size.y >= 52.0, "Build catalog entries are exposed through readable themed controls")
+	check(representative_button != null and String(representative_entry.get("name", "")).to_upper() in representative_button.text and "M " in representative_button.text and "E " in representative_button.text, "Node-based build catalog keeps blueprint identity and resource costs legible in every card")
 	check(first_model.get_node_or_null("SelectionVisual") == null, "selection relies on the persistent range envelopes instead of a redundant yellow hex")
 	check(first_model.get_node("ModelRoot").get_child_count() > 0, "selection leaves the Field Engineer imported model intact")
 	view._clear_selection()

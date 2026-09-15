@@ -6,12 +6,16 @@ extends Control
 # This is an original presentation; every number shown comes from Main.
 
 var snapshot: Dictionary = {}
+signal build_requested(build_type: int)
 
 const MandateTokens = preload("res://ui/theme/ui_tokens.gd")
 const INK := MandateTokens.TEXT_PRIMARY
 const MUTED := MandateTokens.TEXT_SECONDARY
 const PANEL := Color(MandateTokens.SURFACE_BASE, 0.90)
 const PANEL_EDGE := Color(MandateTokens.BORDER_DEFAULT, 0.96)
+const CARD_SURFACE := Color(MandateTokens.SURFACE_PANEL, 0.96)
+const INSET_SURFACE := Color(MandateTokens.SURFACE_INSET, 0.96)
+const PROGRESS_TRACK := MandateTokens.SURFACE_SELECTED
 const CYAN := MandateTokens.ACCENT
 const AMBER := MandateTokens.WARNING
 const RED := MandateTokens.DANGER
@@ -20,17 +24,24 @@ const BUILD_UNIT_SHORTCUTS := ["1", "4", "5", "9", "0", "P"]
 const UiTypographyScript = preload("res://ui_typography.gd")
 const UiIconRegistry = preload("res://ui/icons/ui_icon_registry.gd")
 const ResponsiveUiScript = preload("res://ui/responsive_ui.gd")
+const BuildCatalogScript = preload("res://ui/components/build_catalog.gd")
 const DRAWN_FONT_SIZE_BUMP := 0
 var ui_font: Font
+var build_catalog_view: Control
 
 
 func _ready() -> void:
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
 	ui_font = UiTypographyScript.compact_tactical_font()
+	build_catalog_view = BuildCatalogScript.new()
+	build_catalog_view.build_requested.connect(func(build_type: int): build_requested.emit(build_type))
+	add_child(build_catalog_view)
 
 
 func refresh(next_snapshot: Dictionary) -> void:
 	snapshot = next_snapshot.duplicate(true)
+	if build_catalog_view != null:
+		build_catalog_view.refresh_catalog(snapshot.get("build_catalog", []), bool(snapshot.get("can_build", false)))
 	queue_redraw()
 
 
@@ -40,6 +51,10 @@ func get_build_hover_context() -> Dictionary:
 
 
 func get_build_hover_context_at(pointer: Vector2) -> Dictionary:
+	if build_catalog_view != null:
+		var node_context: Dictionary = build_catalog_view.get_hover_context(pointer)
+		if not node_context.is_empty():
+			return node_context
 	if snapshot.is_empty() or not bool(snapshot.get("can_build", false)):
 		return {}
 	var ui_scale := ResponsiveUiScript.layout_scale(size)
@@ -95,7 +110,7 @@ func _text(at: Vector2, value: String, font_size: int = 14, color: Color = INK, 
 
 
 func _metric(rect: Rect2, label: String, value: String, income: String, accent: Color, icon_id: StringName, ui_scale: float = 1.0) -> void:
-	draw_rect(rect, Color("#0b1c27", 0.96), true)
+	draw_rect(rect, CARD_SURFACE, true)
 	draw_rect(rect, PANEL_EDGE, false, 1.0)
 	draw_rect(Rect2(rect.position, Vector2(3, rect.size.y)), accent, true)
 	_draw_ui_icon(Rect2(rect.position + Vector2(9, 7), Vector2(12, 12)), icon_id, accent)
@@ -108,15 +123,15 @@ func _metric(rect: Rect2, label: String, value: String, income: String, accent: 
 
 
 func _command_cell(rect: Rect2, key: String, title: String, detail: String, accent: Color, ui_scale: float = 1.0) -> void:
-	draw_rect(rect, Color("#0b1c27", 0.96), true)
+	draw_rect(rect, CARD_SURFACE, true)
 	draw_rect(rect, PANEL_EDGE, false, 1.0)
 	draw_rect(Rect2(rect.position + Vector2(5, 7), Vector2(21, 21)), accent, true)
-	_text(rect.position + Vector2(9, 22), key, 9, Color("#07131d"), ui_scale)
+	_text(rect.position + Vector2(9, 22), key, 9, MandateTokens.SURFACE_BASE, ui_scale)
 	_text(rect.position + Vector2(32, 16), title, 9, INK, ui_scale)
 	_text(rect.position + Vector2(32, 30), detail, 8, MUTED, ui_scale)
 
 func _command_icon(rect: Rect2, icon_id: StringName, tooltip: String, accent: Color, ui_scale: float = 1.0) -> void:
-	draw_rect(rect, Color("#0b1c27", 0.96), true)
+	draw_rect(rect, CARD_SURFACE, true)
 	draw_rect(rect, PANEL_EDGE, false, 1.0)
 	_draw_ui_icon(Rect2(rect.position + Vector2(5, 4), Vector2(16, 16)), icon_id, accent)
 
@@ -124,7 +139,7 @@ func _command_icon(rect: Rect2, icon_id: StringName, tooltip: String, accent: Co
 func _build_cell(rect: Rect2, entry: Dictionary, key: String, ui_scale: float = 1.0) -> void:
 	var available := bool(entry.get("available", false))
 	var accent := GREEN if available else MUTED
-	draw_rect(rect, Color("#0b1c27", 0.96), true)
+	draw_rect(rect, CARD_SURFACE, true)
 	draw_rect(rect, accent, false, 1.0)
 	var icon_rect := Rect2(rect.position + Vector2(6, 6), Vector2(25, 25))
 	var nato_symbol_id := StringName(String(entry.get("nato_symbol_id", "")))
@@ -164,7 +179,7 @@ func _draw_missing_icon(rect: Rect2, color: Color) -> void:
 
 func _draw_hover_strip(width: float, height: float, ui_scale: float = 1.0) -> void:
 	var strip := Rect2(0.0, height - 28.0, width, 28.0)
-	draw_rect(strip, Color("#020609", 0.96), true)
+	draw_rect(strip, INSET_SURFACE, true)
 	draw_line(strip.position, Vector2(strip.end.x, strip.position.y), PANEL_EDGE, 1.0)
 	var title := String(snapshot.get("hover_title", "TACTICAL INSPECT"))
 	var detail := String(snapshot.get("hover_detail", "HOVER A UNIT OR STRUCTURE TO INSPECT"))
@@ -227,7 +242,7 @@ func _draw() -> void:
 			var max_health := float(snapshot.get("unit_max_health", 1.0))
 			var health_ratio := clampf(health / max_health, 0.0, 1.0)
 			_text(selection.position + Vector2(11, 91), "INTEGRITY  %.0f / %.0f" % [health, max_health], 9, MUTED, ui_scale)
-			draw_rect(Rect2(selection.position + Vector2(11, 99), Vector2(248, 6)), Color("#132a35"), true)
+			draw_rect(Rect2(selection.position + Vector2(11, 99), Vector2(248, 6)), PROGRESS_TRACK, true)
 			draw_rect(Rect2(selection.position + Vector2(11, 99), Vector2(248 * health_ratio, 6)), GREEN if health_ratio > 0.45 else RED, true)
 			draw_rect(Rect2(selection.position + Vector2(11, 116), Vector2(248, 1)), PANEL_EDGE, true)
 			_text(selection.position + Vector2(11, 133), "FRIENDLY FORCE", 9, MUTED, ui_scale)
@@ -248,26 +263,8 @@ func _draw() -> void:
 			var row := index / 3
 			_command_icon(Rect2(commands.position + Vector2(8 + column * 82, 20 + row * 27), Vector2(76, 23)), icons[index][0], icons[index][1], icons[index][2], ui_scale)
 
-	# Production readout is sourced from the authoritative queue: the menu
-	# exposes exact reservation costs and the active frame exposes time remaining.
-	var build_catalog: Array = snapshot.get("build_catalog", [])
-	if not build_catalog.is_empty() and bool(snapshot.get("can_build", false)):
-		var build_menu := Rect2((w - 540.0) * 0.5, 12.0, 540.0, 158.0)
-		_panel(build_menu, GREEN)
-		_text(build_menu.position + Vector2(10, 15), "FIELD ENGINEER // BUILD MENU", 9, GREEN, ui_scale)
-		var units: Array = build_catalog.filter(func(item): return not bool(item.get("is_structure", false)) and not bool(item.get("is_aircraft", false)))
-		units.sort_custom(func(left, right): return int(left.get("type", -1)) < int(right.get("type", -1)))
-		var structures: Array = build_catalog.filter(func(item): return bool(item.get("is_structure", false)))
-		_text(build_menu.position + Vector2(10, 29), "UNITS", 8, MUTED, ui_scale)
-		for index in range(mini(4, units.size())):
-			_build_cell(Rect2(build_menu.position + Vector2(8 + index * 132, 34), Vector2(128, 36)), units[index], BUILD_UNIT_SHORTCUTS[index], ui_scale)
-		# The deck has six authored unit shortcuts. Never index beyond that
-		# contract if a mod or future catalog adds more unit definitions.
-		for index in range(4, mini(BUILD_UNIT_SHORTCUTS.size(), units.size())):
-			_build_cell(Rect2(build_menu.position + Vector2(8 + (index - 4) * 132, 72), Vector2(128, 36)), units[index], BUILD_UNIT_SHORTCUTS[index], ui_scale)
-		_text(build_menu.position + Vector2(10, 120), "STRUCTURES", 8, MUTED, ui_scale)
-		for index in range(mini(4, structures.size())):
-			_build_cell(Rect2(build_menu.position + Vector2(8 + index * 132, 124), Vector2(128, 28)), structures[index], ["6", "7", "A", "L"][index], ui_scale)
+	# Production readout is sourced from the authoritative queue. The build
+	# catalog itself is a themed node-based component above, not drawn here.
 	var queue: Array = snapshot.get("queue", [])
 	if not queue.is_empty():
 		var active: Dictionary = queue[0]
@@ -275,7 +272,7 @@ func _draw() -> void:
 		_panel(fabrication, CYAN)
 		_text(fabrication.position + Vector2(10, 16), "ACTIVE FABRICATION // STRUCTURE FRAME + UNIT SKELETON", 9, CYAN, ui_scale)
 		var progress := clampf(float(active.get("progress", 0.0)), 0.0, 1.0)
-		draw_rect(Rect2(fabrication.position + Vector2(10, 27), Vector2(520, 8)), Color("#132a35"), true)
+		draw_rect(Rect2(fabrication.position + Vector2(10, 27), Vector2(520, 8)), PROGRESS_TRACK, true)
 		draw_rect(Rect2(fabrication.position + Vector2(10, 27), Vector2(520 * progress, 8)), GREEN, true)
 		_text(fabrication.position + Vector2(10, 55), "%s  %.0f%%  //  %.1f SEC REMAINING" % [String(active.get("name", "UNIT")).to_upper(), progress * 100.0, float(active.get("remaining_seconds", 0.0))], 10, INK, ui_scale)
 		_text(fabrication.position + Vector2(10, 73), "RESERVED: M %.0f  E %.0f  R %.0f" % [float(active.get("reserved_material", 0.0)), float(active.get("reserved_energy", 0.0)), float(active.get("reserved_research", 0.0))], 9, AMBER, ui_scale)
@@ -287,7 +284,7 @@ func _draw() -> void:
 		var fob_progress := clampf(float(fob_installation[4]), 0.0, 1.0)
 		_panel(fob_card, AMBER if constructing else GREEN)
 		_text(fob_card.position + Vector2(10, 16), "FORWARD OPERATING BASE // %s" % ("ASSEMBLY" if constructing else "ACTIVE"), 9, AMBER if constructing else GREEN, ui_scale)
-		draw_rect(Rect2(fob_card.position + Vector2(10, 27), Vector2(520, 8)), Color("#132a35"), true)
+		draw_rect(Rect2(fob_card.position + Vector2(10, 27), Vector2(520, 8)), PROGRESS_TRACK, true)
 		draw_rect(Rect2(fob_card.position + Vector2(10, 27), Vector2(520 * fob_progress, 8)), AMBER if constructing else GREEN, true)
 		_text(fob_card.position + Vector2(10, 55), "%.0f%%  //  M %.0f  //  %s" % [fob_progress * 100.0, float(fob_installation[5]), "CONSTRUCTING" if constructing else "ONLINE"], 10, INK, ui_scale)
 

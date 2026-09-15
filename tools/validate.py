@@ -37,6 +37,7 @@ CONTRACT_SCENARIOS = {
     "native_extension_smoke": ("test.gd", "RtsExtension smoke test passed"),
     "gdextension_boundary": ("test_gdextension_boundary.gd", "GDEXTENSION_BOUNDARY checks="),
     "hud_bridge": ("test_hud_bridge.gd", "HUD_BRIDGE checks="),
+    "build_catalog": ("test_build_catalog.gd", "BUILD_CATALOG checks=6 failures=0"),
     "skirmish_presentation": ("test_skirmish.gd", "GODOT_SKIRMISH_PRESENTATION"),
     "native_skirmish_match_to_result": ("test_native_skirmish.gd", "GODOT_NATIVE_SKIRMISH"),
     "terrain_contract": ("test_goal10_terrain.gd", "GODOT_GOAL10_TERRAIN"),
