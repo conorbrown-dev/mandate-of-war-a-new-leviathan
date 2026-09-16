@@ -489,7 +489,6 @@ TEST(roads_validate_construct_and_apply_traversal_benefit) {
           s.road_network().segments()[0].connected_segments.front() == s.road_network().segments()[1].id,
           "road segments record shared-endpoint connectivity");
     check(get_road_settings().material_cost == 180.0f &&
-          get_road_settings().energy_cost == 120.0f &&
           get_road_settings().traversal_cost < 1.0f,
           "road construction balance is loaded from content data");
     const int road_cell_x = s.pathfinding().to_grid_x(-16000.0f);
@@ -528,10 +527,8 @@ TEST(off_road_travel_accumulates_wear_and_roads_reduce_it) {
           "ground vehicles expose operational wear telemetry");
     check(off_distance > 10.0f && off_wear > road_wear * 2.0f && off_speed < road_speed,
           "long off-road movement accumulates more wear and a larger speed penalty than road travel");
-    const auto* road_energy = s.component_manager().get_component<Energy>(road_tank);
-    const auto* off_energy = s.component_manager().get_component<Energy>(off_road_tank);
-    check(road_energy && off_energy && off_energy->current < road_energy->current,
-          "off-road movement consumes more operational energy than road movement");
+    // Phase 1 removes the per-unit Energy wallet. Fuel consumption is a later
+    // logistics phase, so this scenario asserts terrain wear only.
     check(off_road_unit_factor(UnitType::INDUSTRIAL_ENGINEERING) >
           off_road_unit_factor(UnitType::ELITE_MAIN_BATTLE_TANK),
           "unit-specific off-road resilience is content-authored");

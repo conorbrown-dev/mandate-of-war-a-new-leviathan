@@ -7,6 +7,7 @@
 #include "spatial/spatial_grid.hpp"
 #include "simulation/simulation.hpp"
 #include "ecs/entity.hpp"
+#include "production/production_manager.hpp"
 
 TEST(unit_health_manager_initializes_health) {
     using namespace rts;
@@ -85,4 +86,56 @@ TEST(unit_health_restores_health) {
     if (health->current != 75.0f) {
         throw std::runtime_error("Health should restore to 75");
     }
+}
+
+TEST(tactical_resource_model_has_materials_fuel_and_power_without_research) {
+    using namespace rts;
+    Storage storage{};
+    storage.metal_storage = 400.0f;
+    storage.metal_capacity = 900.0f;
+    storage.energy_capacity = 600.0f;
+    ProductionManager production;
+    production.add_storage(42, storage);
+    auto* resources = production.tactical_resources(42);
+    if (!resources) throw std::runtime_error("Tactical resources were not created");
+    if (resources->materials.current != 400.0f || resources->materials.max != 900.0f)
+        throw std::runtime_error("Materials were not initialized from the compatibility bridge");
+    if (resources->fuel.current != 0.0f || resources->fuel.capacity != 600.0f)
+        throw std::runtime_error("Fuel state is not authoritative storage state");
+    if (resources->power.generation_mw != 0.0f || resources->power.demand_mw != 0.0f)
+        throw std::runtime_error("Power must start as generation/demand state, not a wallet");
+}
+
+TEST(tactical_power_reserve_reports_surplus_and_deficit) {
+    using namespace rts;
+    ProductionManager production;
+    production.add_storage(7, Storage{});
+    if (!production.set_tactical_power(7, 100.0f, 70.0f))
+        throw std::runtime_error("Could not set valid tactical power state");
+    auto* power = &production.tactical_resources(7)->power;
+    if (power->reserve_mw() != 30.0f || power->in_deficit())
+        throw std::runtime_error("Power surplus is incorrect");
+    if (!production.set_tactical_power(7, 50.0f, 80.0f))
+        throw std::runtime_error("Could not set deficit tactical power state");
+    if (power->reserve_mw() != -30.0f || !power->in_deficit())
+        throw std::runtime_error("Power deficit is incorrect");
+}
+
+TEST(tactical_extraction_routes_legacy_energy_to_fuel_and_ignores_research) {
+    using namespace rts;
+    ProductionManager production;
+    Storage storage{};
+    storage.metal_capacity = 100.0f;
+    storage.energy_capacity = 100.0f;
+    production.add_storage(1, storage);
+    production.add_resource_node(2, ResourceNode{0, 0, 50, 50, ResourceNode::Type::ENERGY, false});
+    production.extractors()[3] = Extractor{0, 0, 2, 10.0f, 0.0f, true, 1};
+    production.extract_resource(3, 50.0f);
+    if (production.tactical_resources(1)->fuel.current != 10.0f)
+        throw std::runtime_error("Tactical energy-node migration did not fill Fuel");
+    production.add_resource_node(4, ResourceNode{0, 0, 50, 50, ResourceNode::Type::RESEARCH, false});
+    production.extractors()[5] = Extractor{0, 0, 4, 10.0f, 0.0f, true, 1};
+    production.extract_resource(5, 50.0f);
+    if (production.resource_nodes().at(4).amount != 50.0f)
+        throw std::runtime_error("Tactical research node must not create a spendable balance");
 }

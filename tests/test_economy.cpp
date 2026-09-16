@@ -49,6 +49,21 @@ TEST(economy_storage_info) {
     sim.stop();
 }
 
+TEST(economy_tactical_storage_info) {
+    using namespace rts;
+    Simulation sim;
+    sim.start();
+    ::economy_add_tactical_storage(9, 10.0f, 20.0f, 500.0f, 300.0f, 100.0f, 70.0f);
+    float materials, materials_capacity, fuel, fuel_capacity, generation, demand, reserve;
+    if (!::economy_get_tactical_resources(9, &materials, &materials_capacity, &fuel, &fuel_capacity,
+            &generation, &demand, &reserve)) throw std::runtime_error("Expected tactical storage info");
+    if (materials != 0.0f || materials_capacity != 500.0f || fuel != 0.0f || fuel_capacity != 300.0f)
+        throw std::runtime_error("Tactical storage capacity state mismatch");
+    if (generation != 100.0f || demand != 70.0f || reserve != 30.0f)
+        throw std::runtime_error("Tactical power snapshot mismatch");
+    sim.stop();
+}
+
 TEST(economy_queue_size) {
     using namespace rts;
     

@@ -89,7 +89,7 @@ func _build_hover_context_for(rect: Rect2, entry: Dictionary, pointer: Vector2) 
 	return {
 		"key": "build:%s:%s" % [entry.get("type", ""), entry.get("is_structure", false)],
 		"title": "BUILD // %s" % String(entry.get("name", "UNIT")),
-		"detail": "WRENCH %.0f  //  BOLT %.0f  //  %.0f SEC  //  %s" % [float(entry.get("material", 0.0)), float(entry.get("energy", 0.0)), float(entry.get("build_seconds", 0.0)), "READY" if bool(entry.get("available", false)) else "LOCKED"],
+		"detail": "MATERIALS %.0f  //  %.0f SEC  //  %s" % [float(entry.get("material", 0.0)), float(entry.get("build_seconds", 0.0)), "READY" if bool(entry.get("available", false)) else "LOCKED"],
 		"accent": AMBER,
 	}
 
@@ -151,8 +151,6 @@ func _build_cell(rect: Rect2, entry: Dictionary, key: String, ui_scale: float = 
 	_text(rect.position + Vector2(39, 16), key, 8, PANEL, ui_scale)
 	_draw_ui_icon(Rect2(rect.position + Vector2(58, 5), Vector2(12, 12)), &"resource.material", Color("#47b9ff") if available else MUTED)
 	_text(rect.position + Vector2(69, 17), "%.0f" % float(entry.get("material", 0.0)), 9, INK if available else MUTED, ui_scale)
-	_draw_ui_icon(Rect2(rect.position + Vector2(58, 19), Vector2(12, 12)), &"resource.energy", Color("#ff9a3d") if available else MUTED)
-	_text(rect.position + Vector2(69, 31), "%.0f" % float(entry.get("energy", 0.0)), 9, INK if available else MUTED, ui_scale)
 
 
 func _draw_ui_icon(rect: Rect2, icon_id: StringName, color: Color) -> void:
@@ -216,12 +214,13 @@ func _draw() -> void:
 		_panel(reinforcement, CYAN)
 		_text(reinforcement.position + Vector2(10, 22), reinforcement_status, 10, CYAN, ui_scale)
 
-	var economy_width := 374.0
+	var economy_width := 494.0
 	var economy := Rect2(w - economy_width - 14.0, 12, economy_width, 56)
 	_panel(economy, GREEN)
-	_metric(Rect2(economy.position + Vector2(6, 5), Vector2(114, 46)), "MATERIAL", str(snapshot.get("material", "--")), String(snapshot.get("material_income", "")), Color("#47b9ff"), &"resource.material", ui_scale)
-	_metric(Rect2(economy.position + Vector2(126, 5), Vector2(114, 46)), "ENERGY", str(snapshot.get("energy", "--")), String(snapshot.get("energy_income", "")), Color("#ff9a3d"), &"resource.energy", ui_scale)
-	_metric(Rect2(economy.position + Vector2(246, 5), Vector2(122, 46)), "RESEARCH", str(snapshot.get("research", "--")), String(snapshot.get("research_income", "")), GREEN, &"resource.research", ui_scale)
+	_metric(Rect2(economy.position + Vector2(6, 5), Vector2(154, 46)), "MATERIALS", str(snapshot.get("materials", "--")), "CURRENT / CAPACITY", Color("#47b9ff"), &"resource.material", ui_scale)
+	_metric(Rect2(economy.position + Vector2(166, 5), Vector2(154, 46)), "FUEL", str(snapshot.get("fuel", "--")), "CURRENT / CAPACITY", AMBER, &"resource.fuel", ui_scale)
+	var power_accent := RED if bool(snapshot.get("power_deficit", false)) else GREEN
+	_metric(Rect2(economy.position + Vector2(326, 5), Vector2(162, 46)), "POWER", str(snapshot.get("power", "--")), String(snapshot.get("power_reserve", "")), power_accent, &"resource.power", ui_scale)
 
 	var selected_count := int(snapshot.get("selected", 0))
 	# Selection has no empty-state card; it appears only when it contains facts.
@@ -275,7 +274,7 @@ func _draw() -> void:
 		draw_rect(Rect2(fabrication.position + Vector2(10, 27), Vector2(520, 8)), PROGRESS_TRACK, true)
 		draw_rect(Rect2(fabrication.position + Vector2(10, 27), Vector2(520 * progress, 8)), GREEN, true)
 		_text(fabrication.position + Vector2(10, 55), "%s  %.0f%%  //  %.1f SEC REMAINING" % [String(active.get("name", "UNIT")).to_upper(), progress * 100.0, float(active.get("remaining_seconds", 0.0))], 10, INK, ui_scale)
-		_text(fabrication.position + Vector2(10, 73), "RESERVED: M %.0f  E %.0f  R %.0f" % [float(active.get("reserved_material", 0.0)), float(active.get("reserved_energy", 0.0)), float(active.get("reserved_research", 0.0))], 9, AMBER, ui_scale)
+		_text(fabrication.position + Vector2(10, 73), "RESERVED MATERIALS: %.0f" % float(active.get("reserved_material", 0.0)), 9, AMBER, ui_scale)
 
 	var fob_installation: Array = snapshot.get("fob_installation", [])
 	if fob_installation.size() >= 6:

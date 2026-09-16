@@ -24,7 +24,7 @@ func _initialize() -> void:
 	check(hostile_fighter_path == "res://assets/ui/symbols/nato/hostile/air/fighter.svg", "NATO affiliation selects a distinct generated symbol")
 	check(UiIconRegistryScript.get_icon(&"order.move") != null, "command icon is imported as a drawable Godot texture")
 	check(UiIconRegistryScript.get_nato_symbol(&"fighter", &"friendly") != null, "NATO symbol is imported as a drawable Godot texture")
-	for icon_id in [&"order.stop", &"combat.attack", &"construction.build", &"construction.demolish", &"resource.energy", &"resource.research"]:
+	for icon_id in [&"order.stop", &"combat.attack", &"construction.build", &"construction.demolish", &"resource.fuel", &"resource.power"]:
 		check(UiIconRegistryScript.get_icon(icon_id) != null, "HUD semantic icon loads as a drawable texture: %s" % icon_id)
 	check(UiIconRegistryScript.get_nato_symbol(&"medium_armor", &"friendly") != null, "NATO land symbol is imported as a drawable Godot texture")
 	check(UiIconRegistryScript.get_nato_symbol(&"patrol_boat", &"friendly") != null, "NATO naval symbol is imported as a drawable Godot texture")

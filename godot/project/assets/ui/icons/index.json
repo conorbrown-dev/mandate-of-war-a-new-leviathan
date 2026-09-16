@@ -1041,6 +1041,26 @@
     "path": "res://assets/ui/icons/resources/energy.svg",
     "aliases": []
   },
+  "resource.fuel": {
+    "id": "resource.fuel",
+    "label": "Fuel",
+    "category": "resources",
+    "description": "Tactical fuel reserve",
+    "source": "fontawesome",
+    "sourceIcon": "gas-pump",
+    "path": "res://assets/ui/icons/resources/energy.svg",
+    "aliases": []
+  },
+  "resource.power": {
+    "id": "resource.power",
+    "label": "Power",
+    "category": "resources",
+    "description": "Tactical power generation, demand, and reserve",
+    "source": "fontawesome",
+    "sourceIcon": "bolt",
+    "path": "res://assets/ui/icons/resources/energy.svg",
+    "aliases": []
+  },
   "resource.research": {
     "id": "resource.research",
     "label": "Research",

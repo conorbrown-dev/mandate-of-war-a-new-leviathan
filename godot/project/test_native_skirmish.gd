@@ -19,7 +19,7 @@ func _run() -> void:
 	check(view.load_error.is_empty(), "native route loads the validated deterministic scenario")
 	print("native state units=%d result=%d" % [view.state.get("units", []).size(), int(view.state.get("result", -2))])
 	check(int(view.state.get("result", -2)) == -1 and view.state.get("units", []).size() >= 24, "native route enters the authored two-landmass match with fog-limited state")
-	check(view.state.get("resources", []).size() == 3, "native route exposes authored Material, Energy, and Research fields")
+	check(view.state.has("materials") and view.state.has("fuel") and view.state.has("power_reserve_mw") and not view.state.has("research"), "native route exposes canonical tactical Materials, Fuel, and Power without a Research balance")
 	var aircraft_id := 0
 	var vessel_id := 0
 	for unit in view.state.get("units", []):
@@ -76,15 +76,15 @@ func _run() -> void:
 		if int(unit.get("id", 0)) == vessel_id:
 			vessel_state = unit
 	check(bool(vessel_state.get("stranded", false)), "native route exposes naval endurance exhaustion and stranding")
-	var material_before_resupply := float(view.extension.call("skirmish_state").get("material", 0.0))
+	var material_before_resupply := float(view.extension.call("skirmish_state").get("materials", 0.0))
 	check(int(view.extension.call("skirmish_command", 5, PackedInt32Array([vessel_id]), 0.0, 0.0, 0)) == 1, "native route accepts paid naval resupply through the return command")
 	for _tick in range(2):
 		view.extension.call("skirmish_update", 50.0)
 	for unit in view.extension.call("skirmish_state").get("units", []):
 		if int(unit.get("id", 0)) == vessel_id:
 			vessel_state = unit
-	check(not bool(vessel_state.get("stranded", true)) and float(vessel_state.get("fuel", 0.0)) > 90.0, "native route restores naval endurance from owned energy")
-	check(float(view.extension.call("skirmish_state").get("material", material_before_resupply)) < material_before_resupply, "native route deducts finite material stock for naval resupply")
+	check(not bool(vessel_state.get("stranded", true)) and float(vessel_state.get("fuel", 0.0)) > 90.0, "native route restores naval endurance from its existing vessel fuel system")
+	check(float(view.extension.call("skirmish_state").get("materials", material_before_resupply)) < material_before_resupply, "native route deducts finite material stock for naval resupply")
 	for _tick in range(20000):
 		if int(view.state.get("result", -1)) >= 0:
 			break

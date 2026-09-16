@@ -254,8 +254,6 @@ Entity Simulation::create_unit(float x, float y) {
     Health hp = {100.0f, 100.0f};
     
     Material mat = {100.0f, 1000.0f, 0.0f};
-    Energy en = {100.0f, 1000.0f, 0.0f, 0.0f};
-    Research rs = {0.0f, 1000.0f, 0.0f};
     
     Faction faction = {FactionId::ELITE_PRECISION};
     
@@ -265,8 +263,6 @@ Entity Simulation::create_unit(float x, float y) {
     component_manager_.add_component(entity.id, vel);
     component_manager_.add_component(entity.id, hp);
     component_manager_.add_component(entity.id, mat);
-    component_manager_.add_component(entity.id, en);
-    component_manager_.add_component(entity.id, rs);
     component_manager_.add_component(entity.id, faction);
     component_manager_.add_component(entity.id, wep);
     
@@ -411,6 +407,10 @@ void Simulation::return_unit(EntityId entity) {
             funds->second.metal_storage >= material_cost) {
             funds->second.energy_storage -= needed;
             funds->second.metal_storage -= material_cost;
+            // TEMPORARY Phase-2 bridge: naval recovery still consumes its
+            // legacy logistics budget, so preserve the canonical Materials
+            // snapshot until the logistics fuel migration removes this path.
+            funds->second.tactical.materials.current = funds->second.metal_storage;
             logistics_manager_.resupply_naval_vessel(entity, needed);
         }
         stop_unit(entity);
@@ -958,10 +958,6 @@ void Simulation::prediction_phase(float delta_ms) {
                     material->current = std::max(0.0f, material->current -
                         distance_traveled * settings.material_per_meter * terrain_factor * unit_factor);
                 }
-                if (auto* energy = component_manager_.get_component<Energy>(entity_id)) {
-                    energy->current = std::max(0.0f, energy->current -
-                        distance_traveled * settings.energy_per_meter * terrain_factor * unit_factor);
-                }
             }
         }
         if (auto* aircraft = component_manager_.get_component<Aircraft>(entity_id)) {
@@ -1172,9 +1168,9 @@ bool Simulation::request_reinforcement_delivery(FactionId player) {
     const EntityId line = production_manager_.faction_line(player);
     const auto storage = production_manager_.storages().find(line);
     const bool funded = storage != production_manager_.storages().end() &&
-        storage->second.metal_storage >= package.material_cost && storage->second.energy_storage >= package.energy_cost;
+        storage->second.tactical.materials.current >= package.material_cost;
     if (!reinforcement_delivery_.request(funded)) return false;
-    return production_manager_.deduct_faction_resources(player, package.material_cost, package.energy_cost);
+    return production_manager_.deduct_faction_resources(player, package.material_cost, 0.0f);
 }
 
 void Simulation::set_reinforcement_resources(FactionId faction, float material, float energy) {
@@ -1183,6 +1179,9 @@ void Simulation::set_reinforcement_resources(FactionId faction, float material, 
     if (storage == production_manager_.storages().end()) return;
     storage->second.metal_storage = std::max(0.0f, material);
     storage->second.energy_storage = std::max(0.0f, energy);
+    storage->second.tactical.materials.current = storage->second.metal_storage;
+    storage->second.tactical.fuel.current = std::min(storage->second.energy_storage,
+                                                       storage->second.tactical.fuel.capacity);
 }
 
 float Simulation::get_unit_x(EntityId entity) const {
@@ -1560,6 +1559,20 @@ extern "C" {
         storage.research_storage = 0.0f;
         
         get_simulation()->production_manager().add_storage(static_cast<EntityId>(storage_id), storage);
+    }
+
+    void economy_add_tactical_storage(int storage_id, float x, float y, float materials_capacity,
+                                      float fuel_capacity, float power_generation_mw, float power_demand_mw) {
+        if (!std::isfinite(materials_capacity) || !std::isfinite(fuel_capacity) ||
+            materials_capacity < 0.0f || fuel_capacity < 0.0f) return;
+        rts::Storage storage{};
+        storage.x = x; storage.y = y;
+        storage.tactical.materials = {0.0f, materials_capacity, 0.0f};
+        storage.tactical.fuel = {0.0f, fuel_capacity};
+        storage.tactical.power = {power_generation_mw, power_demand_mw};
+        get_simulation()->production_manager().add_storage(static_cast<EntityId>(storage_id), storage);
+        auto* resources = get_simulation()->production_manager().tactical_resources(static_cast<EntityId>(storage_id));
+        if (resources) *resources = storage.tactical;
     }
 
     void economy_add_production_line(int line_id, int storage_id, float build_speed_metal, float build_speed_energy, int max_jobs) {
@@ -2036,7 +2049,7 @@ bool Simulation::queue_road(EntityId engineer, FactionId owner, float start_x, f
 
     const float length = std::hypot(end_x - start_x, end_y - start_y);
     const auto& road_settings = get_road_settings();
-    if (!production_manager_.deduct_faction_resources(owner, road_settings.material_cost, road_settings.energy_cost)) return false;
+    if (!production_manager_.deduct_faction_resources(owner, road_settings.material_cost, 0.0f)) return false;
     return road_network_.queue(
         engineer, owner, start_x, start_y, end_x, end_y,
         road_settings.construction_time_base_seconds + length * road_settings.construction_time_per_meter);
@@ -2177,8 +2190,6 @@ int rts::Simulation::create_unit_with_type(float x, float y, rts::UnitType unit_
     Health hp = {proto.hp, proto.hp};
     
     Material mat = {100.0f, 1000.0f, 0.0f};
-    Energy en = {100.0f, 1000.0f, 0.0f, 0.0f};
-    Research rs = {0.0f, 1000.0f, 0.0f};
     
     Faction faction = {faction_id};
     
@@ -2189,8 +2200,6 @@ int rts::Simulation::create_unit_with_type(float x, float y, rts::UnitType unit_
     component_manager_.add_component(entity.id, vel);
     component_manager_.add_component(entity.id, hp);
     component_manager_.add_component(entity.id, mat);
-    component_manager_.add_component(entity.id, en);
-    component_manager_.add_component(entity.id, rs);
     component_manager_.add_component(entity.id, faction);
     component_manager_.add_component(entity.id, wep);
     component_manager_.add_component(entity.id, UnitData{proto.speed, proto.view_range});
@@ -2462,6 +2471,24 @@ extern "C" {
         *out_metal_capacity = it->second.metal_capacity;
         *out_energy_capacity = it->second.energy_capacity;
         *out_research_capacity = it->second.research_capacity;
+        return true;
+    }
+
+    bool economy_get_tactical_resources(int storage_id, float* out_materials, float* out_materials_capacity,
+                                        float* out_fuel, float* out_fuel_capacity,
+                                        float* out_power_generation_mw, float* out_power_demand_mw,
+                                        float* out_power_reserve_mw) {
+        if (!out_materials || !out_materials_capacity || !out_fuel || !out_fuel_capacity ||
+            !out_power_generation_mw || !out_power_demand_mw || !out_power_reserve_mw) return false;
+        const auto* resources = get_simulation()->production_manager().tactical_resources(static_cast<EntityId>(storage_id));
+        if (!resources) return false;
+        *out_materials = resources->materials.current;
+        *out_materials_capacity = resources->materials.max;
+        *out_fuel = resources->fuel.current;
+        *out_fuel_capacity = resources->fuel.capacity;
+        *out_power_generation_mw = resources->power.generation_mw;
+        *out_power_demand_mw = resources->power.demand_mw;
+        *out_power_reserve_mw = resources->power.reserve_mw();
         return true;
     }
     

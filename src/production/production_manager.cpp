@@ -17,25 +17,6 @@ constexpr float structure_metal_cost(uint8_t structure_type) {
     }
 }
 
-constexpr float structure_energy_cost(uint8_t structure_type) {
-    switch (structure_type) {
-        case 0: return 150.0f;
-        case 1: return 250.0f;
-        case 2: return 400.0f;
-        case 3: return 620.0f;
-        default: return 0.0f;
-    }
-}
-
-constexpr float structure_research_cost(uint8_t structure_type) {
-    switch (structure_type) {
-        case 0: return 0.0f;
-        case 1: return 100.0f;
-        case 2: return 150.0f;
-        case 3: return 80.0f;
-        default: return 0.0f;
-    }
-}
 
 constexpr float structure_build_seconds(uint8_t structure_type) {
     switch (structure_type) {
@@ -72,8 +53,6 @@ void ProductionManager::add_unit_to_queue(EntityId production_line_id, FactionId
     float discount = (faction_it != faction_data.end()) ? faction_it->second.unit_cost_discount : 0.0f;
     
     float material_cost = it->second.material_cost * (1.0f + discount);
-    float energy_cost = it->second.energy_cost * (1.0f + discount);
-    float research_cost = it->second.research_cost * (1.0f + discount);
     
     ConstructionQueueEntry entry{};
     entry.entity_id = NULL_ENTITY;  // Will be assigned when unit is spawned
@@ -82,11 +61,7 @@ void ProductionManager::add_unit_to_queue(EntityId production_line_id, FactionId
     entry.faction_id = faction_id;
     entry.build_progress = 0.0f;
     entry.total_cost_metal = material_cost;
-    entry.total_cost_energy = energy_cost;
-    entry.total_cost_research = research_cost;
     entry.metal_per_tick = material_cost / (it->second.build_time_seconds * 20.0f);  // 20 ticks per second
-    entry.energy_per_tick = energy_cost / (it->second.build_time_seconds * 20.0f);
-    entry.research_per_tick = research_cost / (it->second.build_time_seconds * 20.0f);
     entry.build_time_seconds = it->second.build_time_seconds;
     entry.completed = false;
     
@@ -113,30 +88,65 @@ void ProductionManager::extract_resource(EntityId extractor_id, float delta_ms) 
     if (storage != storages_.end()) {
         float capacity;
         switch (node.type) {
-            case ResourceNode::Type::METAL: balance = &storage->second.metal_storage; capacity = storage->second.metal_capacity; break;
-            case ResourceNode::Type::ENERGY: balance = &storage->second.energy_storage; capacity = storage->second.energy_capacity; break;
-            case ResourceNode::Type::RESEARCH: balance = &storage->second.research_storage; capacity = storage->second.research_capacity; break;
-            default: return;
+            case ResourceNode::Type::METAL:
+                balance = &storage->second.tactical.materials.current;
+                capacity = storage->second.tactical.materials.max;
+                break;
+            case ResourceNode::Type::ENERGY:
+                balance = &storage->second.tactical.fuel.current;
+                capacity = storage->second.tactical.fuel.capacity;
+                break;
+            case ResourceNode::Type::RESEARCH:
+                return; // strategic-only; tactical extractors do not collect it.
         }
         amount = std::min(amount, std::max(0.0f, capacity - *balance));
     }
     if (amount <= 0) return;
     if (balance) *balance += amount;
+    if (storage != storages_.end() && node.type == ResourceNode::Type::METAL)
+        storage->second.metal_storage = storage->second.tactical.materials.current;
     node.amount -= amount;
     node.depleted = node.amount <= 0;
     ++extraction_count_;
 }
 
 void ProductionManager::add_storage(EntityId storage_id, const Storage& storage) {
-    storages_[storage_id] = storage;
+    Storage migrated = storage;
+    // TEMPORARY Phase-1 bridge: legacy content creates Energy wallets.  They
+    // are not Power; preserve them solely for old queues while exposing a
+    // capacity-based Power state to new code. Remove in Phase 2.
+    migrated.tactical.materials = {storage.metal_storage, storage.metal_capacity, 0.0f};
+    migrated.tactical.fuel = {0.0f, storage.energy_capacity};
+    migrated.tactical.power = {0.0f, 0.0f};
+    storages_[storage_id] = migrated;
+}
+
+const TacticalResources* ProductionManager::tactical_resources(EntityId storage_id) const {
+    const auto it = storages_.find(storage_id);
+    return it == storages_.end() ? nullptr : &it->second.tactical;
+}
+
+TacticalResources* ProductionManager::tactical_resources(EntityId storage_id) {
+    const auto it = storages_.find(storage_id);
+    return it == storages_.end() ? nullptr : &it->second.tactical;
+}
+
+bool ProductionManager::set_tactical_power(EntityId storage_id, float generation_mw, float demand_mw) {
+    if (!std::isfinite(generation_mw) || !std::isfinite(demand_mw) || generation_mw < 0.0f || demand_mw < 0.0f) return false;
+    auto* resources = tactical_resources(storage_id);
+    if (!resources) return false;
+    resources->power = {generation_mw, demand_mw};
+    return true;
 }
 
 void ProductionManager::update_storage(EntityId storage_id, float metal, float energy, float research) {
     auto it = storages_.find(storage_id);
     if (it != storages_.end()) {
-        it->second.metal_storage += metal;
-        it->second.energy_storage += energy;
-        it->second.research_storage += research;
+        it->second.tactical.materials.current = std::clamp(it->second.tactical.materials.current + metal, 0.0f, it->second.tactical.materials.max);
+        it->second.tactical.fuel.current = std::clamp(it->second.tactical.fuel.current + energy, 0.0f, it->second.tactical.fuel.capacity);
+        it->second.metal_storage = it->second.tactical.materials.current;
+        it->second.energy_storage = it->second.tactical.fuel.current;
+        (void)research; // Research is not a tactical balance.
     }
 }
 
@@ -191,11 +201,10 @@ void ProductionManager::update_construction_queues(float delta_ms) {
         const float fraction = std::min(dt / entry.build_time_seconds, 1.0f - entry.build_progress);
         const float ticks = fraction * entry.build_time_seconds * 20.0f;
         float metal = entry.metal_per_tick * ticks;
-        float energy = entry.energy_per_tick * ticks;
-        float research = entry.research_per_tick * ticks;
         auto& funds = storage->second;
-        if (funds.metal_storage < metal || funds.energy_storage < energy || funds.research_storage < research) continue;
-        funds.metal_storage -= metal; funds.energy_storage -= energy; funds.research_storage -= research;
+        if (funds.tactical.materials.current < metal) continue;
+        funds.tactical.materials.current -= metal;
+        funds.metal_storage = funds.tactical.materials.current;
         entry.build_progress += fraction;
         line.active_jobs = 1;
         if (entry.build_progress >= 1.0f - 0.0001f) {
@@ -348,20 +357,8 @@ bool ProductionManager::can_produce_unit(FactionId faction_id, UnitType unit_typ
         return false;
     }
     
-    auto research_it = faction_research_.find(faction_id);
-    if (research_it == faction_research_.end()) {
-        return it->second.research_prerequisites.empty();
-    }
-    
-    const auto& faction_research = research_it->second;
-    
-    for (const auto& prereq : it->second.research_prerequisites) {
-        auto completed_it = faction_research.completed_projects.find(prereq);
-        if (completed_it == faction_research.completed_projects.end() || !completed_it->second) {
-            return false;
-        }
-    }
-    
+    // Research prerequisites are strategic-authorization metadata. Until that
+    // system exists, they must not block tactical content acquisition.
     return true;
 }
 
@@ -380,21 +377,6 @@ float ProductionManager::get_unit_metal_cost(FactionId faction_id, UnitType unit
     return it->second.material_cost * (1.0f + discount);
 }
 
-float ProductionManager::get_unit_energy_cost(FactionId faction_id, UnitType unit_type) const {
-    const auto& prototypes = get_unit_prototypes();
-    auto it = prototypes.find(unit_type);
-    if (it == prototypes.end()) {
-        return 0.0f;
-    }
-    
-    // Apply faction discount/bonus
-    const auto& faction_data = get_faction_start_data();
-    auto faction_it = faction_data.find(faction_id);
-    float discount = (faction_it != faction_data.end()) ? faction_it->second.unit_cost_discount : 0.0f;
-    
-    return it->second.energy_cost * (1.0f + discount);
-}
-
 bool ProductionManager::deduct_faction_resources(FactionId faction, float metal, float energy) {
     auto line_it = production_lines_.find(faction_line(faction));
     if (line_it == production_lines_.end()) return false;
@@ -403,27 +385,12 @@ bool ProductionManager::deduct_faction_resources(FactionId faction, float metal,
     if (storage_it == storages_.end()) return false;
     
     auto& funds = storage_it->second;
-    if (funds.metal_storage < metal || funds.energy_storage < energy) return false;
-    
-    funds.metal_storage -= metal;
-    funds.energy_storage -= energy;
+    if (funds.tactical.materials.current < metal) return false;
+    funds.tactical.materials.current -= metal;
+    funds.metal_storage = funds.tactical.materials.current;
+    (void)energy; // temporary signature bridge; Power is not spent.
     return true;
 }
-
-float ProductionManager::get_unit_research_cost(FactionId faction_id, UnitType unit_type) const {
-    const auto& prototypes = get_unit_prototypes();
-    auto it = prototypes.find(unit_type);
-    if (it == prototypes.end()) {
-        return 0.0f;
-    }
-    
-    // Apply faction discount/bonus
-    const auto& faction_data = get_faction_start_data();
-    auto faction_it = faction_data.find(faction_id);
-    float discount = (faction_it != faction_data.end()) ? faction_it->second.unit_cost_discount : 0.0f;
-    
-     return it->second.research_cost * (1.0f + discount);
- }
 
 float ProductionManager::get_build_time_seconds(UnitType unit_type) const {
      const auto& prototypes = get_unit_prototypes();
@@ -450,18 +417,14 @@ bool ProductionManager::can_queue_unit(EntityId line_id, FactionId faction, Unit
     if (faction_line(faction) != line_id || line == production_lines_.end() ||
         proto == get_unit_prototypes().end() || proto->second.faction != faction ||
         line->second.queue.size() >= static_cast<size_t>(line->second.max_jobs)) return false;
-    const auto& state = research(faction);
-    for (const auto& prerequisite : proto->second.research_prerequisites) {
-        auto it = state.completed_projects.find(prerequisite);
-        if (it == state.completed_projects.end() || !it->second) return false;
-    }
+    // Strategic authorization is a later migration. Tactical acquisition must
+    // not use Research-project completion as a currency-like availability gate.
     auto storage = storages_.find(line->second.storage_id);
     if (storage == storages_.end()) return false;
     const auto& funds = storage->second;
     const auto& p = proto->second;
     const float ferry_material = p.is_aircraft && p.requires_runway ? p.operational_material : 0.0f;
-    const float ferry_energy = p.is_aircraft && p.requires_runway ? p.operational_energy : 0.0f;
-    return funds.metal_storage >= p.material_cost + ferry_material && funds.energy_storage >= p.energy_cost + ferry_energy;
+    return funds.tactical.materials.current >= p.material_cost + ferry_material;
 }
 bool ProductionManager::queue_unit(EntityId line_id, FactionId faction, UnitType type, float x, float y) {
     if (!can_queue_unit(line_id, faction, type)) return false;
@@ -470,13 +433,12 @@ bool ProductionManager::queue_unit(EntityId line_id, FactionId faction, UnitType
     auto& funds = storages_.at(line.storage_id);
     // Reserve full build costs once. Research is spent on projects, not units.
     const float ferry_material = p.is_aircraft && p.requires_runway ? p.operational_material : 0.0f;
-    const float ferry_energy = p.is_aircraft && p.requires_runway ? p.operational_energy : 0.0f;
-    funds.metal_storage -= p.material_cost + ferry_material;
-    funds.energy_storage -= p.energy_cost + ferry_energy;
+    funds.tactical.materials.current -= p.material_cost + ferry_material;
+    funds.metal_storage = funds.tactical.materials.current;
     ConstructionQueueEntry entry{};
     entry.type = ConstructionQueueEntry::Type::UNIT;
     entry.unit_type = type; entry.faction_id = faction;
-    entry.total_cost_metal = p.material_cost + ferry_material; entry.total_cost_energy = p.energy_cost + ferry_energy;
+    entry.total_cost_metal = p.material_cost + ferry_material; entry.total_cost_energy = 0.0f;
     entry.build_time_seconds = p.build_time_seconds;
     entry.target_x = x; entry.target_y = y;
     line.queue.push(entry);
@@ -489,17 +451,13 @@ bool ProductionManager::can_queue_structure(EntityId line_id, FactionId faction,
     auto storage = storages_.find(line->second.storage_id);
     if (storage == storages_.end()) return false;
     const float metal = structure_metal_cost(structure_type);
-    const float energy = structure_energy_cost(structure_type);
-    const float research = structure_research_cost(structure_type);
     const auto& funds = storage->second;
-    return funds.metal_storage >= metal && funds.energy_storage >= energy && funds.research_storage >= research;
+    return funds.tactical.materials.current >= metal;
 }
 bool ProductionManager::queue_structure(EntityId line_id, FactionId faction, uint8_t structure_type, float x, float y) {
     if (!can_queue_structure(line_id, faction, structure_type)) return false;
     auto& line = production_lines_.at(line_id);
     const float metal = structure_metal_cost(structure_type);
-    const float energy = structure_energy_cost(structure_type);
-    const float research_cost = structure_research_cost(structure_type);
     ConstructionQueueEntry entry{};
     entry.type = ConstructionQueueEntry::Type::BUILDING;
     entry.unit_type = static_cast<UnitType>(0);
@@ -507,12 +465,10 @@ bool ProductionManager::queue_structure(EntityId line_id, FactionId faction, uin
     entry.structure_type = structure_type;
     entry.display_name = structure_display_name(structure_type);
     entry.total_cost_metal = metal;
-    entry.total_cost_energy = energy;
-    entry.total_cost_research = research_cost;
+    entry.total_cost_energy = 0.0f;
     entry.build_time_seconds = structure_build_seconds(structure_type);
     entry.metal_per_tick = entry.total_cost_metal / (entry.build_time_seconds * 20.0f);
-    entry.energy_per_tick = entry.total_cost_energy / (entry.build_time_seconds * 20.0f);
-    entry.research_per_tick = entry.total_cost_research / (entry.build_time_seconds * 20.0f);
+    entry.energy_per_tick = 0.0f;
     entry.target_x = x; entry.target_y = y;
     line.queue.push(std::move(entry));
     return true;
@@ -529,8 +485,7 @@ bool ProductionManager::can_queue_requisition(EntityId line_id, FactionId factio
     const auto& funds = storage->second;
     const auto& p = proto->second;
     const float ferry_material = p.is_aircraft && p.requires_runway ? p.operational_material : 0.0f;
-    const float ferry_energy = p.is_aircraft && p.requires_runway ? p.operational_energy : 0.0f;
-    return funds.metal_storage >= p.material_cost + ferry_material && funds.energy_storage >= p.energy_cost + ferry_energy;
+    return funds.tactical.materials.current >= p.material_cost + ferry_material;
 }
 bool ProductionManager::queue_requisition(EntityId line_id, FactionId faction, UnitType type, float x, float y) {
     if (!can_queue_requisition(line_id, faction, type, x, y)) return false;
@@ -538,19 +493,17 @@ bool ProductionManager::queue_requisition(EntityId line_id, FactionId faction, U
     auto& funds = storages_.at(line.storage_id);
     const auto& p = get_unit_prototypes().at(type);
     float ferry_material = 0.0f;
-    float ferry_energy = 0.0f;
     if (p.is_aircraft && p.requires_runway) {
         ferry_material = p.operational_material;
-        ferry_energy = p.operational_energy;
     }
-    funds.metal_storage -= p.material_cost + ferry_material;
-    funds.energy_storage -= p.energy_cost + ferry_energy;
+    funds.tactical.materials.current -= p.material_cost + ferry_material;
+    funds.metal_storage = funds.tactical.materials.current;
     ConstructionQueueEntry entry{};
     entry.type = ConstructionQueueEntry::Type::UNIT;
     entry.unit_type = type;
     entry.faction_id = faction;
     entry.total_cost_metal = p.material_cost + ferry_material;
-    entry.total_cost_energy = p.energy_cost + ferry_energy;
+    entry.total_cost_energy = 0.0f;
     entry.build_time_seconds = p.build_time_seconds;
     entry.target_x = x;
     entry.target_y = y;

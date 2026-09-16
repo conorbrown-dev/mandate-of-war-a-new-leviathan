@@ -3,7 +3,7 @@ extends Node3D
 const DEFAULT_UNIT_COUNT := 1000
 const DEFAULT_SKIRMISH_PATH := "res://scenarios/commander_start_skirmish.json"
 const SKIRMISH_PRESENTATION_STARTING_MATERIALS := 5000.0
-const SKIRMISH_PRESENTATION_STARTING_ENERGY := 5000.0
+const SKIRMISH_PRESENTATION_STARTING_FUEL := 5000.0
 const UNIT_SPACING := 3.0
 const UNIT_BASE_COLOR := Color(0.12, 0.62, 1.0, 1.0)
 const UNIT_SELECTED_COLOR := Color(1.0, 0.72, 0.08, 1.0)
@@ -305,7 +305,8 @@ var profile_max_multimesh_upload_ms := 0.0
 
 
 func _setup_economy_for_player_1() -> void:
-	extension.call("economy_add_storage", 1, 0.0, 0.0, 5000.0, 5000.0, 1000.0)
+	extension.call("economy_add_tactical_storage", 1, 0.0, 0.0,
+		SKIRMISH_PRESENTATION_STARTING_MATERIALS, SKIRMISH_PRESENTATION_STARTING_FUEL, 0.0, 0.0)
 	extension.call("economy_add_production_line", 1, 1, 100.0, 100.0, 5)
 
 
@@ -882,7 +883,7 @@ func _on_start_skirmish_pressed() -> void:
 	# This presentation skirmish is a build-test sandbox, not an economy slice.
 	# Resource generation and capture remain authoritative native systems.
 	extension.call("reinforcement_delivery_set_resources", HUMAN_PLAYER_ID,
-		SKIRMISH_PRESENTATION_STARTING_MATERIALS, SKIRMISH_PRESENTATION_STARTING_ENERGY)
+		SKIRMISH_PRESENTATION_STARTING_MATERIALS, SKIRMISH_PRESENTATION_STARTING_FUEL)
 	_spawn_material_sites()
 	_spawn_civilian_buildings()
 	_set_selected(_player_engineer_id(), true)
@@ -1893,7 +1894,7 @@ func _update_hover_context() -> void:
 				next_context = {
 					"key": "structure:%s" % structure.get_instance_id(),
 					"title": "FRIENDLY // %s" % _structure_display_name(structure_type),
-					"detail": "WRENCH %.0f  //  BOLT %.0f  //  TACTICAL INSTALLATION" % [_structure_material_cost(structure_type), _structure_energy_cost(structure_type)],
+					"detail": "MATERIALS %.0f  //  TACTICAL INSTALLATION" % _structure_material_cost(structure_type),
 					"accent": Color("#47d9ff"),
 				}
 	if next_context.get("key", "") == hover_context.get("key", ""):
@@ -3087,7 +3088,7 @@ func _spawn_completed_structure_view(structure_type: int, target: Vector2) -> vo
 		root.add_child(lamp)
 	var status := Label3D.new()
 	status.name = "StructureStatus"
-	status.text = "%s\nWRENCH %.0f  //  BOLT %.0f" % [_structure_display_name(structure_type), _structure_material_cost(structure_type), _structure_energy_cost(structure_type)]
+	status.text = "%s\nMATERIALS %.0f" % [_structure_display_name(structure_type), _structure_material_cost(structure_type)]
 	status.position.y = 18.0 if structure_type == 3 else 11.0 if structure_type == 1 else 5.0
 	status.font_size = 42
 	status.outline_size = 8
@@ -3122,10 +3123,6 @@ func _structure_display_name(structure_type: int) -> String:
 
 func _structure_material_cost(structure_type: int) -> float:
 	return 300.0 if structure_type == 0 else 450.0 if structure_type == 1 else 600.0 if structure_type == 2 else 380.0
-
-
-func _structure_energy_cost(structure_type: int) -> float:
-	return 150.0 if structure_type == 0 else 250.0 if structure_type == 1 else 400.0 if structure_type == 2 else 620.0
 
 
 func _sync_construction_frames(queue: Array) -> void:
@@ -3237,7 +3234,7 @@ func _update_hud() -> void:
 		Engine.get_frames_per_second(),
 		hud_state.get("tick_ms", 0.0),
 	]).to_upper()
-	var storage: Array = hud_state.get("storage", [])
+	var tactical_resources: Array = hud_state.get("tactical_resources", [])
 	var selection_detail := "Drag-select a force to inspect it."
 	if material_order_mode == 1:
 		selection_detail = "CLAIM MODE  •  RIGHT-CLICK A MATERIAL FACILITY"
@@ -3296,12 +3293,11 @@ func _update_hud() -> void:
 		"fob_installation": fob_installation,
 		"fob_completion_notification": fob_completion_notification,
 		"build_catalog": hud_state.get("build_catalog", []),
-		"material": _hud_resource(storage, 0),
-		"energy": _hud_resource(storage, 1),
-		"research": _hud_resource(storage, 2),
-		"material_income": "",
-		"energy_income": "",
-		"research_income": "",
+		"materials": _hud_resource_pair(tactical_resources, 0, 1),
+		"fuel": _hud_resource_pair(tactical_resources, 2, 3),
+		"power": _hud_power(tactical_resources),
+		"power_reserve": _hud_power_reserve(tactical_resources),
+		"power_deficit": tactical_resources.size() >= 7 and float(tactical_resources[6]) < 0.0,
 		"tick": hud_state.get("tick_ms", 0.0),
 		"fps": Engine.get_frames_per_second(),
 		"engine": "ONLINE",
@@ -3311,10 +3307,22 @@ func _update_hud() -> void:
 	_sync_strategic_command()
 
 
-func _hud_resource(storage: Array, index: int) -> String:
-	if storage.size() <= index:
+func _hud_resource_pair(resources: Array, current_index: int, capacity_index: int) -> String:
+	if resources.size() <= capacity_index:
 		return "--"
-	return "%.0f" % float(storage[index])
+	return "%.0f / %.0f" % [float(resources[current_index]), float(resources[capacity_index])]
+
+
+func _hud_power(resources: Array) -> String:
+	if resources.size() <= 5:
+		return "--"
+	return "%.0f MW / %.0f MW" % [float(resources[4]), float(resources[5])]
+
+
+func _hud_power_reserve(resources: Array) -> String:
+	if resources.size() <= 6:
+		return ""
+	return "RESERVE %+.0f MW" % float(resources[6])
 
 
 func _selected_unit_snapshot(entity_id: int, health: Array = []) -> Dictionary:

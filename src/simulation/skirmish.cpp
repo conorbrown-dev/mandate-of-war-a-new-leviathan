@@ -200,19 +200,19 @@ uint64_t Skirmish::checksum() {
     auto& production=simulation_.production_manager();
     for(int f=0;f<2;++f) {
         const auto funds=production.storages().find(bases_[f]);
-        if(funds!=production.storages().end()) { real(funds->second.metal_storage); real(funds->second.energy_storage); real(funds->second.research_storage); }
+        if (funds != production.storages().end()) {
+            // Tactical resource determinism is based on the Phase-1 canonical
+            // state. Research is strategic metadata and intentionally absent.
+            const auto& resources = funds->second.tactical;
+            real(resources.materials.current); real(resources.materials.max);
+            real(resources.fuel.current); real(resources.fuel.capacity);
+            real(resources.power.generation_mw); real(resources.power.demand_mw);
+        }
         auto line=production.production_lines().find(bases_[f]);
         if(line!=production.production_lines().end()) {
             auto queue=line->second.queue; add(queue.size());
             while(!queue.empty()) { add(static_cast<int>(queue.front().unit_type)); real(queue.front().build_progress); queue.pop(); }
         }
-        const auto& research=production.research(static_cast<FactionId>(f));
-        for(uint32_t i=0;i<get_research_projects().size();++i) {
-            const auto id=Simulation::research_id(i);
-            auto done=research.completed_projects.find(id); add(done!=research.completed_projects.end() && done->second);
-            add(!research.active_queue.empty() && research.active_queue.front()==id);
-        }
-        real(production.research_progress(static_cast<FactionId>(f)));
     }
     for(const auto& shot:simulation_.combat_manager().projectile_manager().projectiles()) {
         real(shot.x); real(shot.y); real(shot.vel_x); real(shot.vel_y); real(shot.time_alive); add(static_cast<int>(shot.faction_id));

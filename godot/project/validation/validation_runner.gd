@@ -400,9 +400,9 @@ func _scenario_reinforcement_delivery_smoke() -> void:
 	view.call("_on_start_skirmish_pressed")
 	var extension: Object = view.get("extension")
 	var human_command_storage := int(view.get("commander_ids").get(0, -1))
-	var starting_funds: Array = extension.call("economy_get_storage_info", human_command_storage)
-	_check(starting_funds.size() >= 2 and float(starting_funds[0]) == 5000.0 and float(starting_funds[1]) == 5000.0,
-		"reinforcement.presentation_starting_resources", "The presentation skirmish starts with a 5,000 Materials and Energy build-test budget")
+	var starting_funds: Array = extension.call("economy_get_tactical_resources", human_command_storage)
+	_check(starting_funds.size() >= 4 and float(starting_funds[0]) == 5000.0 and float(starting_funds[2]) == 5000.0,
+		"reinforcement.presentation_starting_resources", "The presentation skirmish starts with 5,000 Materials and Fuel for tactical resource presentation")
 	var engineer_catalog: Array = view.call("_build_unit_catalog")
 	var engineer_offers_aircraft := false
 	for entry in engineer_catalog:
@@ -430,7 +430,7 @@ func _scenario_reinforcement_delivery_smoke() -> void:
 	var delivery: Dictionary = extension.call("reinforcement_delivery_state")
 	_check(bool(view.get("reinforcement_delivery_enabled")) and int(delivery.get("state", 0)) == 2 and Vector2(float(delivery.get("x", 0.0)), float(delivery.get("y", 0.0))).distance_to(airfield_position) <= 0.01, "reinforcement.ready", "A single completed airfield automatically becomes the selected native delivery anchor")
 	var line := int(view.get("commander_ids").get(0, -1))
-	var funds_before: Array = extension.call("economy_get_storage_info", line)
+	var funds_before: Array = extension.call("economy_get_tactical_resources", line)
 	var zone := Vector2(float(delivery.get("x", 0.0)), float(delivery.get("y", 0.0)))
 	_focus_camera_on_position(view, zone, 420.0)
 	view.call("_update_reinforcement_presentation")
@@ -451,8 +451,8 @@ func _scenario_reinforcement_delivery_smoke() -> void:
 	var delivery_presentation: Node = view.get("reinforcement_presentation")
 	var inbound_f15: Node3D = delivery_presentation.get("transport") if delivery_presentation != null else null
 	_check(inbound_f15 != null and inbound_f15.scene_file_path.ends_with("industrial_fighter_f15c.glb"), "reinforcement.inbound_uses_f15c", "The delivery fly-in uses the registered F-15C scene", {"scene_file_path": inbound_f15.scene_file_path if inbound_f15 != null else ""})
-	var funds_after_request: Array = extension.call("economy_get_storage_info", line)
-	_check(funds_after_request.size() >= 2 and funds_before.size() >= 2 and float(funds_after_request[0]) == float(funds_before[0]) - 260.0 and float(funds_after_request[1]) == float(funds_before[1]) - 140.0, "reinforcement.cost_once", "Materials and Energy are deducted exactly once")
+	var funds_after_request: Array = extension.call("economy_get_tactical_resources", line)
+	_check(funds_after_request.size() >= 4 and funds_before.size() >= 4 and float(funds_after_request[0]) == float(funds_before[0]) - 260.0 and float(funds_after_request[2]) == float(funds_before[2]), "reinforcement.cost_once", "Materials are deducted exactly once; Fuel is not a construction wallet")
 	view.call("_close_strategic_command")
 	extension.call("update_simulation", 1000.0)
 	view.call("_sync_new_entities")
@@ -749,10 +749,10 @@ func _scenario_road_construction() -> void:
 	_check(preview.albedo_color.b > preview.albedo_color.r, "road.valid_preview", "Valid road preview uses the normal placement color")
 	await _capture_checkpoint(view, "road_preview")
 	var storage_id := int(extension.call("get_faction_production_line", 0))
-	var stores_before: Array = extension.call("economy_get_storage_info", storage_id)
+	var stores_before: Array = extension.call("economy_get_tactical_resources", storage_id)
 	var finish_world := Vector3(finish.x, float(view.call("_terrain_height_at", finish.x, finish.y)), finish.y)
 	_send_mouse_button(view, MOUSE_BUTTON_LEFT, view.get_viewport().get_camera_3d().unproject_position(finish_world))
-	var stores_after: Array = extension.call("economy_get_storage_info", storage_id)
+	var stores_after: Array = extension.call("economy_get_tactical_resources", storage_id)
 	_check(not bool(view.get("road_build_mode")), "road.second_click_commits", "Second terrain click commits the road order")
 	_check(stores_after.size() >= 2 and stores_after[0] < stores_before[0], "road.paid", "Road order reserves Material from the player's economy")
 	_check(extension.call("get_road_segments").is_empty(), "road.not_instant", "Road has no completed segment before construction ticks")

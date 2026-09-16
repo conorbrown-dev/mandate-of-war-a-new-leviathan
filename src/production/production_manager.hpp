@@ -29,6 +29,11 @@ public:
     void extract_resource(EntityId extractor_id, float delta_ms);
     
     void add_storage(EntityId storage_id, const Storage& storage);
+    // Phase-1 canonical resource access.  This is the authoritative API for
+    // new tactical systems; it has no research balance.
+    const TacticalResources* tactical_resources(EntityId storage_id) const;
+    TacticalResources* tactical_resources(EntityId storage_id);
+    bool set_tactical_power(EntityId storage_id, float generation_mw, float demand_mw);
     void update_storage(EntityId storage_id, float metal, float energy, float research);
     
     void add_to_queue(EntityId production_line_id, const ConstructionQueueEntry& entry);
@@ -75,8 +80,6 @@ public:
     bool deduct_faction_resources(FactionId faction, float metal, float energy);
     float research_progress(FactionId faction) const;
     float get_unit_metal_cost(FactionId faction_id, UnitType unit_type) const;
-    float get_unit_energy_cost(FactionId faction_id, UnitType unit_type) const;
-     float get_unit_research_cost(FactionId faction_id, UnitType unit_type) const;
      float get_build_time_seconds(UnitType unit_type) const;
     
     void set_faction_research(FactionId faction_id, const FactionResearch& research);

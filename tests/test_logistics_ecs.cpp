@@ -723,21 +723,15 @@ TEST(vtol_prototype_is_runway_independent_with_data_driven_tradeoffs) {
     const UnitPrototype& vtol = vtol_it->second;
     if (!fighter.is_aircraft || !fighter.requires_runway || !vtol.is_aircraft || vtol.requires_runway ||
         vtol.operational_range >= fighter.operational_range || vtol.payload >= fighter.payload ||
-        vtol.energy_cost <= fighter.energy_cost || vtol.research_cost <= fighter.research_cost ||
         vtol.energy_consumption_rate <= fighter.energy_consumption_rate ||
         vtol.build_time_seconds <= fighter.build_time_seconds)
         throw std::runtime_error("vtol_tradeoffs_not_preserved");
 
     ProductionManager production;
-    FactionResearch research{};
-    research.completed_projects["vtol_flight_systems"] = false;
-    production.set_faction_research(FactionId::ELITE_PRECISION, research);
-    if (production.can_produce_unit(FactionId::ELITE_PRECISION, UnitType::ELITE_T1_VTOL))
-        throw std::runtime_error("vtol_produced_without_research");
-    research.completed_projects["vtol_flight_systems"] = true;
-    production.set_faction_research(FactionId::ELITE_PRECISION, research);
+    // Tactical acquisition no longer spends or gates on Research. The retained
+    // prerequisite metadata will be consumed by future strategic authorization.
     if (!production.can_produce_unit(FactionId::ELITE_PRECISION, UnitType::ELITE_T1_VTOL))
-        throw std::runtime_error("vtol_research_did_not_unlock_production");
+        throw std::runtime_error("vtol_tactical_acquisition_should_be_available");
 
     Simulation simulation;
     simulation.start();

@@ -25,7 +25,7 @@ func _run() -> void:
 	check(snapshot.get("friendly", 0) == 1, "HUD aggregate must report the opening player force")
 	check(float(snapshot.get("tick", -1.0)) >= 0.0, "HUD aggregate must report simulation timing")
 	check(snapshot.get("queue", null) is Array and snapshot.get("build_catalog", []).size() > 0, "HUD aggregate must provide production queue and catalog")
-	check(String(snapshot.get("material", "--")) != "--", "HUD aggregate must provide resource storage")
+	check(String(snapshot.get("materials", "--")).contains("/") and String(snapshot.get("fuel", "--")).contains("/") and String(snapshot.get("power", "--")).contains("MW") and String(snapshot.get("power_reserve", "")).contains("RESERVE") and not snapshot.has("research"), "HUD aggregate must provide canonical tactical resources without Research")
 	var build_icons_resolve := true
 	for entry in snapshot.get("build_catalog", []):
 		if bool(entry.get("is_structure", false)):

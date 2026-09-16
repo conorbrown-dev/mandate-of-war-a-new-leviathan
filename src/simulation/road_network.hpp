@@ -11,7 +11,6 @@ namespace rts {
 struct RoadSettings {
     float width = 18.0f;
     float material_cost = 180.0f;
-    float energy_cost = 120.0f;
     float construction_time_base_seconds = 8.0f;
     float construction_time_per_meter = 1.0f / 300.0f;
     float traversal_cost = 0.68f;

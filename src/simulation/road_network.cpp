@@ -28,7 +28,6 @@ const RoadSettings& get_road_settings() {
         };
         result.width = std::max(1.0f, number("width", result.width));
         result.material_cost = std::max(0.0f, number("material_cost", result.material_cost));
-        result.energy_cost = std::max(0.0f, number("energy_cost", result.energy_cost));
         result.construction_time_base_seconds = std::max(0.1f, number("construction_time_base_seconds", result.construction_time_base_seconds));
         result.construction_time_per_meter = std::max(0.0f, number("construction_time_per_meter", result.construction_time_per_meter));
         result.traversal_cost = std::clamp(number("traversal_cost", result.traversal_cost), 0.25f, 4.0f);

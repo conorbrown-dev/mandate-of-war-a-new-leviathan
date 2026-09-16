@@ -12,7 +12,6 @@ enum class ReinforcementDeliveryState : uint8_t { INACTIVE = 0, READY = 1, SELEC
 struct ReinforcementPackage {
     UnitType unit_type = UnitType::INDUSTRIAL_MBT;
     float material_cost = 260.0f;
-    float energy_cost = 140.0f;
     float delivery_duration_ms = 4000.0f;
 };
 

@@ -116,6 +116,8 @@ func _run() -> void:
 	check(first_model != null and first_model.get_node("ModelRoot").visible, "zooming in past the strategic marker threshold restores the engineer model")
 	view._update_hud()
 	check(not view.command_hud.snapshot.is_empty() and view.command_hud.snapshot.get("friendly", 0) == 1, "HUD receives live friendly-force telemetry")
+	var tactical_hud: Dictionary = view.command_hud.snapshot
+	check(String(tactical_hud.get("materials", "")).contains("/") and String(tactical_hud.get("fuel", "")).contains("/") and String(tactical_hud.get("power", "")).contains("MW") and String(tactical_hud.get("power_reserve", "")).contains("RESERVE") and not tactical_hud.has("research"), "HUD consumes canonical Materials, Fuel, and Power without a tactical Research balance")
 	view._set_selected(view.player_entity_ids[0], true)
 	view._update_hud()
 	check(view.command_hud.snapshot.get("selected", 0) == 1, "HUD updates selection context")
@@ -154,16 +156,16 @@ func _run() -> void:
 	check(view.command_hud.snapshot.get("unit_name", "") != "" and float(view.command_hud.snapshot.get("unit_max_health", -1.0)) > 0.0, "single-unit HUD exposes type and health")
 	var engineer_id: int = view.player_entity_ids[0]
 	var commander_id: int = int(view.commander_ids.get(0, -1))
-	var stores_before: Array = view.extension.call("economy_get_storage_info", commander_id)
+	var stores_before: Array = view.extension.call("economy_get_tactical_resources", commander_id)
 	view.extension.call("update_simulation", 50.0)
-	var stores_after: Array = view.extension.call("economy_get_storage_info", commander_id)
+	var stores_after: Array = view.extension.call("economy_get_tactical_resources", commander_id)
 	check(stores_after == stores_before, "hidden production base has no automatic local resource income")
 	var neutral_site: Dictionary = view.material_site_state[900]
 	var materials_before_claim := float(stores_after[0])
 	view._set_material_order_mode(1)
 	view._issue_material_site_order(view.camera.unproject_position(Vector3(neutral_site.position.x, 0.0, neutral_site.position.y)))
 	view.extension.call("update_simulation", 50.0)
-	var materials_after_claim: Array = view.extension.call("economy_get_storage_info", commander_id)
+	var materials_after_claim: Array = view.extension.call("economy_get_tactical_resources", commander_id)
 	check(int(view.material_site_state[900].owner) == 0 and float(materials_after_claim[0]) > materials_before_claim, "Field Engineer captures a neutral facility into shared Materials")
 	var enemy_site: Dictionary = view.material_site_state[902]
 	view._set_material_order_mode(2)

@@ -75,8 +75,6 @@ static UnitPrototype parse_unit_prototype(const rts::data::JsonValue& obj) {
     auto type_opt = obj.get("type");
     auto faction_opt = obj.get("faction");
     auto mat_cost_opt = obj.get("material_cost");
-    auto en_cost_opt = obj.get("energy_cost");
-    auto res_cost_opt = obj.get("research_cost");
     auto build_time_opt = obj.get("build_time_seconds");
     auto hp_opt = obj.get("hp");
     auto speed_opt = obj.get("speed");
@@ -84,8 +82,8 @@ static UnitPrototype parse_unit_prototype(const rts::data::JsonValue& obj) {
     auto view_opt = obj.get("view_range");
     auto visual_id_opt = obj.get("visual_id");
 
-    if (!name_opt || !type_opt || !faction_opt || !mat_cost_opt || !en_cost_opt ||
-        !res_cost_opt || !build_time_opt || !hp_opt || !speed_opt || !range_opt || !view_opt) {
+    if (!name_opt || !type_opt || !faction_opt || !mat_cost_opt || !build_time_opt ||
+        !hp_opt || !speed_opt || !range_opt || !view_opt) {
         throw std::runtime_error("Missing required field in unit prototype");
     }
 
@@ -99,8 +97,6 @@ static UnitPrototype parse_unit_prototype(const rts::data::JsonValue& obj) {
     UnitPrototype prototype{
         name_opt.value().as_string(),
         static_cast<float>(mat_cost_opt.value().as_number()),
-        static_cast<float>(en_cost_opt.value().as_number()),
-        static_cast<float>(res_cost_opt.value().as_number()),
         static_cast<float>(build_time_opt.value().as_number()),
         static_cast<float>(hp_opt.value().as_number()),
         static_cast<float>(speed_opt.value().as_number()),

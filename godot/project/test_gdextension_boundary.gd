@@ -17,7 +17,7 @@ func _init() -> void:
 			# authoritative commands, and aggregate skirmish data.
 			for method in [
 				"start_simulation", "update_simulation", "get_unit_position", "get_unit_transforms", "get_unpresented_entities",
-				"issue_move_commands", "queue_faction_structure", "queue_faction_unit", "get_build_catalog", "get_hud_state", "skirmish_state",
+				"issue_move_commands", "queue_faction_structure", "queue_faction_unit", "get_build_catalog", "get_hud_state", "skirmish_state", "economy_get_tactical_resources",
 				"get_road_segments", "territory_get_installation_info"
 			]:
 				check(bridge.has_method(method), "required bridge method missing: %s" % method, failures)
@@ -32,7 +32,7 @@ func _init() -> void:
 				"skirmish_position_visible", "render_add_unit", "render_update",
 				"render_get_instance_count", "set_debug_mode", "get_unit_x", "get_unit_y",
 				"get_unit_positions", "get_unit_headings", "move_unit", "initialize_faction",
-				"economy_add_extractor", "economy_enqueue_construction", "economy_update_all",
+				"economy_add_storage", "economy_get_storage_info", "economy_add_extractor", "economy_enqueue_construction", "economy_update_all",
 				"queue_structure", "get_faction_production_line",
 				"issue_patrol_commands", "issue_return_commands", "issue_defend_commands",
 				"get_simulation_tick_ms", "get_unit_off_road_state", "get_unit_is_dead",
@@ -45,7 +45,7 @@ func _init() -> void:
 			var entity_id: int = bridge.call("create_unit", 1.0, 1.0)
 			var hud_state: Dictionary = bridge.call("get_hud_state", 0, -1, entity_id, 0.0, 0.0, false)
 			check(hud_state.has("tick_ms"), "HUD aggregate is missing tick timing", failures)
-			check(hud_state.has("storage") and hud_state.has("production_queue"), "HUD aggregate is missing economy state", failures)
+			check(hud_state.has("tactical_resources") and hud_state.has("production_queue"), "HUD aggregate is missing canonical economy state", failures)
 			check(hud_state.has("selected_health") and hud_state.has("selected_off_road"), "HUD aggregate is missing selected-unit state", failures)
 			check(hud_state.has("build_catalog") and hud_state.has("fob_installation"), "HUD aggregate is missing presentation state", failures)
 			var transforms: PackedFloat32Array = bridge.call("get_unit_transforms", PackedInt32Array([entity_id]))

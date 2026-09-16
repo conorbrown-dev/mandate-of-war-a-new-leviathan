@@ -53,8 +53,6 @@ enum class UnitType : uint8_t {
 struct UnitPrototype {
     std::string name;
     float material_cost;
-    float energy_cost;
-    float research_cost;
     float build_time_seconds;
     float hp;
     float speed;
@@ -62,6 +60,8 @@ struct UnitPrototype {
     float view_range;
     UnitType type;
     FactionId faction;
+    // Strategic authorization metadata. It is intentionally not evaluated by
+    // tactical acquisition until the strategic Research migration.
     std::vector<std::string> research_prerequisites;
     bool is_naval = false;
     bool is_aircraft = false;

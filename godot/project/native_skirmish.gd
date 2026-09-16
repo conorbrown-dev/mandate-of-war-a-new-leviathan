@@ -118,10 +118,10 @@ func _update_hud() -> void:
 			naval_stranded += 1
 	var logistics := "AIR %s  //  RECOVERY Q %d/%d  //  NAVAL STRANDED %d  //  INTEL %d CURRENT / %d STALE / %d VISIBLE" % [
 		", ".join(aircraft) if not aircraft.is_empty() else "NONE", int(state.get("takeoff_queue", 0)), int(state.get("landing_queue", 0)), naval_stranded, intel_current, intel_stale, visible_enemy]
-	telemetry.text = "MATERIAL %.0f  +%.1f    ENERGY %.0f  +%.1f    RESEARCH %.0f  +%.1f    TICK %d    %s\n%s" % [
-		float(state.get("material", 0.0)), float(state.get("material_income", 0.0)),
-		float(state.get("energy", 0.0)), float(state.get("energy_income", 0.0)),
-		float(state.get("research", 0.0)), float(state.get("research_income", 0.0)),
+	telemetry.text = "MATERIALS %.0f / %.0f    FUEL %.0f / %.0f    POWER %.0f MW / %.0f MW  RESERVE %+.0f MW    TICK %d    %s\n%s" % [
+		float(state.get("materials", 0.0)), float(state.get("materials_capacity", 0.0)),
+		float(state.get("fuel", 0.0)), float(state.get("fuel_capacity", 0.0)),
+		float(state.get("power_generation_mw", 0.0)), float(state.get("power_demand_mw", 0.0)), float(state.get("power_reserve_mw", 0.0)),
 		int(state.get("tick", 0)), "PAUSED" if paused else "LIVE", logistics]
 	help.text = "%s\n[P] pause  [X] stop  [R] return/recover  [B] queue MBT  [T] research  [H] harvest  [K] patrol  [D] defend  [Right-click] move  [Ctrl+Right-click] attack" % status_message
 

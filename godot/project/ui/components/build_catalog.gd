@@ -66,7 +66,7 @@ func get_hover_context(pointer: Vector2) -> Dictionary:
 			return {
 				"key": "build:%s:%s" % [entry.get("type", ""), entry.get("is_structure", false)],
 				"title": "BUILD // %s" % String(entry.get("name", "UNIT")),
-				"detail": "WRENCH %.0f  //  BOLT %.0f  //  %.0f SEC  //  %s" % [float(entry.get("material", 0.0)), float(entry.get("energy", 0.0)), float(entry.get("build_seconds", 0.0)), "READY" if bool(entry.get("available", false)) else "LOCKED"],
+		"detail": "MATERIALS %.0f  //  %.0f SEC  //  %s" % [float(entry.get("material", 0.0)), float(entry.get("build_seconds", 0.0)), "READY" if bool(entry.get("available", false)) else "LOCKED"],
 				"accent": Tokens.ACCENT,
 			}
 	return {}
@@ -98,23 +98,22 @@ func _add_section(content: VBoxContainer, label: String, entries: Array, hotkeys
 		# MandateCommandButton establishes its compact default in _ready; apply
 		# the catalog's readable two-line size after the node has entered the tree.
 		button.custom_minimum_size = Vector2(244.0, 52.0)
-		_add_resource_costs(button, float(entry.get("material", 0.0)), float(entry.get("energy", 0.0)))
+		_add_resource_costs(button, float(entry.get("material", 0.0)))
 		var record := entry.duplicate(true)
 		record["button"] = button
 		_entries.append(record)
 
-func _add_resource_costs(button: Button, mass: float, energy: float) -> void:
+func _add_resource_costs(button: Button, mass: float) -> void:
 	var costs := HBoxContainer.new()
 	costs.name = "ResourceCosts"
 	costs.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	costs.add_theme_constant_override("separation", Tokens.SPACE_SM)
 	costs.set_anchors_preset(Control.PRESET_BOTTOM_RIGHT)
-	costs.offset_left = -124.0
+	costs.offset_left = -70.0
 	costs.offset_top = -23.0
 	costs.offset_right = -8.0
 	costs.offset_bottom = -5.0
 	_add_resource_cost(costs, &"resource.material", Tokens.RESOURCE_MASS, mass, "MassCost")
-	_add_resource_cost(costs, &"resource.energy", Tokens.RESOURCE_ENERGY, energy, "EnergyCost")
 	button.add_child(costs)
 
 func _add_resource_cost(parent: HBoxContainer, icon_id: StringName, color: Color, amount: float, node_name: String) -> void:

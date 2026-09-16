@@ -7,6 +7,7 @@
 
 #include "ecs/entity.hpp"
 #include "factions.hpp"
+#include "resources.hpp"
 
 namespace rts {
 
@@ -39,6 +40,10 @@ struct Storage {
     float metal_capacity;
     float energy_capacity;
     float research_capacity;
+    // Phase-1 canonical state. Legacy fields above remain only as a narrow
+    // compatibility bridge for old production/content consumers; Phase 2
+    // moves those consumers to this state and deletes the bridge.
+    TacticalResources tactical{};
 };
 
 struct ConstructionQueueEntry {

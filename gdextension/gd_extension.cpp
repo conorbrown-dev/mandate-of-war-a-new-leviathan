@@ -137,14 +137,17 @@ int logistics_get_intelligence_age(int entity_id);
 bool logistics_is_intelligence_stale(int entity_id);
 void economy_add_resource_node(int node_id, float x, float y, float amount, int type);
 void economy_add_extractor(int extractor_id, float x, float y, int node_id, float extraction_rate);
-void economy_add_storage(int storage_id, float x, float y, float metal_capacity, float energy_capacity, float research_capacity);
+void economy_add_tactical_storage(int storage_id, float x, float y, float materials_capacity, float fuel_capacity,
+                                  float power_generation_mw, float power_demand_mw);
 void economy_add_production_line(int line_id, int storage_id, float build_speed_metal, float build_speed_energy, int max_jobs);
 void economy_enqueue_construction(int line_id, int entity_id, int type, float metal_cost, float energy_cost, float metal_per_tick, float energy_per_tick);
 void economy_update_all(float delta_ms);
 int economy_get_resource_node_count();
 bool economy_get_resource_node_info(int node_id, float* out_x, float* out_y, float* out_amount, int* out_type);
-bool economy_get_storage_info(int storage_id, float* out_metal_storage, float* out_energy_storage, float* out_research_storage, 
-                              float* out_metal_capacity, float* out_energy_capacity, float* out_research_capacity);
+bool economy_get_tactical_resources(int storage_id, float* out_materials, float* out_materials_capacity,
+                                    float* out_fuel, float* out_fuel_capacity,
+                                    float* out_power_generation_mw, float* out_power_demand_mw,
+                                    float* out_power_reserve_mw);
 int economy_get_queue_size(int line_id);
 int economy_get_completed_build_count();
 int territory_get_zone_count();
@@ -242,10 +245,10 @@ protected:
         ClassDB::bind_method(D_METHOD("send_visual_pack_handshake", "pack_id", "pack_version", "sha256"), &RtsExtension::send_visual_pack_handshake);
         ClassDB::bind_method(D_METHOD("set_expected_visual_pack", "pack_id", "pack_version", "sha256"), &RtsExtension::set_expected_visual_pack);
         ClassDB::bind_method(D_METHOD("economy_add_resource_node", "node_id", "x", "y", "amount", "type"), &RtsExtension::economy_add_resource_node);
-        ClassDB::bind_method(D_METHOD("economy_add_storage", "storage_id", "x", "y", "metal_capacity", "energy_capacity", "research_capacity"), &RtsExtension::economy_add_storage);
+        ClassDB::bind_method(D_METHOD("economy_add_tactical_storage", "storage_id", "x", "y", "materials_capacity", "fuel_capacity", "power_generation_mw", "power_demand_mw"), &RtsExtension::economy_add_tactical_storage);
         ClassDB::bind_method(D_METHOD("economy_add_production_line", "line_id", "storage_id", "build_speed_metal", "build_speed_energy", "max_jobs"), &RtsExtension::economy_add_production_line);
         ClassDB::bind_method(D_METHOD("economy_get_resource_node_count"), &RtsExtension::economy_get_resource_node_count);
-        ClassDB::bind_method(D_METHOD("economy_get_storage_info", "storage_id"), &RtsExtension::economy_get_storage_info);
+        ClassDB::bind_method(D_METHOD("economy_get_tactical_resources", "storage_id"), &RtsExtension::economy_get_tactical_resources);
         ClassDB::bind_method(D_METHOD("territory_get_zone_count"), &RtsExtension::territory_get_zone_count);
         ClassDB::bind_method(D_METHOD("territory_get_zone_info", "zone_id"), &RtsExtension::territory_get_zone_info);
         ClassDB::bind_method(D_METHOD("territory_get_installation_info", "x", "y"), &RtsExtension::territory_get_installation_info);
@@ -371,7 +374,7 @@ protected:
         state["x"] = delivery.zone_x(); state["y"] = delivery.zone_y(); state["radius"] = delivery.zone_radius();
         state["delivery_x"] = delivery.selected_x(); state["delivery_y"] = delivery.selected_y();
         state["elapsed_ms"] = delivery.elapsed_ms(); state["duration_ms"] = delivery.package().delivery_duration_ms;
-        state["material_cost"] = delivery.package().material_cost; state["energy_cost"] = delivery.package().energy_cost;
+        state["material_cost"] = delivery.package().material_cost;
         state["unit_type"] = static_cast<int>(delivery.package().unit_type);
         return state;
     }
@@ -515,18 +518,22 @@ public:
         const auto base=skirmish_->base(0);
         const auto funds=production.storages().find(base);
         if(funds!=production.storages().end()) {
-            state["material"]=funds->second.metal_storage; state["energy"]=funds->second.energy_storage;
-            state["research"]=funds->second.research_storage;
-            state["material_capacity"]=funds->second.metal_capacity;
-            state["energy_capacity"]=funds->second.energy_capacity;
-            state["research_capacity"]=funds->second.research_capacity;
+            const auto& tactical = funds->second.tactical;
+            state["materials"] = tactical.materials.current;
+            state["materials_capacity"] = tactical.materials.max;
+            state["fuel"] = tactical.fuel.current;
+            state["fuel_capacity"] = tactical.fuel.capacity;
+            state["power_generation_mw"] = tactical.power.generation_mw;
+            state["power_demand_mw"] = tactical.power.demand_mw;
+            state["power_reserve_mw"] = tactical.power.reserve_mw();
+            state["power_deficit"] = tactical.power.in_deficit();
             float rates[3]{};
             for (const auto& [id, extractor] : production.extractors()) {
                 const auto node=production.resource_nodes().find(extractor.resource_node_id);
                 if(extractor.storage_id==base && extractor.active && node!=production.resource_nodes().end() && !node->second.depleted)
                     rates[static_cast<int>(node->second.type)] += extractor.extraction_rate * 20;
             }
-            state["material_income"]=rates[0]; state["energy_income"]=rates[1]; state["research_income"]=rates[2];
+            state["material_income"] = rates[0]; state["fuel_income"] = 0.0;
         }
         Array queue;
         const auto line=production.production_lines().find(base);
@@ -670,8 +677,6 @@ public:
             entry["type"] = static_cast<int>(type);
             entry["name"] = String(prototype.name.c_str());
             entry["material"] = production.get_unit_metal_cost(faction, type);
-            entry["energy"] = production.get_unit_energy_cost(faction, type);
-            entry["research"] = production.get_unit_research_cost(faction, type);
             entry["build_seconds"] = prototype.build_time_seconds;
             entry["is_aircraft"] = prototype.is_aircraft;
             const bool airfield_ready = !prototype.is_aircraft || !prototype.requires_runway ||
@@ -693,8 +698,6 @@ public:
             entry["is_structure"] = true;
             entry["name"] = structure == 0 ? String("FORWARD OUTPOST") : structure == 1 ? String("RADAR MAST") : structure == 2 ? String("AIRFIELD") : String("FLOODLIGHT");
             entry["material"] = structure == 0 ? 300.0 : structure == 1 ? 450.0 : structure == 2 ? 600.0 : 380.0;
-            entry["energy"] = structure == 0 ? 150.0 : structure == 1 ? 250.0 : structure == 2 ? 400.0 : 620.0;
-            entry["research"] = structure == 0 ? 0.0 : structure == 1 ? 100.0 : structure == 2 ? 150.0 : 80.0;
             entry["build_seconds"] = structure == 0 ? 20.0 : structure == 1 ? 28.0 : structure == 2 ? 36.0 : 24.0;
             entry["available"] = line != rts::INVALID_ENTITY && production.can_queue_structure(line, faction, structure);
             entry["icon_id"] = structure == 0 ? String("construction.fortification") : structure == 1 ? String("intel.radar") : structure == 2 ? String("infrastructure.airbase") : String("intel.sensors");
@@ -786,8 +789,6 @@ public:
             entry["progress"] = item.build_progress;
             entry["remaining_seconds"] = std::max(0.0f, item.build_time_seconds * (1.0f - item.build_progress));
             entry["reserved_material"] = item.total_cost_metal;
-            entry["reserved_energy"] = item.total_cost_energy;
-            entry["reserved_research"] = item.total_cost_research;
             entry["target_x"] = item.target_x;
             entry["target_y"] = item.target_y;
             queue.append(entry);
@@ -802,7 +803,7 @@ public:
         if (faction_id < 0 || faction_id > 2) return state;
 
         state["tick_ms"] = get_simulation_tick_ms();
-        state["storage"] = economy_get_storage_info(storage_id);
+        state["tactical_resources"] = economy_get_tactical_resources(storage_id);
         state["build_catalog"] = get_build_catalog(faction_id);
         state["production_queue"] = get_production_queue(get_faction_production_line(faction_id));
         state["selected_health"] = selected_entity_id > 0 ? get_unit_health(selected_entity_id) : Array();
@@ -1060,14 +1061,16 @@ public:
         );
     }
 
-    void economy_add_storage(int64_t storage_id, double x, double y, double metal_capacity, double energy_capacity, double research_capacity) {
-        ::economy_add_storage(
+    void economy_add_tactical_storage(int64_t storage_id, double x, double y, double materials_capacity, double fuel_capacity,
+                                      double power_generation_mw, double power_demand_mw) {
+        ::economy_add_tactical_storage(
             static_cast<int>(storage_id),
             static_cast<float>(x),
             static_cast<float>(y),
-            static_cast<float>(metal_capacity),
-            static_cast<float>(energy_capacity),
-            static_cast<float>(research_capacity)
+            static_cast<float>(materials_capacity),
+            static_cast<float>(fuel_capacity),
+            static_cast<float>(power_generation_mw),
+            static_cast<float>(power_demand_mw)
         );
     }
 
@@ -1358,21 +1361,14 @@ public:
         return info;
     }
     
-    Array economy_get_storage_info(int64_t storage_id) const {
-        float metal_storage, energy_storage, research_storage;
-        float metal_capacity, energy_capacity, research_capacity;
-        if (!::economy_get_storage_info(static_cast<int>(storage_id),
-                &metal_storage, &energy_storage, &research_storage,
-                &metal_capacity, &energy_capacity, &research_capacity)) {
-            return Array();
-        }
+    Array economy_get_tactical_resources(int64_t storage_id) const {
+        float materials, materials_capacity, fuel, fuel_capacity, generation, demand, reserve;
+        if (!::economy_get_tactical_resources(static_cast<int>(storage_id), &materials, &materials_capacity,
+                &fuel, &fuel_capacity, &generation, &demand, &reserve)) return Array();
         Array info;
-        info.append(metal_storage);
-        info.append(energy_storage);
-        info.append(research_storage);
-        info.append(metal_capacity);
-        info.append(energy_capacity);
-        info.append(research_capacity);
+        info.append(materials); info.append(materials_capacity);
+        info.append(fuel); info.append(fuel_capacity);
+        info.append(generation); info.append(demand); info.append(reserve);
         return info;
     }
     
