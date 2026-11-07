@@ -15,7 +15,7 @@ TEST(terrain_load_heightfield_file) {
         test_data[i] = static_cast<float>(i);
     }
     
-    std::string path = "/tmp/test_heightmap.json";
+    std::string path = temp_file("test_heightmap.json");
     write_heightfield(path, 320, 320, test_data);
     
     Terrain terrain;
@@ -39,7 +39,7 @@ TEST(terrain_height_at_coordinates) {
         }
     }
     
-    std::string path = "/tmp/test_heightmap.json";
+    std::string path = temp_file("test_heightmap.json");
     write_heightfield(path, 320, 320, test_data);
     
     Terrain terrain;
@@ -54,7 +54,7 @@ TEST(terrain_height_at_coordinates) {
 
 TEST(terrain_out_of_bounds_returns_zero) {
     std::vector<float> test_data(320 * 320, 50.0f);
-    std::string path = "/tmp/test_heightmap.json";
+    std::string path = temp_file("test_heightmap.json");
     write_heightfield(path, 320, 320, test_data);
     
     Terrain terrain;
@@ -69,7 +69,7 @@ TEST(terrain_out_of_bounds_returns_zero) {
 
 TEST(terrain_ground_units_follow_heightfield) {
     std::vector<float> test_data(320 * 320, 12.0f);
-    const std::string path = "/tmp/test_heightmap_ground_units.json";
+    const std::string path = temp_file("test_heightmap_ground_units.json");
     write_heightfield(path, 320, 320, test_data);
 
     Simulation simulation;

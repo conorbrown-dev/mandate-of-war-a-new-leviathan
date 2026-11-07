@@ -81,6 +81,8 @@ def isolated_environment(artifact_dir: Path) -> dict[str, str]:
         env["XDG_DATA_HOME"] = str(artifact_dir / "user-data")
         env["XDG_CONFIG_HOME"] = str(artifact_dir / "user-config")
         env["XDG_CACHE_HOME"] = str(artifact_dir / "user-cache")
+    elif sys.platform == "win32":
+        env["APPDATA"] = str(artifact_dir / "user-data")
     return env
 
 
@@ -120,6 +122,7 @@ def godot_executable() -> Path:
     configured = os.environ.get("GODOT_BIN")
     candidates = [
         Path(configured) if configured else None,
+        Path.home() / "mow-tools/godot/Godot_v4.7.2-stable_win64_console.exe",
         ROOT / "Godot_v4.7.2-stable_linux.x86_64",
         Path(shutil.which("godot4") or "") if shutil.which("godot4") else None,
         Path(shutil.which("godot") or "") if shutil.which("godot") else None,
@@ -167,7 +170,7 @@ def run_gameplay(args: argparse.Namespace, artifact_dir: Path, started_at: str) 
         str(artifact_dir / "engine-godot.log"),
     ]
     rendered_run = args.rendered or args.record or args.require_screenshots or args.update_baseline
-    if rendered_run and not os.environ.get("DISPLAY") and not os.environ.get("WAYLAND_DISPLAY"):
+    if rendered_run and sys.platform.startswith("linux") and not os.environ.get("DISPLAY") and not os.environ.get("WAYLAND_DISPLAY"):
         report = failure_report(args, artifact_dir, started_at, "rendered evidence requested but no graphical display is available")
         write_report(artifact_dir / "report.json", report)
         return 2

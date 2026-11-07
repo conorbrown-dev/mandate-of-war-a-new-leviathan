@@ -29,16 +29,10 @@ index and AI vision rewrite the same run was 22.1, 85.8 and 124.6 ms. `rts_comba
 hashes matched before and after the index at 1,000 and 2,000 units per side.
 This says nothing about Godot frame rate.
 
-Known failures, none caused by this work:
+All 20 contracts and 9 scenarios pass on Windows and Linux (2026-11-07).
 
-- `native_extension_smoke`: expects a unit at x=8.0 after 10 ticks; it is at 7.4.
-- `skirmish_presentation`: build catalog text, single-click selection and
-  commander site demolition checks fail, and the script then never exits.
-- `basic_selection_move`: the same single-click selection failure.
-- `road_construction`: calls `get_faction_production_line`, which the extension
-  no longer binds.
-- `airfield_fighter_ferry`: all checks pass, but Godot reports resource leaks at
-  shutdown.
+Units stop within `kArrivalRadiusMeters` (0.75 m) of an order, so
+`native_extension_smoke` asserts that radius, not the exact target.
 
 ## Content and balance
 
@@ -50,6 +44,34 @@ pairings within its 0.12 tolerance (Elite vs Mass -0.08, Elite vs Industrial
 +0.11, Mass vs Industrial +0.11). This covers ground armies in open terrain only,
 without air, naval, terrain or player tactics. Simulation worst tick at the cap
 is about 22 ms after the AI vision pass was rewritten.
+
+## Windows and GPU
+
+The game builds natively with MSVC and renders on the player's graphics card.
+Run `tools/build_windows.ps1`, then `tools/run_game.ps1`. Godot's Windows build
+is expected in `~/mow-tools/godot`. WSL only reaches a software renderer, so use
+it for simulation work, not for judging visuals or frame rate.
+
+`tools/gpu_benchmark.ps1` runs the real game and reports the adapter and frame
+times for four camera distances. Evidence from 2026-11-07 (Release, RTX 4070 Ti
+SUPER, driver 610.88, Ryzen 9 9900X, 1920x1080, vsync off, match start with
+712,434 vegetation instances and only the starting force on the map):
+
+| View | `gl_compatibility` | `forward_plus` |
+| --- | --- | --- |
+| Close (120 m) | 313 FPS, 3.2 ms | 273 FPS, 3.7 ms |
+| Default (420 m) | 354 FPS, 2.8 ms | 298 FPS, 3.4 ms |
+| Wide (2,200 m) | 384 FPS, 2.6 ms | 306 FPS, 3.3 ms |
+| Strategic (9,000 m) | 568 FPS, 1.8 ms | 381 FPS, 2.6 ms |
+
+`gl_compatibility` stays the project renderer: it is faster here, and the terrain
+was tuned under it. Under `forward_plus` the same shaders look pale and washed
+out, so switching needs a lighting pass. Neither column says anything about a
+full battle, because thousands of units have not been rendered yet.
+
+Windows has a 1 MiB thread stack, so large buffers and `Snapshot` values must
+stay on the heap. `std::getenv` misses values set through Godot's
+`OS.set_environment` there, so use `read_environment`.
 
 ## Terrain and vegetation
 
@@ -65,8 +87,7 @@ player first. This sits alongside the original 960 oak trees. Past their view
 range the shader paints forest canopy.
 
 Limits: rivers and trees are visual only, so ground units cross water and pass
-through trees, and structures do not clear trees. Rendering has only been run on
-a software renderer, so GPU frame rate is unmeasured.
+through trees, and structures do not clear trees. See "Windows and GPU" for frame rates.
 
 CI (`.github/workflows/ci.yml`) runs the build, CTest and Godot contracts, and
 stays red until those failures are resolved. A local checkout needs

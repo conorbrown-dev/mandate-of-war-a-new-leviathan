@@ -17,7 +17,7 @@ TEST(replay_writer_open_close) {
         throw std::runtime_error("Writer should not be open initially");
     }
     
-    if (!writer.open("/tmp/test_replay.rts")) {
+    if (!writer.open(temp_file("test_replay.rts"))) {
         throw std::runtime_error("Failed to open replay file");
     }
     
@@ -36,7 +36,7 @@ TEST(replay_writer_header) {
     using namespace rts;
     
     ReplayWriter writer;
-    if (!writer.open("/tmp/test_replay2.rts")) {
+    if (!writer.open(temp_file("test_replay2.rts"))) {
         throw std::runtime_error("Failed to open replay file");
     }
     
@@ -56,7 +56,7 @@ TEST(replay_writer_read_roundtrip) {
     using namespace rts;
     
     ReplayWriter writer;
-    if (!writer.open("/tmp/test_replay3.rts")) {
+    if (!writer.open(temp_file("test_replay3.rts"))) {
         throw std::runtime_error("Failed to open replay file");
     }
     
@@ -84,7 +84,7 @@ TEST(replay_writer_read_roundtrip) {
     writer.close();
     
     ReplayReader reader;
-    if (!reader.open("/tmp/test_replay3.rts")) {
+    if (!reader.open(temp_file("test_replay3.rts"))) {
         throw std::runtime_error("Failed to open replay for reading");
     }
     
@@ -146,7 +146,7 @@ TEST(replay_writer_portable_snapshot) {
     }
     
     // Write portable snapshot to replay using sim's writer
-    const char* replay_path = "/tmp/test_replay_portable.rts";
+    const std::string replay_path = temp_file("test_replay_portable.rts");
     
     if (!sim.start_replay(replay_path)) {
         throw std::runtime_error("Failed to open replay file");

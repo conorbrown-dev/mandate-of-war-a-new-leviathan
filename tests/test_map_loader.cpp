@@ -2,13 +2,13 @@
 #include "map/map_loader.hpp"
 #include "simulation/terrain.hpp"
 
+#include <chrono>
 #include <filesystem>
 #include <fstream>
 #include <cmath>
-#include <unistd.h>
 
 namespace {
-const std::filesystem::path test_root = std::filesystem::temp_directory_path() / ("rts-map-tests-" + std::to_string(getpid()));
+const std::filesystem::path test_root = std::filesystem::temp_directory_path() / ("rts-map-tests-" + std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
 }
 
 namespace fs = std::filesystem;

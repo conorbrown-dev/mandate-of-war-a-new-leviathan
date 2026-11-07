@@ -10,14 +10,14 @@
 #include <unordered_map>
 
 #include "data/json_parser.hpp"
+#include "util/environment.hpp"
 
 namespace rts {
 
 namespace {
 
 std::filesystem::path content_data_path(const char* filename) {
-    if (const char* configured_root = std::getenv("RTS_DATA_ROOT");
-        configured_root != nullptr && configured_root[0] != '\0') {
+    if (const std::string configured_root = read_environment("RTS_DATA_ROOT"); !configured_root.empty()) {
         return std::filesystem::path(configured_root) / filename;
     }
     return std::filesystem::path("data") / filename;

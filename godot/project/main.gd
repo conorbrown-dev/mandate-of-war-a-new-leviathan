@@ -1844,7 +1844,7 @@ func _select_nearest(screen_position: Vector2) -> void:
 	# At strategic zoom a vehicle's rendered hull is only a few pixels wide.
 	# Use a forgiving but bounded screen-space hit radius for a direct click.
 	var closest_distance := clampf(camera_distance * 0.22, 20.0, 32.0)
-	for entity_id in ai_entity_ids:
+	for entity_id in player_entity_ids:
 		var world_position := _entity_world_position(entity_id)
 		if camera.is_position_behind(world_position):
 			continue
@@ -3087,13 +3087,13 @@ func _spawn_completed_structure_view(structure_type: int, target: Vector2) -> vo
 	root.name = "Built_%s" % ("Outpost" if structure_type == 0 else "RadarMast" if structure_type == 1 else "Airfield" if structure_type == 2 else "Floodlight")
 	root.set_meta("structure_type", structure_type)
 	root.position = Vector3(target.x, _terrain_height_at(target.x, target.y) + 0.05, target.y)
-	var mesh := MeshInstance3D.new()
-	var box := BoxMesh.new()
-	box.size = Vector3(5.0, 1.6 if structure_type == 0 else 7.0 if structure_type == 1 else 0.5 if structure_type == 2 else 2.0, 5.0 if structure_type < 2 else 12.0 if structure_type == 2 else 5.0)
-	mesh.mesh = box
-	mesh.position.y = box.size.y * 0.5
-	mesh.material_override = _demo_material(Color("#d09a45") if structure_type == 0 else Color("#55b9c9"), 0.0)
 	if structure_type != 2:
+		var mesh := MeshInstance3D.new()
+		var box := BoxMesh.new()
+		box.size = Vector3(5.0, 1.6 if structure_type == 0 else 7.0 if structure_type == 1 else 2.0, 5.0)
+		mesh.mesh = box
+		mesh.position.y = box.size.y * 0.5
+		mesh.material_override = _demo_material(Color("#d09a45") if structure_type == 0 else Color("#55b9c9"), 0.0)
 		root.add_child(mesh)
 	if structure_type == 2:
 		# Two compressed 1,200 m tactical runways form the standard X pattern.

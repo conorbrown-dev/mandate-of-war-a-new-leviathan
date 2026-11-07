@@ -11,6 +11,12 @@ func check(condition: bool, reason: String) -> void:
 		push_error(reason)
 		failures += 1
 
+func aim_camera_at_site(view: Node, site: Dictionary) -> void:
+	view.camera_target = Vector3(site.position.x, view._terrain_height_at(site.position.x, site.position.y), site.position.y)
+	view.camera_distance = 420.0
+	view.target_camera_distance = 420.0
+	view._update_camera(1.0)
+
 func _initialize() -> void:
 	_run.call_deferred()
 
@@ -144,7 +150,9 @@ func _run() -> void:
 	var representative_entry: Dictionary = catalog_entries[0] if not catalog_entries.is_empty() else {}
 	var representative_button: Button = representative_entry.get("button")
 	check(representative_button != null and representative_button.custom_minimum_size.y >= 52.0, "Build catalog entries are exposed through readable themed controls")
-	check(representative_button != null and String(representative_entry.get("name", "")).to_upper() in representative_button.text and "M " in representative_button.text and "E " in representative_button.text, "Node-based build catalog keeps blueprint identity and resource costs legible in every card")
+	var representative_cost: Control = representative_button.get_node_or_null("ResourceCosts/MassCost") if representative_button != null else null
+	var representative_cost_label: Label = representative_cost.get_child(1) as Label if representative_cost != null else null
+	check(representative_button != null and String(representative_entry.get("name", "")).to_upper() in representative_button.text and representative_cost_label != null and representative_cost_label.text == "%.0f" % float(representative_entry.get("material", -1.0)), "Node-based build catalog keeps blueprint identity and Materials cost legible in every card")
 	check(first_model.get_node_or_null("SelectionVisual") == null, "selection relies on the persistent range envelopes instead of a redundant yellow hex")
 	check(first_model.get_node("ModelRoot").get_child_count() > 0, "selection leaves the Field Engineer imported model intact")
 	view._clear_selection()
@@ -162,15 +170,23 @@ func _run() -> void:
 	check(stores_after == stores_before, "hidden production base has no automatic local resource income")
 	var neutral_site: Dictionary = view.material_site_state[900]
 	var materials_before_claim := float(stores_after[0])
+	var camera_target_before_sites: Vector3 = view.camera_target
+	var camera_distance_before_sites: float = view.camera_distance
+	aim_camera_at_site(view, neutral_site)
 	view._set_material_order_mode(1)
 	view._issue_material_site_order(view.camera.unproject_position(Vector3(neutral_site.position.x, 0.0, neutral_site.position.y)))
 	view.extension.call("update_simulation", 50.0)
 	var materials_after_claim: Array = view.extension.call("economy_get_tactical_resources", commander_id)
 	check(int(view.material_site_state[900].owner) == 0 and float(materials_after_claim[0]) > materials_before_claim, "Field Engineer captures a neutral facility into shared Materials")
 	var enemy_site: Dictionary = view.material_site_state[902]
+	aim_camera_at_site(view, enemy_site)
 	view._set_material_order_mode(2)
 	view._issue_material_site_order(view.camera.unproject_position(Vector3(enemy_site.position.x, 0.0, enemy_site.position.y)))
 	await process_frame
+	view.camera_target = camera_target_before_sites
+	view.camera_distance = camera_distance_before_sites
+	view.target_camera_distance = camera_distance_before_sites
+	view._update_camera(1.0)
 	check(bool(view.material_site_state[902].destroyed) and view.resource_sites.get_child_count() == 3 and view.extension.call("economy_get_resource_node_count") == 3, "commander can demolish an enemy material facility")
 	view._queue_commander_unit(0)
 	view.extension.call("update_simulation", 50.0)
@@ -188,7 +204,7 @@ func _run() -> void:
 	if OS.get_environment("RTS_CAPTURE_SCREENSHOT") == "1":
 		await RenderingServer.frame_post_draw
 		var production_image := view.get_viewport().get_texture().get_image()
-		check(production_image.save_png("/tmp/near-future-rts-presentation.png") == OK, "GPU production HUD screenshot saved")
+		check(production_image.save_png(OS.get_temp_dir().path_join("near-future-rts-presentation.png")) == OK, "GPU production HUD screenshot saved")
 	for _tick in range(310):
 		view.extension.call("update_simulation", 50.0)
 		view._sync_new_entities()
@@ -198,7 +214,7 @@ func _run() -> void:
 	var commander_position: PackedFloat32Array = view.extension.call("get_unit_position", commander_id)
 	check(produced_position.size() == 2 and commander_position.size() == 2 and produced_position[0] != commander_position[0], "completed unit spawns at a visible factory rally point")
 	view._set_selected(engineer_id, true)
-	check(view._build_unit_type_at_index(3) == 9 and view._build_unit_type_at_index(4) == 10 and view._build_unit_type_at_index(5) == 11, "new unit shortcuts resolve from the native catalog rather than hard-coded unit types")
+	check(view._build_unit_type_at_index(0) == 0 and view._build_unit_type_at_index(1) == 1 and view._build_unit_type_at_index(2) == 2 and view._build_unit_type_at_index(3) == 11 and view._build_unit_type_at_index(4) == -1, "Field Engineer shortcuts resolve from the native catalog and exclude aircraft")
 	var fighter_queue_before_airfield: Array = view.extension.call("get_hud_state", 0, commander_id, -1, 0.0, 0.0, false).get("production_queue", [])
 	view._queue_commander_unit(9)
 	var fighter_queue_after_airfield: Array = view.extension.call("get_hud_state", 0, commander_id, -1, 0.0, 0.0, false).get("production_queue", [])
@@ -224,7 +240,7 @@ func _run() -> void:
 	var beacon_target := Vector2(-15000.0, -6500.0)
 	var beacon_catalog: Array = view.extension.call("get_build_catalog", 0)
 	var beacon_entry: Dictionary = beacon_catalog.filter(func(entry): return int(entry.get("type", -1)) == 103).front() if not beacon_catalog.filter(func(entry): return int(entry.get("type", -1)) == 103).is_empty() else {}
-	check(beacon_entry.get("name", "") == "FLOODLIGHT" and float(beacon_entry.get("material", 0.0)) > 0.0 and float(beacon_entry.get("energy", 0.0)) > 0.0, "Floodlight is an authoritative Material and Energy build option")
+	check(beacon_entry.get("name", "") == "FLOODLIGHT" and float(beacon_entry.get("material", 0.0)) > 0.0, "Floodlight is an authoritative Materials build option")
 	var beacon_queued: bool = view._queue_commander_structure(3, beacon_target)
 	if beacon_queued:
 		# The input path records this when the engineer reaches the site; the
@@ -244,7 +260,7 @@ func _run() -> void:
 	view._apply_time_of_day("DAYTIME")
 	view._set_selected_structure(floodlight)
 	var floodlight_label := floodlight.get_node_or_null("StructureStatus") as Label3D if floodlight != null else null
-	check(floodlight_label != null and floodlight_label.visible and "FLOODLIGHT" in floodlight_label.text and "380" in floodlight_label.text and "620" in floodlight_label.text, "selected structures show their name and committed Material/Energy above the model")
+	check(floodlight_label != null and floodlight_label.visible and "FLOODLIGHT" in floodlight_label.text and "380" in floodlight_label.text, "selected structures show their name and committed Materials above the model")
 	view._queue_commander_unit(9)
 	view.extension.call("update_simulation", 50.0)
 	view._update_hud()
@@ -296,10 +312,10 @@ func _run() -> void:
 	view._update_camera(1.0)
 	view._sync_unit_transforms()
 	check(view.strategic_icon_overlay.match_view == view and not first_model.get_node("ModelRoot").visible and not first_model.get_node("StrategicZoomVisual").visible, "strategic view uses the screen-space marker overlay instead of a 3D gray dot")
-	var zoom_cursor := Vector2(view.get_viewport().size.x * 0.82, view.get_viewport().size.y * 0.22)
+	var zoom_cursor: Vector2 = view.get_viewport().get_visible_rect().size * Vector2(0.82, 0.22)
 	var zoom_anchor: Vector2 = view._screen_to_world(zoom_cursor)
 	var centre_anchor: Vector2 = view._screen_to_world(view.get_viewport().get_visible_rect().get_center())
-	check(zoom_anchor.distance_to(centre_anchor) > 100.0, "cursor-zoom regression fixture uses terrain materially away from screen centre")
+	check(zoom_anchor.distance_to(centre_anchor) > 100.0 and zoom_anchor.distance_to(centre_anchor) < 5000.0, "cursor-zoom regression fixture uses nearby terrain materially away from screen centre")
 	var wheel_zoom := InputEventMouseButton.new()
 	wheel_zoom.button_index = MOUSE_BUTTON_WHEEL_UP
 	wheel_zoom.pressed = true

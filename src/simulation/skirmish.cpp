@@ -7,7 +7,8 @@
 #include <bit>
 #include <iomanip>
 #include <filesystem>
-#include <openssl/sha.h>
+#include "util/sha256.hpp"
+#include "util/environment.hpp"
 
 namespace rts {
 namespace {
@@ -46,8 +47,8 @@ bool Skirmish::load(const std::string& path) {
         // the repository root where authored data/ is stored.
         const auto root_path=std::filesystem::path(path).parent_path().parent_path().parent_path().parent_path();
         const auto scenario_data_root=root_path/"data";
-        if (std::getenv("RTS_DATA_ROOT") == nullptr) {
-            ::setenv("RTS_DATA_ROOT", scenario_data_root.c_str(), 1);
+        if (read_environment("RTS_DATA_ROOT").empty()) {
+            write_environment("RTS_DATA_ROOT", scenario_data_root.string());
         }
         if (number(field(root,"version")) != 1) throw std::runtime_error("Unsupported scenario version");
         const auto& theater = field(root,"theater");
@@ -102,7 +103,8 @@ bool Skirmish::load(const std::string& path) {
         name_=field(root,"display_name").as_string();
         if (name_.empty() || x[0]>=x[1]) throw std::runtime_error("Invalid scenario identity or opposing spawns");
         scenario_path_=path;
-        const auto data_root=std::getenv("RTS_DATA_ROOT") ? std::filesystem::path(std::getenv("RTS_DATA_ROOT")) : root_path/"data";
+        const auto configured_root=read_environment("RTS_DATA_ROOT");
+        const auto data_root=configured_root.empty() ? root_path/"data" : std::filesystem::path(configured_root);
         content_hash_=digest(bytes.str()+file_bytes((data_root/"unit_faction_stats.json").string())+file_bytes((data_root/"research_projects.json").string()));
         
         // Load terrain heightmap if present

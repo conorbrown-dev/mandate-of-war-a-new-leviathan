@@ -91,7 +91,7 @@ func _process(delta: float) -> void:
 	if not screenshot_saved and OS.get_environment("RTS_CAPTURE_NATIVE_SCREENSHOT") == "1":
 		screenshot_saved = true
 		await RenderingServer.frame_post_draw
-		get_viewport().get_texture().get_image().save_png("/tmp/g08-native-skirmish.png")
+		get_viewport().get_texture().get_image().save_png(OS.get_temp_dir().path_join("g08-native-skirmish.png"))
 
 func _update_hud() -> void:
 	if telemetry == null:

@@ -1,4 +1,5 @@
 #include "simulation/off_road.hpp"
+#include "util/environment.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -29,8 +30,8 @@ const OffRoadSettings& get_off_road_settings() {
             {UnitType::INDUSTRIAL_MISSILE_PLATFORM, 1.25f},
             {UnitType::INDUSTRIAL_ENGINEERING, 1.35f},
         };
-        const char* configured_root = std::getenv("RTS_DATA_ROOT");
-        const std::string path = std::string(configured_root != nullptr && configured_root[0] != '\0' ? configured_root : "data") + "/off_road.json";
+        const std::string configured_root = read_environment("RTS_DATA_ROOT");
+        const std::string path = (configured_root.empty() ? std::string("data") : configured_root) + "/off_road.json";
         std::ifstream input(path);
         if (!input) return result;
         std::stringstream contents;

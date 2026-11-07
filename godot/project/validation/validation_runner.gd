@@ -748,7 +748,7 @@ func _scenario_road_construction() -> void:
 	view.call("_update_road_preview", finish)
 	_check(preview.albedo_color.b > preview.albedo_color.r, "road.valid_preview", "Valid road preview uses the normal placement color")
 	await _capture_checkpoint(view, "road_preview")
-	var storage_id := int(extension.call("get_faction_production_line", 0))
+	var storage_id := int(view.get("commander_ids").get(0, -1))
 	var stores_before: Array = extension.call("economy_get_tactical_resources", storage_id)
 	var finish_world := Vector3(finish.x, float(view.call("_terrain_height_at", finish.x, finish.y)), finish.y)
 	_send_mouse_button(view, MOUSE_BUTTON_LEFT, view.get_viewport().get_camera_3d().unproject_position(finish_world))

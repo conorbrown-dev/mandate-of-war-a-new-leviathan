@@ -100,7 +100,7 @@ desktop-dense and presentation-only; simulation rules remain native C++.
 - **Presentation layer:** Godot 4.7.2 with `godot-cpp` GDExtension
 - **Visible unit batching:** Godot `MultiMeshInstance3D`
 - **Build system:** CMake
-- **Current verified platform:** Linux x86_64
+- **Current verified platforms:** Windows x86_64 (MSVC, renders on the GPU) and Linux x86_64
 
 ## Scale Targets
 

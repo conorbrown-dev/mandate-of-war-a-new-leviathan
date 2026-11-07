@@ -6,14 +6,17 @@
 #include <algorithm>
 #include <cmath>
 #include <deque>
+#include <vector>
 #include <cstring>
-#include <sys/socket.h>
-#include <netinet/in.h>
-#include <arpa/inet.h>
-#include <unistd.h>
-#include <openssl/sha.h>
+#include "network/socket_compat.hpp"
+#include "util/sha256.hpp"
 
 static_assert(rts::MAX_SNAPSHOT_ENTITIES >= 3 * rts::MAX_UNITS_PER_PLAYER, "snapshots must hold every faction at its unit cap");
+
+namespace {
+// Far larger than a thread stack on Windows, so it must not live on one.
+constexpr size_t MAX_ENCODED_SNAPSHOT_BYTES = 1024 * 1024;
+}
 
 namespace rts {
 
@@ -82,10 +85,8 @@ void NetworkManager::update_discovery(float delta_ms) {
         uint8_t buffer[1024];
         ssize_t bytes_recv;
         sockaddr_in sender_addr;
-        socklen_t sender_len = sizeof(sender_addr);
         
-        while ((bytes_recv = recvfrom(discovery_client_->socket_fd(), buffer, sizeof(buffer), 0,
-                                      reinterpret_cast<sockaddr*>(&sender_addr), &sender_len)) > 0) {
+        while ((bytes_recv = net::recv_datagram(discovery_client_->socket_fd(), buffer, sizeof(buffer), sender_addr)) > 0) {
             ServerInfo info{};
             if (discovery_client_->handle_packet(buffer, bytes_recv, info)) {
                 bool found = false;
@@ -209,8 +210,8 @@ bool NetworkManager::receive_command(InputCommand& cmd) {
      if (simulation_) {
          auto state = simulation_->get_state();
          if (pending_remote_checksum_.tick == current_tick_) {
-             uint8_t buffer[1024 * 1024];
-             size_t buffer_size = sizeof(buffer);
+             static thread_local std::vector<uint8_t> buffer(MAX_ENCODED_SNAPSHOT_BYTES);
+             size_t buffer_size = buffer.size();
              size_t encoded_size = 0;
              
              SnapshotError error = encode_portable_snapshot(
@@ -226,14 +227,14 @@ bool NetworkManager::receive_command(InputCommand& cmd) {
                  state.is_dead.data(),
                  static_cast<size_t>(state.entity_ids.size()),
                  current_tick_,
-                 buffer,
+                 buffer.data(),
                  buffer_size,
                  &encoded_size
              );
              
              if (error == SnapshotError::OK) {
                  uint8_t hash_buffer[SHA256_DIGEST_LENGTH];
-                 SHA256(buffer, encoded_size, hash_buffer);
+                 SHA256(buffer.data(), encoded_size, hash_buffer);
                  
                  uint64_t local_hash = 0;
                  std::memcpy(&local_hash, hash_buffer, sizeof(uint64_t));
@@ -339,7 +340,7 @@ bool NetworkManager::receive_command(InputCommand& cmd) {
      }
      
      uint8_t buffer[65536];
-     ssize_t n = ::recv(tcp_transport_.client_socket(), buffer, sizeof(buffer), MSG_DONTWAIT);
+     ssize_t n = net::recv_available(tcp_transport_.client_socket(), buffer, sizeof(buffer));
      if (n <= 0) {
          return;
      }
@@ -485,8 +486,8 @@ void NetworkManager::capture_snapshot_checksum() {
     
     auto state = simulation_->get_state();
     
-    uint8_t buffer[1024 * 1024];
-    size_t buffer_size = sizeof(buffer);
+    static thread_local std::vector<uint8_t> buffer(MAX_ENCODED_SNAPSHOT_BYTES);
+    size_t buffer_size = buffer.size();
     size_t encoded_size = 0;
     
     SnapshotError error = encode_portable_snapshot(
@@ -502,14 +503,14 @@ void NetworkManager::capture_snapshot_checksum() {
         state.is_dead.data(),
         static_cast<size_t>(state.entity_ids.size()),
         current_tick_,
-        buffer,
+        buffer.data(),
         buffer_size,
         &encoded_size
     );
     
     if (error == SnapshotError::OK) {
         uint8_t hash_buffer[SHA256_DIGEST_LENGTH];
-        SHA256(buffer, encoded_size, hash_buffer);
+        SHA256(buffer.data(), encoded_size, hash_buffer);
         
         SnapshotChecksum checksum;
         checksum.tick = current_tick_;

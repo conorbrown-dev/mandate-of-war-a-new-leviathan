@@ -4,7 +4,7 @@
 #include <sstream>
 #include <fstream>
 #include <iostream>
-#include <openssl/sha.h>
+#include "util/sha256.hpp"
 #include <regex>
 #include <unordered_map>
 #include <iomanip>

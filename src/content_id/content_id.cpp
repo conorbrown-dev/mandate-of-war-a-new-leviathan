@@ -1,7 +1,7 @@
 #include "content_id.hpp"
 #include <sstream>
 #include <iomanip>
-#include <openssl/sha.h>
+#include "util/sha256.hpp"
 
 namespace rts {
 

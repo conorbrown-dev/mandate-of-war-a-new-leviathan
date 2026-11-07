@@ -1,11 +1,17 @@
 #pragma once
 
+#include <filesystem>
 #include <iostream>
 #include <string>
 #include <vector>
 #include <functional>
 #include <unordered_map>
 #include <stdexcept>
+
+// A writable scratch path on every platform.
+inline std::string temp_file(const std::string& name) {
+    return (std::filesystem::temp_directory_path() / name).string();
+}
 
 namespace rts {
 namespace test {

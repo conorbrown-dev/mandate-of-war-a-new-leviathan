@@ -4,7 +4,9 @@
 
 ## Reproducible quick start
 
-On Linux x86_64, install CMake 3.20+, a C++20 compiler, OpenSSL development headers, Python 3, Git, and Godot 4.7.2. Set `GODOT_BIN` if Godot is not on `PATH`, then run:
+On Windows, install Visual Studio or its Build Tools with the C++ workload and Godot 4.7.2, then run `tools/build_windows.ps1` and `tools/run_game.ps1`.
+
+On Linux x86_64, install CMake 3.20+, a C++20 compiler, Python 3, Git, and Godot 4.7.2. Set `GODOT_BIN` if Godot is not on `PATH`, then run:
 
 ```bash
 python3 scripts/dev.py configure
