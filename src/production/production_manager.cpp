@@ -3,6 +3,8 @@
 #include <algorithm>
 #include <cmath>
 #include "ecs/components/factions.hpp"
+#include "simulation/structure_sites.hpp"
+#include "simulation/fuel_supply.hpp"
 
 namespace rts {
 
@@ -103,6 +105,8 @@ void ProductionManager::extract_resource(EntityId extractor_id, float delta_ms) 
     if (balance) *balance += amount;
     if (storage != storages_.end() && node.type == ResourceNode::Type::METAL)
         storage->second.metal_storage = storage->second.tactical.materials.current;
+    if (storage != storages_.end() && node.type == ResourceNode::Type::ENERGY)
+        storage->second.energy_storage = storage->second.tactical.fuel.current;
     node.amount -= amount;
     node.depleted = node.amount <= 0;
     ++extraction_count_;
@@ -202,14 +206,19 @@ void ProductionManager::update_construction_queues(float delta_ms) {
         const float ticks = fraction * entry.build_time_seconds * 20.0f;
         float metal = entry.metal_per_tick * ticks;
         auto& funds = storage->second;
-        if (funds.tactical.materials.current < metal) continue;
+        const float fuel = entry.fuel_per_tick * ticks;
+        if (funds.tactical.materials.current < metal || funds.tactical.fuel.current < fuel) continue;
         funds.tactical.materials.current -= metal;
         funds.metal_storage = funds.tactical.materials.current;
+        if (fuel > 0.0f) {
+            funds.tactical.fuel.current -= fuel;
+            funds.energy_storage = funds.tactical.fuel.current;
+        }
         entry.build_progress += fraction;
         line.active_jobs = 1;
         if (entry.build_progress >= 1.0f - 0.0001f) {
             completed_constructions_.push_back({entry.entity_id, entry.unit_type, entry.faction_id, entry.target_x, entry.target_y,
-                entry.type == ConstructionQueueEntry::Type::BUILDING, entry.structure_type});
+                entry.type == ConstructionQueueEntry::Type::BUILDING, entry.structure_type, entry.graded_structure});
             if (is_unit && slots != unit_slots_.end()) --slots->second;
             line.queue.pop(); // no reference to the popped entry may survive
             ++construction_count_;
@@ -265,12 +274,49 @@ bool ProductionManager::find_or_create_extractor(float x, float y, EntityId& ext
     constexpr float CLAIM_RADIUS = 8.0f;
     if (nearest_node == INVALID_ENTITY || best_dist_sq > CLAIM_RADIUS * CLAIM_RADIUS) return false;
     
-    auto new_id = static_cast<EntityId>(extractors_.size() + resource_nodes_.size() + 1000000);
+    const auto new_id = next_extractor_id_++;
     const auto& node = resource_nodes_.at(nearest_node);
     extractors_[new_id] = {node.x, node.y, nearest_node, 1.0f, 0.0f, true, INVALID_ENTITY};
     extractor_id = new_id;
     node_id = nearest_node;
     return true;
+}
+
+EntityId ProductionManager::fuel_depot_at(float x, float y) const {
+    constexpr float CLAIM_RADIUS = 8.0f;
+    EntityId nearest = INVALID_ENTITY;
+    float best_dist_sq = CLAIM_RADIUS * CLAIM_RADIUS;
+    for (const auto& [node_id, node] : resource_nodes_) {
+        if (node.type != ResourceNode::Type::ENERGY) continue;
+        const float dx = node.x - x;
+        const float dy = node.y - y;
+        const float distance_sq = dx * dx + dy * dy;
+        if (distance_sq < best_dist_sq || (distance_sq == best_dist_sq && node_id < nearest)) {
+            best_dist_sq = distance_sq;
+            nearest = node_id;
+        }
+    }
+    return nearest;
+}
+
+EntityId ProductionManager::fuel_depot_holder(EntityId depot_id) const {
+    for (const auto& [id, extractor] : extractors_) {
+        if (extractor.resource_node_id == depot_id) return extractor.storage_id;
+    }
+    return INVALID_ENTITY;
+}
+
+void ProductionManager::assign_fuel_depot(EntityId depot_id, EntityId storage_id, bool drawing) {
+    const auto depot = resource_nodes_.find(depot_id);
+    if (depot == resource_nodes_.end()) return;
+    for (auto& [id, extractor] : extractors_) {
+        if (extractor.resource_node_id != depot_id) continue;
+        extractor.storage_id = storage_id;
+        extractor.active = drawing;
+        return;
+    }
+    const auto new_id = next_extractor_id_++;
+    extractors_[new_id] = {depot->second.x, depot->second.y, depot_id, kFuelDepotDrawPerTick, 0.0f, drawing, storage_id};
 }
 
 bool ProductionManager::destroy_resource_site(float x, float y) {
@@ -313,6 +359,7 @@ bool ProductionManager::verify_queue_length(EntityId production_line_id, int exp
 void ProductionManager::reset() {
     resource_nodes_.clear();
     extractors_.clear();
+    next_extractor_id_ = 1000000;
     storages_.clear();
     production_lines_.clear();
     transports_.clear();
@@ -388,6 +435,11 @@ EntityId ProductionManager::faction_line(FactionId faction) const {
     auto it = faction_production_lines_.find(faction);
     return it == faction_production_lines_.end() ? INVALID_ENTITY : it->second;
 }
+EntityId ProductionManager::faction_storage(FactionId faction) const {
+    const auto line = production_lines_.find(faction_line(faction));
+    return line == production_lines_.end() ? INVALID_ENTITY : line->second.storage_id;
+}
+
 bool ProductionManager::can_queue_unit(EntityId line_id, FactionId faction, UnitType type) const {
     auto line = production_lines_.find(line_id);
     auto proto = get_unit_prototypes().find(type);
@@ -421,15 +473,37 @@ bool ProductionManager::queue_unit(EntityId line_id, FactionId faction, UnitType
     line.queue.push(entry);
     return true;
 }
-bool ProductionManager::can_queue_structure(EntityId line_id, FactionId faction, uint8_t structure_type) const {
+bool ProductionManager::can_queue_structure(EntityId line_id, FactionId faction, uint8_t structure_type,
+    float earthworks_material, float earthworks_fuel, int earthworks_jobs) const {
     if (structure_type > 3 || faction_line(faction) != line_id) return false;
     auto line = production_lines_.find(line_id);
-    if (line == production_lines_.end() || line->second.queue.size() >= static_cast<size_t>(line->second.max_jobs)) return false;
+    if (line == production_lines_.end() ||
+        line->second.queue.size() + static_cast<size_t>(earthworks_jobs) >= static_cast<size_t>(line->second.max_jobs)) return false;
     auto storage = storages_.find(line->second.storage_id);
     if (storage == storages_.end()) return false;
-    const float metal = structure_metal_cost(structure_type);
+    const float metal = structure_metal_cost(structure_type) + earthworks_material;
     const auto& funds = storage->second;
-    return funds.tactical.materials.current >= metal;
+    return funds.tactical.materials.current >= metal && funds.tactical.fuel.current >= earthworks_fuel;
+}
+void ProductionManager::queue_earthworks(EntityId line_id, FactionId faction, uint8_t graded_structure, float x, float y,
+    float material, float fuel, float seconds) {
+    auto& line = production_lines_.at(line_id);
+    ConstructionQueueEntry entry{};
+    entry.type = ConstructionQueueEntry::Type::BUILDING;
+    entry.unit_type = static_cast<UnitType>(0);
+    entry.faction_id = faction;
+    entry.structure_type = EARTHWORKS_JOB;
+    entry.graded_structure = graded_structure;
+    entry.display_name = "EARTHWORKS";
+    entry.total_cost_metal = material;
+    entry.total_cost_energy = 0.0f;
+    entry.build_time_seconds = seconds;
+    entry.metal_per_tick = material / (seconds * 20.0f);
+    entry.total_cost_fuel = fuel;
+    entry.fuel_per_tick = fuel / (seconds * 20.0f);
+    entry.energy_per_tick = 0.0f;
+    entry.target_x = x; entry.target_y = y;
+    line.queue.push(std::move(entry));
 }
 bool ProductionManager::queue_structure(EntityId line_id, FactionId faction, uint8_t structure_type, float x, float y) {
     if (!can_queue_structure(line_id, faction, structure_type)) return false;

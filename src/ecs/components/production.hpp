@@ -62,6 +62,9 @@ struct ConstructionQueueEntry {
     std::string display_name;
     float target_x = 0.0f;
     float target_y = 0.0f;
+    uint8_t graded_structure = 0; // Valid for an earthworks job
+    float total_cost_fuel = 0.0f;
+    float fuel_per_tick = 0.0f;
 };
 
 struct ProductionLine {

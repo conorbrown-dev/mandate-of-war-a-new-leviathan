@@ -62,6 +62,10 @@ void Simulation::start() {
     control_point_battle_.reset();
     reinforcement_delivery_.reset();
     road_network_.reset();
+    site_claims_.clear();
+    fuel_captures_.clear();
+    fuel_shipments_.clear();
+    fuel_supply_reasons_.fill({});
     pathfinding_.clear_traversal_costs();
     naval_pathfinding_.clear_traversal_costs();
 }
@@ -484,6 +488,16 @@ void Simulation::requisition_unit(EntityId entity, float x, float y, UnitType un
 }
 
 void Simulation::harvest_resource(EntityId entity, float x, float y) {
+    if (const EntityId depot = production_manager_.fuel_depot_at(x, y); depot != INVALID_ENTITY) {
+        // A depot changes hands when a unit reaches it, not when one is ordered to.
+        std::erase_if(fuel_captures_, [entity](const FuelCapture& capture) { return capture.unit == entity; });
+        if (component_manager_.get_component<Faction>(entity)) {
+            const auto& node = production_manager_.resource_nodes().at(depot);
+            fuel_captures_.push_back({entity, depot});
+            move_unit(entity, node.x, node.y);
+        }
+        return;
+    }
     EntityId extractor_id, node_id;
     if (!production_manager_.find_or_create_extractor(x, y, extractor_id, node_id)) {
         return;
@@ -504,6 +518,13 @@ void Simulation::harvest_resource(EntityId entity, float x, float y) {
 
 bool Simulation::destroy_resource_site(EntityId entity, float x, float y) {
     if (!component_manager_.get_component<Faction>(entity)) return false;
+    if (const EntityId depot = production_manager_.fuel_depot_at(x, y); depot != INVALID_ENTITY) {
+        const auto* position = component_manager_.get_component<Position>(entity);
+        const auto& node = production_manager_.resource_nodes().at(depot);
+        if (!position || std::hypot(position->x - node.x, position->y - node.y) > kFuelDepotCaptureRadius) {
+            return false;
+        }
+    }
     return production_manager_.destroy_resource_site(x, y);
 }
 
@@ -1044,6 +1065,15 @@ void Simulation::economy_phase(float delta_ms) {
     auto& completed = production_manager_.get_completed_constructions();
     for (size_t index = 0; index < completed.size(); ++index) {
         const auto& comp = completed[index];
+        if (comp.is_structure && comp.structure_type == EARTHWORKS_JOB) {
+            for (const auto& claim : site_claims_) {
+                if (claim.x == comp.x && claim.y == comp.y) {
+                    terrain_.flatten_rect(claim.x, claim.y, claim.half_x, claim.half_y, claim.pad_height);
+                    break;
+                }
+            }
+            continue;
+        }
         if (comp.is_structure) {
 			// Block the authored footprint, not just its center cell. Flow-field
 			// steering still provides an exit direction for an engineer already
@@ -1140,6 +1170,109 @@ void Simulation::environment_phase(float delta_ms) {
         }
         create_unit_with_type(deploy_x, deploy_y, package.unit_type, reinforcement_delivery_.owner());
     }
+    update_fuel_supply(delta_ms);
+}
+
+void Simulation::update_fuel_supply(float delta_ms) {
+    std::erase_if(fuel_captures_, [this](const FuelCapture& capture) {
+        const auto depot = production_manager_.resource_nodes().find(capture.depot);
+        const auto* position = component_manager_.get_component<Position>(capture.unit);
+        const auto* faction = component_manager_.get_component<Faction>(capture.unit);
+        const auto* health = component_manager_.get_component<Health>(capture.unit);
+        if (depot == production_manager_.resource_nodes().end() || !position || !faction ||
+            (health && health->is_dead)) return true;
+        const float depot_x = depot->second.x;
+        const float depot_y = depot->second.y;
+        if (std::hypot(position->x - depot_x, position->y - depot_y) <= kFuelDepotCaptureRadius) {
+            production_manager_.assign_fuel_depot(capture.depot, production_manager_.faction_storage(faction->faction_id), true);
+            return true;
+        }
+        const auto target = move_targets_.find(capture.unit);
+        return target == move_targets_.end() ||
+            std::hypot(target->second.arrival.x - depot_x, target->second.arrival.y - depot_y) > kFuelDepotCaptureRadius;
+    });
+
+    std::erase_if(fuel_shipments_, [this, delta_ms](FuelShipment& shipment) {
+        shipment.remaining_ms -= delta_ms;
+        if (shipment.remaining_ms > 0.0f) return false;
+        auto& reason = fuel_supply_reasons_[static_cast<size_t>(shipment.faction)];
+        if (territorial_control_.active_installation_count(shipment.faction, InstallationType::AIRFIELD) == 0) {
+            reason = "FUEL SHIPMENT LOST // NO AIRFIELD";
+            return true;
+        }
+        production_manager_.update_storage(production_manager_.faction_storage(shipment.faction), 0.0f, kFuelShipmentLoad);
+        reason = "FUEL SHIPMENT DELIVERED";
+        return true;
+    });
+}
+
+bool Simulation::request_fuel_shipment(FactionId player) {
+    auto& reason = fuel_supply_reasons_[static_cast<size_t>(player)];
+    if (fuel_shipment(player)) {
+        reason = "FUEL SHIPMENT ALREADY INBOUND";
+        return false;
+    }
+    float x = 0.0f;
+    float y = 0.0f;
+    if (!territorial_control_.get_active_installation_position(player, InstallationType::AIRFIELD, x, y)) {
+        reason = "AIRFIELD REQUIRED FOR FUEL SHIPMENTS";
+        return false;
+    }
+    const auto storage = production_manager_.storages().find(production_manager_.faction_storage(player));
+    if (storage == production_manager_.storages().end()) return false;
+    const auto& funds = storage->second.tactical;
+    if (funds.fuel.capacity - funds.fuel.current < kFuelShipmentLoad) {
+        reason = "FUEL STORAGE FULL";
+        return false;
+    }
+    if (funds.materials.current < kFuelShipmentMaterialCost ||
+        !production_manager_.deduct_faction_resources(player, kFuelShipmentMaterialCost, 0.0f)) {
+        reason = "INSUFFICIENT MATERIALS";
+        return false;
+    }
+    fuel_shipments_.push_back({player, x, y, kFuelShipmentDurationMs});
+    reason = "FUEL SHIPMENT INBOUND";
+    return true;
+}
+
+const FuelShipment* Simulation::fuel_shipment(FactionId faction) const {
+    for (const auto& shipment : fuel_shipments_) {
+        if (shipment.faction == faction) return &shipment;
+    }
+    return nullptr;
+}
+
+const std::string& Simulation::fuel_supply_reason(FactionId faction) const {
+    return fuel_supply_reasons_[static_cast<size_t>(faction)];
+}
+
+bool Simulation::assign_fuel_depot(EntityId depot, FactionId holder) {
+    const auto node = production_manager_.resource_nodes().find(depot);
+    const EntityId storage = production_manager_.faction_storage(holder);
+    if (node == production_manager_.resource_nodes().end() || storage == INVALID_ENTITY ||
+        node->second.type != ResourceNode::Type::ENERGY) return false;
+    production_manager_.assign_fuel_depot(depot, storage, false);
+    return true;
+}
+
+std::vector<FuelDepotStatus> Simulation::fuel_depots() const {
+    std::vector<FuelDepotStatus> depots;
+    for (const auto& [id, node] : production_manager_.resource_nodes()) {
+        if (node.type != ResourceNode::Type::ENERGY) continue;
+        FuelDepotStatus status{id, node.x, node.y, node.amount, node.max_amount};
+        const EntityId holder = production_manager_.fuel_depot_holder(id);
+        for (size_t faction = 0; faction < FACTION_COUNT && holder != INVALID_ENTITY; ++faction) {
+            if (production_manager_.faction_storage(static_cast<FactionId>(faction)) == holder) {
+                status.owner = static_cast<int>(faction);
+            }
+        }
+        status.capturing = std::any_of(fuel_captures_.begin(), fuel_captures_.end(),
+            [id](const FuelCapture& capture) { return capture.depot == id; });
+        depots.push_back(status);
+    }
+    std::sort(depots.begin(), depots.end(),
+        [](const FuelDepotStatus& a, const FuelDepotStatus& b) { return a.id < b.id; });
+    return depots;
 }
 
 bool Simulation::begin_control_point_battle(const std::vector<ControlPointDefinition>& points,
@@ -1950,35 +2083,30 @@ void Simulation::block_civilian_area(float x, float y, float radius) {
     pathfinding_.block_world_area(x, y, radius);
 }
 
-bool Simulation::validate_structure_placement(uint8_t structure_type, float x, float y) const {
-    struct PlacementProfile {
-        float footprint_x;
-        float footprint_y;
-        float maximum_slope;
-        float maximum_height_variation;
-    };
-    const PlacementProfile profile = [&]() {
-        switch (structure_type) {
-            // Keep buildable ground visibly level at the tactical scale. The
-            // old limits allowed structures to perch on relief that was
-            // technically navigable but visually swallowed nearby units.
-            case 0: return PlacementProfile{125.0f, 125.0f, 0.32f, 55.0f}; // outpost
-            case 1: return PlacementProfile{125.0f, 125.0f, 0.32f, 55.0f}; // radar
-            // Reserve an operational runway corridor without treating the
-            // compact tactical model as a full 1.8 km civil runway. This spans
-            // several navigation cells but remains buildable on broad slopes.
-            case 2: return PlacementProfile{250.0f, 750.0f, 0.28f, 180.0f}; // airfield
-            case 3: return PlacementProfile{125.0f, 125.0f, 0.36f, 65.0f}; // beacon
-            default: return PlacementProfile{0.0f, 0.0f, 0.0f, 0.0f};
+bool Simulation::site_claimed(float x, float y, float half_x, float half_y) const {
+    // Levelling moves whole height cells, so keep one cell of clearance from
+    // ground another structure already stands on.
+    const float margin = pathfinding_.cell_size();
+    for (const auto& claim : site_claims_) {
+        if (std::abs(claim.x - x) < claim.half_x + half_x + margin &&
+            std::abs(claim.y - y) < claim.half_y + half_y + margin) {
+            return true;
         }
-    }();
-    if (profile.footprint_x <= 0.0f || !std::isfinite(x) || !std::isfinite(y)) return false;
+    }
+    return false;
+}
 
-    const float half_x = profile.footprint_x * 0.5f;
-    const float half_y = profile.footprint_y * 0.5f;
-    const float sample_x = profile.footprint_x / 4.0f;
-    const float sample_y = profile.footprint_y / 4.0f;
+StructureSite Simulation::assess_structure_site(uint8_t structure_type, float x, float y) const {
+    StructureSite site{};
+    const StructureSiteRules rules = structure_site_rules(structure_type);
+    if (rules.footprint_x <= 0.0f || !std::isfinite(x) || !std::isfinite(y)) return site;
+
+    const float half_x = rules.footprint_x * 0.5f;
+    const float half_y = rules.footprint_y * 0.5f;
+    const float sample_x = rules.footprint_x / 4.0f;
+    const float sample_y = rules.footprint_y / 4.0f;
     float heights[5][5]{};
+    float total_height = 0.0f;
     for (int row = 0; row < 5; ++row) {
         for (int column = 0; column < 5; ++column) {
             const float sample_world_x = x - half_x + sample_x * static_cast<float>(column);
@@ -1987,9 +2115,10 @@ bool Simulation::validate_structure_placement(uint8_t structure_type, float x, f
                 sample_world_x <= pathfinding_.max_world_x_center() + pathfinding_.cell_size() * 0.5f &&
                 sample_world_y >= pathfinding_.min_world_y_center() - pathfinding_.cell_size() * 0.5f &&
                 sample_world_y <= pathfinding_.max_world_y_center() + pathfinding_.cell_size() * 0.5f;
-            if (!inside_world) return false;
-            if (!is_land_position(sample_world_x, sample_world_y)) return false;
+            if (!inside_world) return site;
+            if (!is_land_position(sample_world_x, sample_world_y)) return site;
             heights[row][column] = terrain_.height_at(sample_world_x, sample_world_y);
+            total_height += heights[row][column];
         }
     }
 
@@ -2010,8 +2139,48 @@ bool Simulation::validate_structure_placement(uint8_t structure_type, float x, f
             }
         }
     }
-    return maximum_slope <= profile.maximum_slope &&
-        maximum_height - minimum_height <= profile.maximum_height_variation;
+    const float height_variation = maximum_height - minimum_height;
+    site.pad_height = total_height / 25.0f;
+    if (maximum_slope <= rules.direct_slope && height_variation <= rules.direct_height_variation) {
+        site.buildable = true;
+        return site;
+    }
+    if (maximum_slope > rules.earthworks_slope || height_variation > rules.earthworks_height_variation ||
+        site_claimed(x, y, half_x, half_y)) {
+        return site;
+    }
+    float total_depth = 0.0f;
+    for (int row = 0; row < 5; ++row) {
+        for (int column = 0; column < 5; ++column) {
+            total_depth += std::abs(heights[row][column] - site.pad_height);
+        }
+    }
+    const float mean_depth = total_depth / 25.0f;
+    site.buildable = true;
+    site.earthworks = true;
+    site.material = kEarthworksBaseMaterial + mean_depth * rules.earthworks_material_per_meter;
+    site.fuel = kEarthworksBaseFuel + mean_depth * rules.earthworks_fuel_per_meter;
+    site.seconds = earthworks_seconds(mean_depth);
+    return site;
+}
+
+bool Simulation::validate_structure_placement(uint8_t structure_type, float x, float y) const {
+    return assess_structure_site(structure_type, x, y).buildable;
+}
+
+bool Simulation::queue_structure(EntityId line, FactionId faction, uint8_t structure_type, float x, float y) {
+    const StructureSite site = assess_structure_site(structure_type, x, y);
+    if (!site.buildable) return false;
+    if (!production_manager_.can_queue_structure(line, faction, structure_type, site.material, site.fuel, site.earthworks ? 1 : 0)) {
+        return false;
+    }
+    if (site.earthworks) {
+        production_manager_.queue_earthworks(line, faction, structure_type, x, y, site.material, site.fuel, site.seconds);
+    }
+    production_manager_.queue_structure(line, faction, structure_type, x, y);
+    const StructureSiteRules rules = structure_site_rules(structure_type);
+    site_claims_.push_back({x, y, rules.footprint_x * 0.5f, rules.footprint_y * 0.5f, site.pad_height});
+    return true;
 }
 
 bool Simulation::validate_engineer_placement(float x, float y) const {
@@ -2023,7 +2192,8 @@ bool Simulation::validate_engineer_placement(float x, float y) const {
     // A construction unit needs one usable local building footprint. Requiring
     // valid road probes in both axes rejected otherwise healthy slopes and
     // made engineer spawning much stricter than normal play.
-    return validate_structure_placement(0, x, y);
+    const StructureSite site = assess_structure_site(0, x, y);
+    return site.buildable && !site.earthworks;
 }
 
 bool Simulation::validate_road_placement(float start_x, float start_y, float end_x, float end_y) const {

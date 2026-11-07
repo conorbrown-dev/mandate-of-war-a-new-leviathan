@@ -160,7 +160,7 @@ void AIManager::plan_expansion() {
         bool claimed = false;
         for (const auto& [extractor_id, extractor] : simulation_->production_manager().extractors()) {
             (void)extractor_id;
-            if (extractor.resource_node_id == id && extractor.active) { claimed = true; break; }
+            if (extractor.resource_node_id == id && (extractor.active || extractor.storage_id != INVALID_ENTITY)) { claimed = true; break; }
         }
         const auto& node = simulation_->production_manager().resource_nodes().at(id);
         if (!claimed && (node.amount > selected_amount || (node.amount == selected_amount && id < selected))) {

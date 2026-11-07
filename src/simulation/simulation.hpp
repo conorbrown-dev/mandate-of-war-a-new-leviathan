@@ -16,6 +16,7 @@
 #include "replay/replay_writer.hpp"
 #include "render/renderer.hpp"
 #include "terrain.hpp"
+#include "structure_sites.hpp"
 #include "road_network.hpp"
 #include "off_road.hpp"
 #include "../ecs/components/off_road.hpp"
@@ -25,6 +26,7 @@
 #include "command_manager.hpp"
 #include "control_point_battle.hpp"
 #include "reinforcement_delivery.hpp"
+#include "fuel_supply.hpp"
 #include "ai/ai_manager.hpp"
 #include "production/requisition_manager.hpp"
 
@@ -218,6 +220,9 @@ public:
     bool is_land_position(float x, float y) const;
     void block_civilian_area(float x, float y, float radius);
     bool validate_structure_placement(uint8_t structure_type, float x, float y) const;
+    StructureSite assess_structure_site(uint8_t structure_type, float x, float y) const;
+    // Queues the structure, with an earthworks job first when the ground needs it.
+    bool queue_structure(EntityId line, FactionId faction, uint8_t structure_type, float x, float y);
     bool validate_engineer_placement(float x, float y) const;
     bool validate_road_placement(float start_x, float start_y, float end_x, float end_y) const;
     bool queue_road(EntityId engineer, FactionId owner, float start_x, float start_y, float end_x, float end_y);
@@ -250,6 +255,12 @@ public:
     bool request_reinforcement_delivery(FactionId player);
     void set_reinforcement_resources(FactionId faction, float material, float energy);
     const ReinforcementDelivery& reinforcement_delivery() const { return reinforcement_delivery_; }
+
+    bool request_fuel_shipment(FactionId player);
+    const FuelShipment* fuel_shipment(FactionId faction) const;
+    const std::string& fuel_supply_reason(FactionId faction) const;
+    bool assign_fuel_depot(EntityId depot, FactionId holder);
+    std::vector<FuelDepotStatus> fuel_depots() const;
 
 private:
     void refresh_unit_counts();
@@ -285,6 +296,15 @@ private:
     struct PatrolOrder { Position origin; Position destination; bool returning = false; };
     std::unordered_map<EntityId, PatrolOrder> patrol_orders_;
     Terrain terrain_;
+    struct SiteClaim {
+        float x, y, half_x, half_y, pad_height;
+    };
+    bool site_claimed(float x, float y, float half_x, float half_y) const;
+    std::vector<SiteClaim> site_claims_;
+    void update_fuel_supply(float delta_ms);
+    std::vector<FuelCapture> fuel_captures_;
+    std::vector<FuelShipment> fuel_shipments_;
+    std::array<std::string, FACTION_COUNT> fuel_supply_reasons_{};
     RoadNetwork road_network_;
     TerritorialControlManager territorial_control_;
      ControlPointBattle control_point_battle_;

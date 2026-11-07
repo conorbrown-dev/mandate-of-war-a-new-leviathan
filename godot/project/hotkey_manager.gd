@@ -41,6 +41,11 @@ func _load_default_hotkeys() -> void:
 			"description": "Request reinforcement package"
 		},
 		{
+			"key": "KEY_J",
+			"action": "fuel_shipment_request",
+			"description": "Request fuel shipment"
+		},
+		{
 			"key": "KEY_8",
 			"action": "fob_build",
 			"description": "Forward Outpost build mode"

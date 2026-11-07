@@ -19,6 +19,9 @@ const FACTION_UNIT_VISUAL_OVERRIDES := {
 const BUILD_UNIT_SHORTCUTS := ["1", "4", "5", "9", "0", "P"]
 const CAMERA_MIN_DISTANCE := 24.0
 const CAMERA_MAX_DISTANCE := 26000.0
+# From this zoom a pixel covers metres of ground, so clicks are approximate.
+const APPROXIMATE_CLICK_MIN_CAMERA_DISTANCE := 2000.0
+const APPROXIMATE_CLICK_PIXELS := 24.0
 const CAMERA_MIN_FAR_DISTANCE := 120000.0
 const CAMERA_TERRAIN_CLEARANCE := 6.0
 const UNIT_MODEL_GROUND_CLEARANCE := 1.2
@@ -40,6 +43,8 @@ const MESH_BASE_PATH := "res://scenarios/meshes/"
 const TERRAIN_SAMPLE_WIDTH := 320
 const TERRAIN_SAMPLE_HEIGHT := 320
 const CIVILIAN_DRESSING_PATH := "res://scenarios/civilian_dressing.json"
+const FUEL_DEPOTS_PATH := "res://scenarios/fuel_depots.json"
+const FUEL_STATUS_SECONDS := 8.0
 const TerrainVegetation := preload("res://terrain_vegetation.gd")
 const UnitCatalog := preload("res://unit_catalog.gd")
 const TERRAIN_MASKS_PATH := "res://scenarios/terrain_masks.png"
@@ -55,7 +60,7 @@ const MATERIAL_SITES := [
 	{"id": 900, "name": "RARE METALS", "position": Vector2(-15500, -9000), "owner": -1, "color": Color("#ffbd52")},
 	{"id": 901, "name": "SILICON", "position": Vector2(-10500, 11000), "owner": -1, "color": Color("#47d9ff")},
 	{"id": 902, "name": "POLYMER FEEDSTOCK", "position": Vector2(10500, -11000), "owner": 1, "color": Color("#ce82ff")},
-	{"id": 903, "name": "SYNTHETIC OIL", "position": Vector2(15500, 9000), "owner": 1, "color": Color("#7ad99b")},
+	{"id": 903, "name": "COMPOSITES", "position": Vector2(15500, 9000), "owner": 1, "color": Color("#7ad99b")},
 ]
 
 @onready var camera: Camera3D = $Camera3D
@@ -98,6 +103,8 @@ var unit_multimesh: MultiMesh
 var demo_unit_views: Dictionary = {}
 var demo_mode := false
 var terrain_heights := PackedFloat32Array()
+var terrain_mesh_arrays: Array = []
+var terrain_revision_seen := 0
 var terrain_vegetation: TerrainVegetation
 var terrain_world_width := 320.0
 var terrain_world_height := 320.0
@@ -235,6 +242,11 @@ var forest_tree_variant_indices: Array[int] = []
 var forest_tree_root_depths: Array[float] = []
 var pending_build_order: Dictionary = {}
 var material_site_state: Dictionary = {}
+var fuel_depot_state: Dictionary = {}
+var fuel_supply_status := ""
+var fuel_supply_reason_seen := ""
+var fuel_supply_status_expires_msec := 0
+var fuel_shipment_presentation: Node3D
 var material_order_mode := 0 # 0 normal, 1 claim/capture, 2 demolish
 var fob_build_mode := false
 var fob_build_target := Vector2.INF
@@ -487,6 +499,7 @@ func _setup_strategic_command_view() -> void:
 	strategic_command_view.visible = false
 	strategic_command_view.select_delivery_zone.connect(_on_strategic_command_select_zone)
 	strategic_command_view.request_package.connect(_on_strategic_command_request_package)
+	strategic_command_view.request_fuel.connect(_request_fuel_shipment)
 	strategic_command_view.dismissed.connect(_close_strategic_command)
 	ui_root.add_child(strategic_command_view)
 
@@ -535,7 +548,59 @@ func _sync_strategic_command() -> void:
 		return
 	var state: Dictionary = extension.call("reinforcement_delivery_state") if reinforcement_delivery_enabled else {}
 	var status := reinforcement_delivery_status if not reinforcement_delivery_status.is_empty() else String(state.get("reason", "DELIVERY ACCESS UNAVAILABLE"))
-	strategic_command_view.set_delivery_state(int(state.get("state", 0)), status)
+	strategic_command_view.set_delivery_state(int(state.get("state", 0)), _with_fuel_status(status))
+
+
+func _with_fuel_status(status: String) -> String:
+	if fuel_supply_status.is_empty():
+		return status
+	return fuel_supply_status if status.is_empty() else "%s // %s" % [status, fuel_supply_status]
+
+
+func _request_fuel_shipment() -> bool:
+	var accepted := bool(extension.call("fuel_shipment_request", HUMAN_PLAYER_ID))
+	_sync_fuel_supply()
+	_sync_strategic_command()
+	_update_hud()
+	return accepted
+
+
+func _sync_fuel_supply() -> void:
+	var supply: Dictionary = extension.call("fuel_supply_state", HUMAN_PLAYER_ID)
+	var owners_changed := false
+	for depot in supply.get("depots", []):
+		var site: Dictionary = fuel_depot_state.get(int(depot.id), {})
+		if site.is_empty():
+			continue
+		owners_changed = owners_changed or int(site.owner) != int(depot.owner)
+		site.owner = int(depot.owner)
+		site.stock = float(depot.stock)
+		site.capturing = bool(depot.capturing)
+	if owners_changed:
+		_rebuild_material_site_views()
+	var reason := String(supply.get("reason", ""))
+	if reason != fuel_supply_reason_seen:
+		fuel_supply_reason_seen = reason
+		fuel_supply_status = reason
+		fuel_supply_status_expires_msec = Time.get_ticks_msec() + int(FUEL_STATUS_SECONDS * 1000.0)
+	var inbound := supply.has("shipment_remaining_ms")
+	if inbound:
+		fuel_supply_status = "FUEL SHIPMENT INBOUND // %.0f S" % (float(supply.shipment_remaining_ms) / 1000.0)
+		fuel_supply_status_expires_msec = Time.get_ticks_msec() + int(FUEL_STATUS_SECONDS * 1000.0)
+	elif Time.get_ticks_msec() > fuel_supply_status_expires_msec:
+		fuel_supply_status = ""
+	if fuel_shipment_presentation == null and inbound:
+		fuel_shipment_presentation = ReinforcementPresentationScript.new()
+		add_child(fuel_shipment_presentation)
+	if fuel_shipment_presentation != null:
+		var duration := float(supply.get("shipment_duration_ms", 1.0))
+		fuel_shipment_presentation.sync({
+			"state": 3 if inbound else 0,
+			"elapsed_ms": duration - float(supply.get("shipment_remaining_ms", 0.0)),
+			"duration_ms": duration,
+			"delivery_x": float(supply.get("shipment_x", 0.0)),
+			"delivery_y": float(supply.get("shipment_y", 0.0)),
+		}, func(x: float, z: float): return _terrain_height_at(x, z))
 
 
 func _setup_environment_debug_panel() -> void:
@@ -819,7 +884,8 @@ func _configure_scenario_theater() -> void:
 			# landmass duplicated the world twice at their local offsets, obscuring
 			# the intended terrain and units.  The Ocean node is the single map-wide
 			# terrain host; the old landmass planes are only a no-heightmap fallback.
-			terrain_view.mesh = HeightMap.generate_terrain_mesh(heights, terrain_world_width, terrain_world_height)
+			terrain_mesh_arrays = HeightMap.build_terrain_arrays(heights, terrain_world_width, terrain_world_height)
+			_apply_terrain_mesh()
 			terrain_view.visible = true
 			for landmass in landmass_nodes:
 				landmass.visible = false
@@ -855,6 +921,7 @@ func _on_start_skirmish_pressed() -> void:
 	var theater_terrain: Dictionary = scenario_definition.theater.get("terrain", {})
 	if theater_terrain.get("data", "") != "":
 		extension.call("load_terrain_heightmap", theater_terrain.get("data", ""))
+	terrain_revision_seen = int(extension.call("get_terrain_revision"))
 	extension.call("start_simulation")
 	match_started = true
 	_setup_economy_for_player_1()
@@ -873,6 +940,9 @@ func _on_start_skirmish_pressed() -> void:
 	hidden_base_ids.clear()
 	pending_player_build_types.clear()
 	material_site_state.clear()
+	fuel_depot_state.clear()
+	fuel_supply_status = ""
+	fuel_supply_reason_seen = ""
 	material_order_mode = 0
 	if not _spawn_commander_start():
 		push_error("Failed to create the authoritative engineer-start forces")
@@ -890,6 +960,7 @@ func _on_start_skirmish_pressed() -> void:
 	extension.call("reinforcement_delivery_set_resources", HUMAN_PLAYER_ID,
 		SKIRMISH_PRESENTATION_STARTING_MATERIALS, SKIRMISH_PRESENTATION_STARTING_FUEL)
 	_spawn_material_sites()
+	_spawn_fuel_depots()
 	_spawn_civilian_buildings()
 	_set_selected(_player_engineer_id(), true)
 
@@ -934,12 +1005,17 @@ func _process(delta: float) -> void:
 			build_ghost = _make_build_ghost(build_mode_type)
 			add_child(build_ghost)
 		var ghost_valid := true
+		var ghost_earthworks := false
 		if build_mode_type >= 100 and extension != null:
-			# The preview must remain beneath the cursor. Construction pads make the
-			# starting area permissive; away from them an invalid cursor location is
-			# communicated by the ghost colour, never by silently moving the order.
-			ghost_valid = bool(extension.call("validate_structure_placement", build_mode_type - 100, ghost_target.x, ghost_target.y))
-		_set_build_ghost_valid(ghost_valid)
+			# Up close the preview stays beneath the cursor and colour reports an
+			# invalid location. Zoomed out it shows the nearby spot the order will use.
+			var resolved_target := _resolve_build_target(build_mode_type, ghost_target)
+			ghost_valid = resolved_target != Vector2.INF
+			if ghost_valid:
+				ghost_target = resolved_target
+				var site: Dictionary = extension.call("get_structure_site", build_mode_type - 100, ghost_target.x, ghost_target.y)
+				ghost_earthworks = bool(site.get("earthworks", false))
+		_set_build_ghost_valid(ghost_valid, ghost_earthworks)
 		build_ghost.position = Vector3(ghost_target.x, _terrain_height_at(ghost_target.x, ghost_target.y) + 0.08, ghost_target.y)
 	if extension == null or not match_started:
 		return
@@ -1082,6 +1158,9 @@ func _unhandled_input(event: InputEvent) -> void:
 		_issue_stop_order()
 		return
 	if event is InputEventKey and event.pressed:
+		if event.keycode == KEY_J:
+			_request_fuel_shipment()
+			return
 		if reinforcement_delivery_enabled and event.keycode == KEY_D:
 			reinforcement_delivery_selecting = true
 			reinforcement_delivery_status = "SELECT A FRIENDLY AIRFIELD // LEFT-CLICK ITS STRUCTURE"
@@ -1349,8 +1428,42 @@ func _spawn_material_sites() -> void:
 	_rebuild_material_site_views()
 
 
+# Depots hold a finite stock that was shipped in before the battle. Nothing on
+# the map produces fuel, so a captured depot runs dry for good.
+func _spawn_fuel_depots() -> void:
+	var file := FileAccess.open(FUEL_DEPOTS_PATH, FileAccess.READ)
+	if file == null:
+		push_warning("Fuel depot data is unavailable")
+		return
+	var content: Variant = JSON.parse_string(file.get_as_text())
+	if not content is Dictionary:
+		push_warning("Fuel depot data is malformed")
+		return
+	for definition in content.get("depots", []):
+		var coordinates: Array = definition.get("position", [0, 0])
+		var position := Vector2(float(coordinates[0]), float(coordinates[1]))
+		var stock := float(definition.get("stock", 0.0))
+		var id := int(definition.get("id", 0))
+		var owner := int(definition.get("owner", -1))
+		extension.call("economy_add_resource_node", id, position.x, position.y, stock, 1)
+		if owner >= 0:
+			extension.call("economy_assign_fuel_depot", id, owner)
+		fuel_depot_state[id] = {
+			"id": id,
+			"name": String(definition.get("name", "FUEL DEPOT")),
+			"kind": String(definition.get("kind", "civilian")),
+			"position": position,
+			"owner": owner,
+			"stock": stock,
+			"capacity": stock,
+			"capturing": false,
+		}
+	_rebuild_material_site_views()
+
+
 func _clear_material_sites() -> void:
 	for child in resource_sites.get_children():
+		resource_sites.remove_child(child)
 		child.queue_free()
 
 
@@ -1373,6 +1486,24 @@ func _rebuild_material_site_views() -> void:
 		_add_box_model(root, Vector3(0.22, 2.2, 0.22), Vector3(-1.55, 1.25, -0.85), signal_material)
 		_add_box_model(root, Vector3(0.22, 2.2, 0.22), Vector3(1.55, 1.25, -0.85), signal_material)
 		_add_cylinder_model(root, 0.25, 0.16, Vector3(0, 1.72, 0), signal_material)
+	for site in fuel_depot_state.values():
+		_add_fuel_depot_view(site)
+
+
+func _add_fuel_depot_view(site: Dictionary) -> void:
+	var root := Node3D.new()
+	root.name = "FuelDepot_%d" % int(site.id)
+	var position: Vector2 = site.position
+	root.position = Vector3(position.x, _terrain_height_at(position.x, position.y), position.y)
+	resource_sites.add_child(root)
+	var owner := int(site.get("owner", -1))
+	var signal_color: Color = PLAYER_FACTION_COLOR if owner == HUMAN_PLAYER_ID else AI_FACTION_COLOR if owner == 1 else Color("#d9d3c4")
+	var tank := _demo_material(Color("#5d6468"))
+	var signal_material := _demo_material(signal_color, 1.2)
+	_add_box_model(root, Vector3(9.0, 0.3, 6.0), Vector3(0, 0.15, 0), _demo_material(Color("#2b3537")))
+	for offset in [Vector3(-2.6, 0, 0), Vector3(0, 0, 0), Vector3(2.6, 0, 0)]:
+		_add_cylinder_model(root, 1.15, 2.4, offset + Vector3(0, 1.5, 0), tank)
+		_add_cylinder_model(root, 1.2, 0.18, offset + Vector3(0, 1.9, 0), signal_material)
 
 
 func _spawn_civilian_buildings() -> void:
@@ -1476,9 +1607,12 @@ func _set_material_order_mode(mode: int) -> void:
 	var commander_id := _player_engineer_id()
 	if commander_id <= 0:
 		return
-	# Resource actions are commander-level orders. Arm the mode even when the
-	# player forgot to select the opening unit first.
-	if not selected_ids.has(commander_id):
+	# Arm the mode even when nothing friendly is selected. A selected force stays
+	# selected, because any friendly unit can capture a fuel depot.
+	var friendly_selected := false
+	for id in selected_ids:
+		friendly_selected = friendly_selected or player_entity_ids.has(id)
+	if not friendly_selected:
 		_clear_selection()
 		_set_selected(commander_id, true)
 	material_order_mode = mode
@@ -1486,19 +1620,21 @@ func _set_material_order_mode(mode: int) -> void:
 
 
 func _issue_material_site_order(screen_position: Vector2) -> void:
-	var ray_origin := camera.project_ray_origin(screen_position)
-	var ray_direction := camera.project_ray_normal(screen_position)
-	var intersection = Plane(Vector3.UP, 0.0).intersects_ray(ray_origin, ray_direction)
-	if intersection == null:
+	var target := _screen_ground_point(screen_position)
+	if target == Vector2.INF:
 		return
-	var target: Vector3 = intersection
 	var selected_site: Dictionary = {}
-	var nearest_distance := 8.0
+	var nearest_distance := maxf(8.0, _click_tolerance_meters())
 	for site in material_site_state.values():
 		if bool(site.get("destroyed", false)):
 			continue
 		var position: Vector2 = site.position
-		var distance := Vector2(target.x, target.z).distance_to(position)
+		var distance := target.distance_to(position)
+		if distance <= nearest_distance:
+			nearest_distance = distance
+			selected_site = site
+	for site in fuel_depot_state.values():
+		var distance := target.distance_to(site.position)
 		if distance <= nearest_distance:
 			nearest_distance = distance
 			selected_site = site
@@ -1506,6 +1642,21 @@ func _issue_material_site_order(screen_position: Vector2) -> void:
 		return
 	var commander_id := _player_engineer_id()
 	var site_position: Vector2 = selected_site.position
+	if fuel_depot_state.has(int(selected_site.id)):
+		# Any friendly unit can take a depot; the slow engineer is only the fallback.
+		var capturer := commander_id
+		for id in selected_ids:
+			if player_entity_ids.has(id):
+				capturer = id
+				break
+		if material_order_mode == 1:
+			extension.call("issue_harvest_commands", PackedInt32Array([capturer]), HUMAN_PLAYER_ID, site_position.x, site_position.y)
+		elif material_order_mode == 2 and extension.call("destroy_resource_site", capturer, site_position.x, site_position.y):
+			fuel_depot_state.erase(int(selected_site.id))
+		material_order_mode = 0
+		_rebuild_material_site_views()
+		_update_hud()
+		return
 	if material_order_mode == 1:
 		var accepted: int = extension.call("issue_harvest_commands", PackedInt32Array([commander_id]), HUMAN_PLAYER_ID, site_position.x, site_position.y)
 		if accepted == 1:
@@ -1901,6 +2052,22 @@ func _update_hover_context() -> void:
 					"title": "FRIENDLY // %s" % _structure_display_name(structure_type),
 					"detail": "MATERIALS %.0f  //  TACTICAL INSTALLATION" % _structure_material_cost(structure_type),
 					"accent": Color("#47d9ff"),
+				}
+		for site in fuel_depot_state.values():
+			var site_position: Vector2 = site.position
+			var world_position := Vector3(site_position.x, _terrain_height_at(site_position.x, site_position.y), site_position.y)
+			if camera.is_position_behind(world_position):
+				continue
+			var distance := camera.unproject_position(world_position).distance_to(pointer)
+			if distance < nearest_distance:
+				nearest_distance = distance
+				var owner := int(site.owner)
+				var allegiance: String = "FRIENDLY" if owner == HUMAN_PLAYER_ID else "HOSTILE" if owner >= 0 else "UNCLAIMED"
+				next_context = {
+					"key": "fuel:%d:%d:%d" % [int(site.id), owner, int(float(site.stock) / 50.0)],
+					"title": "%s // %s" % [allegiance, site.name],
+					"detail": "FUEL STOCK %.0f / %.0f  //  2 THEN RIGHT-CLICK TO CAPTURE" % [float(site.stock), float(site.capacity)],
+					"accent": Color("#7ad99b") if owner == HUMAN_PLAYER_ID else Color("#ff6d65") if owner >= 0 else Color("#ffbd52"),
 				}
 	if next_context.get("key", "") == hover_context.get("key", ""):
 		return
@@ -2648,15 +2815,12 @@ func _order_fob(screen_position: Vector2) -> void:
 	if selected_ids.is_empty() or commander_id < 0:
 		fob_build_mode = false
 		return
-	var ray_origin := camera.project_ray_origin(screen_position)
-	var ray_direction := camera.project_ray_normal(screen_position)
-	var intersection = Plane(Vector3.UP, 0.0).intersects_ray(ray_origin, ray_direction)
-	if intersection == null:
+	var target := _screen_ground_point(screen_position)
+	if target == Vector2.INF:
 		return
-	var target: Vector3 = intersection
-	var accepted := int(extension.call("issue_install_commands", selected_ids, HUMAN_PLAYER_ID, target.x, target.z, 1))
+	var accepted := int(extension.call("issue_install_commands", selected_ids, HUMAN_PLAYER_ID, target.x, target.y, 1))
 	if accepted == selected_ids.size():
-		fob_build_target = Vector2(target.x, target.z)
+		fob_build_target = target
 		fob_was_constructing = false
 		fob_completion_notification = ""
 	else:
@@ -2679,7 +2843,8 @@ func _order_commander_to_build(build_type: int, target: Vector2) -> void:
 	var commander_id := _player_engineer_id()
 	if commander_id < 0:
 		return
-	if build_type >= 100 and not bool(extension.call("validate_structure_placement", build_type - 100, target.x, target.y)):
+	target = _resolve_build_target(build_type, target)
+	if target == Vector2.INF:
 		push_warning("Structure placement rejected at the cursor location")
 		return
 	var commander_position := _native_unit_position(commander_id)
@@ -2756,6 +2921,37 @@ func _screen_to_world(screen_position: Vector2) -> Vector2:
 			prior_above = above
 	var intersection = Plane(Vector3.UP, 0.0).intersects_ray(ray_origin, ray_direction)
 	return Vector2(intersection.x, intersection.z) if intersection != null else Vector2.ZERO
+
+func _screen_ground_point(screen_position: Vector2) -> Vector2:
+	if camera.project_ray_normal(screen_position).y >= -0.00001:
+		return Vector2.INF
+	return _screen_to_world(screen_position)
+
+
+func _click_tolerance_meters() -> float:
+	if camera_distance < APPROXIMATE_CLICK_MIN_CAMERA_DISTANCE:
+		return 0.0
+	var meters_per_pixel := 2.0 * camera_distance * tan(deg_to_rad(camera.fov) * 0.5) / get_viewport().get_visible_rect().size.y
+	return meters_per_pixel * APPROXIMATE_CLICK_PIXELS
+
+
+func _resolve_build_target(build_type: int, target: Vector2) -> Vector2:
+	if build_type < 100:
+		return target
+	var structure_type := build_type - 100
+	if bool(extension.call("validate_structure_placement", structure_type, target.x, target.y)):
+		return target
+	var tolerance := _click_tolerance_meters()
+	if tolerance <= 0.0:
+		return Vector2.INF
+	for ring in range(1, 5):
+		var radius := tolerance * float(ring) / 4.0
+		for step in range(16):
+			var candidate := target + Vector2.RIGHT.rotated(TAU * float(step) / 16.0) * radius
+			if bool(extension.call("validate_structure_placement", structure_type, candidate.x, candidate.y)):
+				return candidate
+	return Vector2.INF
+
 
 func _begin_build_placement(build_type: int) -> void:
 	var commander_id := _player_engineer_id()
@@ -2853,6 +3049,9 @@ func _handle_hotkey(keycode: Key, event: InputEventKey) -> bool:
 				reinforcement_delivery_selecting = true
 				reinforcement_delivery_status = "SELECT DELIVERY ZONE // LEFT-CLICK THE CYAN AREA"
 				return true
+		"fuel_shipment_request":
+			_request_fuel_shipment()
+			return true
 		"reinforcement_request":
 			if reinforcement_delivery_enabled:
 				if bool(extension.call("reinforcement_delivery_request", HUMAN_PLAYER_ID)):
@@ -3066,10 +3265,13 @@ func _sync_completed_roads() -> void:
 		add_child(road)
 		road_views[road_id] = road
 
-func _set_build_ghost_valid(valid: bool) -> void:
+func _set_build_ghost_valid(valid: bool, earthworks := false) -> void:
 	if build_ghost_material == null:
 		return
-	build_ghost_material.set_shader_parameter("tint", Color("#ff6b2c", 0.52) if valid else Color("#ff334d", 0.50))
+	var tint := Color("#ff334d", 0.50)
+	if valid:
+		tint = Color("#ffc83d", 0.55) if earthworks else Color("#ff6b2c", 0.52)
+	build_ghost_material.set_shader_parameter("tint", tint)
 
 func _queue_commander_structure(structure_type: int, target: Vector2) -> bool:
 	if not selected_ids.has(_player_engineer_id()):
@@ -3217,29 +3419,26 @@ func _sync_construction_frames(queue: Array) -> void:
 	_add_box_model(root, Vector3(4.7 * completion, 0.8, 2.8), Vector3(0, 0.45, 0), scaffold)
 
 
-func _issue_attack_order(screen_position: Vector2) -> void:
+func _issue_attack_order(screen_position: Vector2) -> int:
 	if selected_ids.is_empty():
 		var commander_id := int(commander_ids.get(HUMAN_PLAYER_ID, -1))
 		if commander_id <= 0:
-			return
+			return -1
 		_set_selected(commander_id, true)
 	if selected_ids.is_empty():
-		return
+		return -1
 
-	var ray_origin := camera.project_ray_origin(screen_position)
-	var ray_direction := camera.project_ray_normal(screen_position)
-	var intersection = Plane(Vector3.UP, 0.0).intersects_ray(ray_origin, ray_direction)
-	if intersection == null:
-		return
+	var target := _screen_ground_point(screen_position)
+	if target == Vector2.INF:
+		return -1
 
-	var target: Vector3 = intersection
 	var mouse_x := target.x
-	var mouse_z := target.z
+	var mouse_z := target.y
 
 	var nearest_enemy_id: int = -1
 	var nearest_distance := 9999.0
 
-	for entity_id in player_entity_ids:
+	for entity_id in ai_entity_ids:
 		var entity_pos := _entity_world_position(entity_id)
 		var dx := entity_pos.x - mouse_x
 		var dz := entity_pos.z - mouse_z
@@ -3252,6 +3451,8 @@ func _issue_attack_order(screen_position: Vector2) -> void:
 		var accepted_count: int = extension.call("issue_attack_commands", selected_ids, HUMAN_PLAYER_ID, nearest_enemy_id)
 		if accepted_count != selected_ids.size():
 			push_warning("Attack order rejected by authoritative command validation")
+			return -1
+	return nearest_enemy_id
 
 
 func _entity_world_position(entity_id: int) -> Vector3:
@@ -3278,7 +3479,49 @@ func _selection_bounds() -> Rect2:
 	return Rect2(top_left, (selection_end - selection_start).abs())
 
 
+func _apply_terrain_mesh() -> void:
+	var mesh := terrain_view.mesh as ArrayMesh
+	if mesh == null:
+		mesh = ArrayMesh.new()
+	var surface_material := terrain_view.get_surface_override_material(0) if terrain_view.get_surface_override_material_count() > 0 else null
+	mesh.clear_surfaces()
+	mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, terrain_mesh_arrays)
+	terrain_view.mesh = mesh
+	if surface_material != null:
+		terrain_view.set_surface_override_material(0, surface_material)
+
+
+func _sync_terrain_edits() -> void:
+	var revision := int(extension.call("get_terrain_revision"))
+	if revision == terrain_revision_seen:
+		return
+	terrain_revision_seen = revision
+	var heights: PackedFloat32Array = extension.call("get_terrain_heights")
+	if heights.size() != terrain_heights.size():
+		return
+	var first := Vector2i(TERRAIN_SAMPLE_WIDTH, TERRAIN_SAMPLE_HEIGHT)
+	var last := Vector2i(-1, -1)
+	for index in range(heights.size()):
+		if heights[index] != terrain_heights[index]:
+			var cell := Vector2i(index % TERRAIN_SAMPLE_WIDTH, index / TERRAIN_SAMPLE_WIDTH)
+			first = Vector2i(mini(first.x, cell.x), mini(first.y, cell.y))
+			last = Vector2i(maxi(last.x, cell.x), maxi(last.y, cell.y))
+	terrain_heights = heights
+	if last.x < 0:
+		return
+	HeightMap.update_terrain_arrays(terrain_mesh_arrays, heights, Rect2i(first, last - first), terrain_world_width, terrain_world_height)
+	_apply_terrain_mesh()
+	var cell_size := Vector2(terrain_world_width, terrain_world_height) / Vector2(TERRAIN_SAMPLE_WIDTH - 1, TERRAIN_SAMPLE_HEIGHT - 1)
+	var world_origin := Vector2(first) * cell_size - Vector2(terrain_world_width, terrain_world_height) * 0.5
+	var area := Rect2(world_origin, Vector2(last - first) * cell_size)
+	if terrain_vegetation != null:
+		terrain_vegetation.clear_area(area)
+
+
 func _update_hud() -> void:
+	if extension != null and match_started:
+		_sync_terrain_edits()
+		_sync_fuel_supply()
 	_activate_reinforcement_delivery_from_airfield()
 	_update_steering_debug()
 	var scenario_name: String = scenario_definition.get("display_name", "Scale profile")
@@ -3301,9 +3544,9 @@ func _update_hud() -> void:
 	var tactical_resources: Array = hud_state.get("tactical_resources", [])
 	var selection_detail := "Drag-select a force to inspect it."
 	if material_order_mode == 1:
-		selection_detail = "CLAIM MODE  •  RIGHT-CLICK A MATERIAL FACILITY"
+		selection_detail = "CLAIM MODE  •  RIGHT-CLICK A MATERIAL FACILITY OR FUEL DEPOT"
 	elif material_order_mode == 2:
-		selection_detail = "DEMOLISH MODE  •  RIGHT-CLICK A MATERIAL FACILITY"
+		selection_detail = "DEMOLISH MODE  •  RIGHT-CLICK A MATERIAL FACILITY OR FUEL DEPOT"
 	elif fob_build_mode:
 		selection_detail = "FOB PLACEMENT  •  LEFT-CLICK TERRAIN"
 	var selected_unit: Dictionary = {}
@@ -3366,7 +3609,7 @@ func _update_hud() -> void:
 		"fps": Engine.get_frames_per_second(),
 		"engine": "ONLINE",
 		"objective_status": control_point_battle_status,
-		"reinforcement_status": reinforcement_delivery_status,
+		"reinforcement_status": _with_fuel_status(reinforcement_delivery_status),
 	})
 	_sync_strategic_command()
 

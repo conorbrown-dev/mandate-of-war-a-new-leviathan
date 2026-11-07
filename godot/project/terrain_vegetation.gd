@@ -93,6 +93,24 @@ func clear() -> void:
 	batch_count = 0
 
 
+# Hides everything growing inside a levelled site.
+func clear_area(area: Rect2) -> void:
+	for child in get_children():
+		var batch := child as MultiMeshInstance3D
+		if batch == null or batch.multimesh == null:
+			continue
+		var buffer := batch.multimesh.buffer
+		var changed := false
+		for offset in range(0, buffer.size(), INSTANCE_FLOATS):
+			if not area.has_point(Vector2(buffer[offset + 3], buffer[offset + 11])):
+				continue
+			for scale_index in [0, 1, 2, 4, 5, 6, 8, 9, 10]:
+				buffer[offset + scale_index] = 0.0
+			changed = true
+		if changed:
+			batch.multimesh.buffer = buffer
+
+
 func _mask_value(world_x: float, world_z: float, channel: int) -> int:
 	var x := clampi(int((world_x / _world_width + 0.5) * float(MASK_SIZE - 1)), 0, MASK_SIZE - 1)
 	var z := clampi(int((world_z / _world_height + 0.5) * float(MASK_SIZE - 1)), 0, MASK_SIZE - 1)

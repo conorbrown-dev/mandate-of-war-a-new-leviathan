@@ -86,6 +86,44 @@ static func masks_texture(masks: PackedByteArray) -> ImageTexture:
 static func generate_terrain_mesh(heights: PackedFloat32Array, world_width := 320.0, world_height := 320.0) -> ArrayMesh:
 	print("generate_terrain_mesh called with height data size: %d" % [heights.size()])
 	var mesh := ArrayMesh.new()
+	mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, build_terrain_arrays(heights, world_width, world_height))
+	print("Mesh surface count after generation: %d" % [mesh.get_surface_count()])
+	return mesh
+
+
+# Rewrites only the vertices in region, so levelling a site never rebuilds the map.
+static func update_terrain_arrays(arrays: Array, heights: PackedFloat32Array, region: Rect2i, world_width: float, world_height: float) -> void:
+	var vertices: PackedVector3Array = arrays[Mesh.ARRAY_VERTEX]
+	var normals: PackedVector3Array = arrays[Mesh.ARRAY_NORMAL]
+	var width := TERRAIN_WIDTH
+	var height := TERRAIN_HEIGHT
+	var first_x := maxi(region.position.x, 0)
+	var first_z := maxi(region.position.y, 0)
+	var last_x := mini(region.end.x, width - 1)
+	var last_z := mini(region.end.y, height - 1)
+	for z in range(first_z, last_z + 1):
+		for x in range(first_x, last_x + 1):
+			var index := z * width + x
+			var vertex := vertices[index]
+			vertex.y = presentation_height(heights[index], vertex.x, world_width, vertex.z)
+			vertices[index] = vertex
+	for z in range(maxi(first_z - 1, 0), mini(last_z + 2, height)):
+		for x in range(maxi(first_x - 1, 0), mini(last_x + 2, width)):
+			var left := vertices[z * width + maxi(x - 1, 0)]
+			var right := vertices[z * width + mini(x + 1, width - 1)]
+			var up := vertices[maxi(z - 1, 0) * width + x]
+			var down := vertices[mini(z + 1, height - 1) * width + x]
+			normals[z * width + x] = (down - up).cross(right - left).normalized()
+	var colors: PackedColorArray = arrays[Mesh.ARRAY_COLOR]
+	for z in range(first_z, last_z + 1):
+		for x in range(first_x, last_x + 1):
+			colors[z * width + x].g = 1.0
+	arrays[Mesh.ARRAY_VERTEX] = vertices
+	arrays[Mesh.ARRAY_NORMAL] = normals
+	arrays[Mesh.ARRAY_COLOR] = colors
+
+
+static func build_terrain_arrays(heights: PackedFloat32Array, world_width: float, world_height: float) -> Array:
 	var vertices := PackedVector3Array()
 	var normals := PackedVector3Array()
 	var indices := PackedInt32Array()
@@ -145,11 +183,7 @@ static func generate_terrain_mesh(heights: PackedFloat32Array, world_width := 32
 	surface_arrays[Mesh.ARRAY_INDEX] = indices
 	surface_arrays[Mesh.ARRAY_COLOR] = colors
 	surface_arrays[Mesh.ARRAY_TEX_UV] = uvs
-	
-	mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, surface_arrays)
-	
-	print("Mesh surface count after generation: %d" % [mesh.get_surface_count()])
-	return mesh
+	return surface_arrays
 
 
 static func _biome_to_color(biome: int) -> Color:

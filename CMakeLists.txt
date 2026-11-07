@@ -201,6 +201,7 @@ add_executable(rts_integration_tests
     tests/test_replay.cpp
     tests/test_economy.cpp
     tests/test_terrain.cpp
+    tests/test_fuel_supply.cpp
     tests/test_territorial_control.cpp
     tests/test_stats.cpp
     tests/test_unit_cap.cpp

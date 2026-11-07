@@ -3,6 +3,13 @@
 Game content uses open formats: JSON, YAML, PNG, JPEG, SVG and glTF binary. Do
 not add custom binary content. Game replays are saved output, not content.
 
+## Fuel depots
+
+`godot/project/scenarios/fuel_depots.json` lists each depot with its `id`, `name`,
+`kind` (`civilian` or `military`), `position` and `stock`. An optional `owner` is
+the id of the faction that holds it at the start. Ids must not match a material
+site.
+
 ## Units and factions
 
 `data/unit_faction_stats.json` is the only definition of units and factions.

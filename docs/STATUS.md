@@ -9,6 +9,8 @@
 - **Forces arrive; they are not built on the battlefield.** Almost no units are
   manufactured in the theater. They are flown in, brought in by road or railway,
   dropped by paratroopers, or landed by boat once sea control is established.
+- **Fuel is shipped in or captured.** There is no time to source it from the
+  earth, so nothing on the map produces fuel: no wells, pumps or refineries.
 
 ## Gameplay stabilization
 
@@ -33,6 +35,46 @@ All 20 contracts and 9 scenarios pass on Windows and Linux (2026-11-07).
 
 Units stop within `kArrivalRadiusMeters` (0.75 m) of an order, so
 `native_extension_smoke` asserts that radius, not the exact target.
+
+From 2,000 m camera distance, clicks are approximate: site orders accept about
+24 pixels of error, and an invalid structure target moves to a valid spot within
+that distance. The build ghost shows the moved spot. Closer in, targets are exact.
+
+## Structure sites and earthworks
+
+`src/simulation/structure_sites.hpp` holds the placement limits. Ground within the
+direct limits takes a structure as it stands. Steeper ground up to a 0.70 slope
+needs earthworks, a queue job that runs first and costs Materials and fuel by
+how much ground moves. It changes the simulation heightfield, so units, later
+placement checks and the visible terrain all use the new height. Steeper ground
+stays unbuildable, and ground within one height cell of a claimed site cannot be
+levelled.
+
+Known gaps: network snapshots do not carry terrain edits and roads are not
+checked against levelled ground.
+
+## Fuel supply
+
+`src/simulation/fuel_supply.hpp` holds the rules, and
+`godot/project/scenarios/fuel_depots.json` places the depots. A depot is a
+finite store, not a source: it never refills.
+
+- **Civilian fuel terminals:** four depots holding 1,500 fuel each, one by each
+  town, unclaimed at the start.
+- **Enemy fuel depots:** two depots holding 4,000 fuel each. They keep their
+  stock until captured, because the AI does not spend fuel yet.
+- **Capture:** a depot changes hands when a unit gets within 40 m of it. Any
+  friendly unit can do it. Stock then reaches the fuel store at 10 per second,
+  and waits in the depot while the store is full. A redirected or dead unit
+  abandons the capture.
+- **Demolition:** a unit must be at a depot to demolish it, and the stock is lost.
+- **Shipments:** with a friendly airfield, J or Strategic Command orders 2,000
+  fuel for 300 Materials. It lands after 45 seconds, one at a time, and is lost
+  if no friendly airfield remains. A store that cannot hold the load refuses it.
+
+Known gaps: shipments only come by air and cannot be intercepted, the AI neither
+orders shipments nor spends fuel, material sites still change hands the moment
+they are ordered, and network snapshots do not carry captures or shipments.
 
 ## Content and balance
 

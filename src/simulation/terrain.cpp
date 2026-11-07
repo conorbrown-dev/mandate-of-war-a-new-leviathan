@@ -66,6 +66,23 @@ void Terrain::set_world_bounds(float width, float height) {
     }
 }
 
+bool Terrain::flatten_rect(float x, float y, float half_x, float half_y, float level) {
+    if (heights_.empty()) return false;
+    const auto grid_x = [this](float world) { return (world / world_width_ + 0.5f) * static_cast<float>(GRID_SIZE - 1); };
+    const auto grid_y = [this](float world) { return (world / world_height_ + 0.5f) * static_cast<float>(GRID_SIZE - 1); };
+    const int first_x = std::clamp(static_cast<int>(std::floor(grid_x(x - half_x))), 0, GRID_SIZE - 1);
+    const int last_x = std::clamp(static_cast<int>(std::ceil(grid_x(x + half_x))), 0, GRID_SIZE - 1);
+    const int first_y = std::clamp(static_cast<int>(std::floor(grid_y(y - half_y))), 0, GRID_SIZE - 1);
+    const int last_y = std::clamp(static_cast<int>(std::ceil(grid_y(y + half_y))), 0, GRID_SIZE - 1);
+    for (int row = first_y; row <= last_y; ++row) {
+        for (int column = first_x; column <= last_x; ++column) {
+            heights_[row * GRID_SIZE + column] = level;
+        }
+    }
+    ++revision_;
+    return true;
+}
+
 float Terrain::height_at(float x, float y) const {
     if (x < -world_width_ * 0.5f || x > world_width_ * 0.5f ||
         y < -world_height_ * 0.5f || y > world_height_ * 0.5f) {

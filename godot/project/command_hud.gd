@@ -274,7 +274,7 @@ func _draw() -> void:
 		draw_rect(Rect2(fabrication.position + Vector2(10, 27), Vector2(520, 8)), PROGRESS_TRACK, true)
 		draw_rect(Rect2(fabrication.position + Vector2(10, 27), Vector2(520 * progress, 8)), GREEN, true)
 		_text(fabrication.position + Vector2(10, 55), "%s  %.0f%%  //  %.1f SEC REMAINING" % [String(active.get("name", "UNIT")).to_upper(), progress * 100.0, float(active.get("remaining_seconds", 0.0))], 10, INK, ui_scale)
-		_text(fabrication.position + Vector2(10, 73), "RESERVED MATERIALS: %.0f" % float(active.get("reserved_material", 0.0)), 9, AMBER, ui_scale)
+		_text(fabrication.position + Vector2(10, 73), "RESERVED MATERIALS: %.0f  FUEL: %.0f" % [float(active.get("reserved_material", 0.0)), float(active.get("reserved_fuel", 0.0))], 9, AMBER, ui_scale)
 
 	var fob_installation: Array = snapshot.get("fob_installation", [])
 	if fob_installation.size() >= 6:

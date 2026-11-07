@@ -159,6 +159,9 @@ void fragment() {
 			local_beacon_light += (1.0 - smoothstep(beacon.z * 0.15, beacon.z, distance_to_beacon)) * beacon.w;
 		}
 	}
+	// Green carries levelled ground, written when earthworks finish.
+	vec3 bare_earth = dot(terrain, vec3(0.3, 0.59, 0.11)) * vec3(1.9, 1.35, 0.85);
+	terrain = mix(terrain, bare_earth, 0.9 * smoothstep(0.35, 0.8, COLOR.g));
 	vec3 unlit_terrain = terrain;
 	terrain *= terrain_brightness * terrain_daylight;
 	// Floodlights must remain useful in nighttime conditions, independent of

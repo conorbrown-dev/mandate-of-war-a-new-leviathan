@@ -1,3 +1,4 @@
+#include <algorithm>
 #include <cstdint>
 #include <chrono>
 #include <cmath>
@@ -193,6 +194,9 @@ protected:
         ClassDB::bind_method(D_METHOD("configure_world_size", "width", "height"), &RtsExtension::configure_world_size);
         ClassDB::bind_method(D_METHOD("configure_theater_landmasses", "first_center_x", "first_center_y", "first_width", "first_height", "second_center_x", "second_center_y", "second_width", "second_height"), &RtsExtension::configure_theater_landmasses);
         ClassDB::bind_method(D_METHOD("load_terrain_heightmap", "path"), &RtsExtension::load_terrain_heightmap);
+        ClassDB::bind_method(D_METHOD("get_structure_site", "structure_type", "x", "y"), &RtsExtension::get_structure_site);
+        ClassDB::bind_method(D_METHOD("get_terrain_revision"), &RtsExtension::get_terrain_revision);
+        ClassDB::bind_method(D_METHOD("get_terrain_heights"), &RtsExtension::get_terrain_heights);
         ClassDB::bind_method(D_METHOD("skirmish_set_ai_enabled", "enabled"), &RtsExtension::skirmish_set_ai_enabled);
         ClassDB::bind_method(D_METHOD("is_land_position", "x", "y"), &RtsExtension::is_land_position);
         ClassDB::bind_method(D_METHOD("block_civilian_area", "x", "y", "radius"), &RtsExtension::block_civilian_area);
@@ -261,6 +265,9 @@ protected:
         ClassDB::bind_method(D_METHOD("reinforcement_delivery_request", "faction_id"), &RtsExtension::reinforcement_delivery_request);
         ClassDB::bind_method(D_METHOD("reinforcement_delivery_set_resources", "faction_id", "material", "energy"), &RtsExtension::reinforcement_delivery_set_resources);
         ClassDB::bind_method(D_METHOD("reinforcement_delivery_state"), &RtsExtension::reinforcement_delivery_state);
+        ClassDB::bind_method(D_METHOD("fuel_shipment_request", "faction_id"), &RtsExtension::fuel_shipment_request);
+        ClassDB::bind_method(D_METHOD("fuel_supply_state", "faction_id"), &RtsExtension::fuel_supply_state);
+        ClassDB::bind_method(D_METHOD("economy_assign_fuel_depot", "depot_id", "faction_id"), &RtsExtension::economy_assign_fuel_depot);
         ClassDB::bind_method(D_METHOD("get_build_catalog", "faction_id"), &RtsExtension::get_build_catalog);
         ClassDB::bind_method(D_METHOD("queue_faction_structure", "faction_id", "structure_type", "x", "y"), &RtsExtension::queue_faction_structure);
         ClassDB::bind_method(D_METHOD("queue_faction_unit", "faction_id", "unit_type", "x", "y"), &RtsExtension::queue_faction_unit);
@@ -365,6 +372,47 @@ protected:
         if (faction_id < 0 || faction_id > 2) return;
         rts::runtime_simulation()->set_reinforcement_resources(static_cast<rts::FactionId>(faction_id),
             static_cast<float>(material), static_cast<float>(energy));
+    }
+
+    bool fuel_shipment_request(int64_t faction_id) const {
+        if (faction_id < 0 || faction_id > 2) return false;
+        return rts::runtime_simulation()->request_fuel_shipment(static_cast<rts::FactionId>(faction_id));
+    }
+
+    bool economy_assign_fuel_depot(int64_t depot_id, int64_t faction_id) const {
+        if (depot_id <= 0 || faction_id < 0 || faction_id > 2) return false;
+        return rts::runtime_simulation()->assign_fuel_depot(
+            static_cast<rts::EntityId>(depot_id), static_cast<rts::FactionId>(faction_id));
+    }
+
+    Dictionary fuel_supply_state(int64_t faction_id) const {
+        Dictionary state;
+        if (faction_id < 0 || faction_id > 2) return state;
+        const auto* simulation = rts::runtime_simulation();
+        const auto faction = static_cast<rts::FactionId>(faction_id);
+        state["reason"] = String(simulation->fuel_supply_reason(faction).c_str());
+        state["shipment_load"] = rts::kFuelShipmentLoad;
+        state["shipment_material_cost"] = rts::kFuelShipmentMaterialCost;
+        state["shipment_duration_ms"] = rts::kFuelShipmentDurationMs;
+        if (const auto* shipment = simulation->fuel_shipment(faction)) {
+            state["shipment_remaining_ms"] = shipment->remaining_ms;
+            state["shipment_x"] = shipment->x;
+            state["shipment_y"] = shipment->y;
+        }
+        Array depots;
+        for (const auto& status : simulation->fuel_depots()) {
+            Dictionary depot;
+            depot["id"] = static_cast<int64_t>(status.id);
+            depot["x"] = status.x;
+            depot["y"] = status.y;
+            depot["stock"] = status.stock;
+            depot["capacity"] = status.capacity;
+            depot["owner"] = status.owner;
+            depot["capturing"] = status.capturing;
+            depots.append(depot);
+        }
+        state["depots"] = depots;
+        return state;
     }
 
     Dictionary reinforcement_delivery_state() const {
@@ -534,7 +582,7 @@ public:
                 if(extractor.storage_id==base && extractor.active && node!=production.resource_nodes().end() && !node->second.depleted)
                     rates[static_cast<int>(node->second.type)] += extractor.extraction_rate * 20;
             }
-            state["material_income"] = rates[0]; state["fuel_income"] = 0.0;
+            state["material_income"] = rates[0]; state["fuel_income"] = rates[1];
         }
         Array queue;
         const auto line=production.production_lines().find(base);
@@ -691,10 +739,33 @@ public:
 
     bool queue_structure(int64_t line_id, int64_t faction_id, int64_t structure_type, double x, double y) const {
         if (line_id <= 0 || faction_id < 0 || faction_id > 2 || structure_type < 0 || structure_type > 3) return false;
-        if (!rts::runtime_simulation()->validate_structure_placement(
-                static_cast<uint8_t>(structure_type), static_cast<float>(x), static_cast<float>(y))) return false;
-        return rts::runtime_simulation()->production_manager().queue_structure(
+        return rts::runtime_simulation()->queue_structure(
             static_cast<rts::EntityId>(line_id), static_cast<rts::FactionId>(faction_id), static_cast<uint8_t>(structure_type), static_cast<float>(x), static_cast<float>(y));
+    }
+
+    Dictionary get_structure_site(int64_t structure_type, double x, double y) const {
+        Dictionary result;
+        if (structure_type < 0 || structure_type > 3) return result;
+        const auto site = rts::runtime_simulation()->assess_structure_site(
+            static_cast<uint8_t>(structure_type), static_cast<float>(x), static_cast<float>(y));
+        result["buildable"] = site.buildable;
+        result["earthworks"] = site.earthworks;
+        result["material"] = site.material;
+        result["fuel"] = site.fuel;
+        result["seconds"] = site.seconds;
+        return result;
+    }
+
+    int64_t get_terrain_revision() const {
+        return rts::runtime_simulation()->terrain().revision();
+    }
+
+    PackedFloat32Array get_terrain_heights() const {
+        const auto& heights = rts::runtime_simulation()->terrain().data();
+        PackedFloat32Array result;
+        result.resize(static_cast<int64_t>(heights.size()));
+        std::copy(heights.begin(), heights.end(), result.ptrw());
+        return result;
     }
 
     bool queue_faction_structure(int64_t faction_id, int64_t structure_type, double x, double y) const {
@@ -772,6 +843,7 @@ public:
             entry["progress"] = item.build_progress;
             entry["remaining_seconds"] = std::max(0.0f, item.build_time_seconds * (1.0f - item.build_progress));
             entry["reserved_material"] = item.total_cost_metal;
+            entry["reserved_fuel"] = item.total_cost_fuel;
             entry["target_x"] = item.target_x;
             entry["target_y"] = item.target_y;
             queue.append(entry);

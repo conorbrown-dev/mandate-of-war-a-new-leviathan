@@ -11,8 +11,11 @@ func check(condition: bool, reason: String) -> void:
 		push_error(reason)
 		failures += 1
 
-func aim_camera_at_site(view: Node, site: Dictionary) -> void:
-	view.camera_target = Vector3(site.position.x, view._terrain_height_at(site.position.x, site.position.y), site.position.y)
+func terrain_point(view: Node, world: Vector2) -> Vector3:
+	return Vector3(world.x, view._terrain_height_at(world.x, world.y), world.y)
+
+func aim_camera_at(view: Node, world: Vector2) -> void:
+	view.camera_target = terrain_point(view, world)
 	view.camera_distance = 420.0
 	view.target_camera_distance = 420.0
 	view._update_camera(1.0)
@@ -97,7 +100,7 @@ func _run() -> void:
 	check(not view.debug_panel.visible, "F8 closes the developer environment panel")
 	check(view.player_entity_ids.size() == 1 and view.ai_entity_ids.size() == 1 and view.player_entity_ids[0] == view._player_engineer_id(), "each side starts with a visible Field Engineer while production bases stay presentation-hidden")
 	check(view.prototype_visual_views.size() == 2, "each opening Field Engineer receives its registered imported model")
-	check(view.resource_sites.get_child_count() == 4 and view.extension.call("economy_get_resource_node_count") == 4, "four visible material facilities are registered with the simulation")
+	check(view.material_site_state.size() == 4 and view.fuel_depot_state.size() == 6 and view.resource_sites.get_child_count() == 10 and view.extension.call("economy_get_resource_node_count") == 10, "four material facilities and six fuel depots are registered with the simulation")
 	check(view.civilian_building_instance_count >= 20 and view.civilian_buildings.get_child_count() == 3, "civilian dressing creates clustered instanced building groups")
 	var civilian_land_only := true
 	var first_civilian_position := Vector3.INF
@@ -172,22 +175,22 @@ func _run() -> void:
 	var materials_before_claim := float(stores_after[0])
 	var camera_target_before_sites: Vector3 = view.camera_target
 	var camera_distance_before_sites: float = view.camera_distance
-	aim_camera_at_site(view, neutral_site)
+	aim_camera_at(view, neutral_site.position)
 	view._set_material_order_mode(1)
-	view._issue_material_site_order(view.camera.unproject_position(Vector3(neutral_site.position.x, 0.0, neutral_site.position.y)))
+	view._issue_material_site_order(view.camera.unproject_position(terrain_point(view, neutral_site.position)))
 	view.extension.call("update_simulation", 50.0)
 	var materials_after_claim: Array = view.extension.call("economy_get_tactical_resources", commander_id)
 	check(int(view.material_site_state[900].owner) == 0 and float(materials_after_claim[0]) > materials_before_claim, "Field Engineer captures a neutral facility into shared Materials")
 	var enemy_site: Dictionary = view.material_site_state[902]
-	aim_camera_at_site(view, enemy_site)
+	aim_camera_at(view, enemy_site.position)
 	view._set_material_order_mode(2)
-	view._issue_material_site_order(view.camera.unproject_position(Vector3(enemy_site.position.x, 0.0, enemy_site.position.y)))
+	view._issue_material_site_order(view.camera.unproject_position(terrain_point(view, enemy_site.position)))
 	await process_frame
 	view.camera_target = camera_target_before_sites
 	view.camera_distance = camera_distance_before_sites
 	view.target_camera_distance = camera_distance_before_sites
 	view._update_camera(1.0)
-	check(bool(view.material_site_state[902].destroyed) and view.resource_sites.get_child_count() == 3 and view.extension.call("economy_get_resource_node_count") == 3, "commander can demolish an enemy material facility")
+	check(bool(view.material_site_state[902].destroyed) and view.resource_sites.get_child_count() == 9 and view.extension.call("economy_get_resource_node_count") == 9, "commander can demolish an enemy material facility")
 	view._queue_commander_unit(0)
 	view.extension.call("update_simulation", 50.0)
 	view._update_hud()
@@ -294,8 +297,10 @@ func _run() -> void:
 	view._set_selected(fob_engineer_id, true)
 	var fob_target := Vector2(-16400.0, -1500.0)
 	view.fob_build_mode = true
-	var fob_screen: Vector2 = view.camera.unproject_position(Vector3(fob_target.x, 0.0, fob_target.y))
+	aim_camera_at(view, fob_target)
+	var fob_screen: Vector2 = view.camera.unproject_position(terrain_point(view, fob_target))
 	view._order_fob(fob_screen)
+	check(view.fob_build_target.distance_to(fob_target) <= 5.0, "FOB placement lands on the terrain under the cursor")
 	view.extension.call("update_simulation", 50.0)
 	view._update_hud()
 	var fob_state: Array = view.command_hud.snapshot.get("fob_installation", [])
@@ -306,6 +311,120 @@ func _run() -> void:
 	fob_state = view.command_hud.snapshot.get("fob_installation", [])
 	check(fob_state.size() >= 6 and int(fob_state[2]) == 1 and int(fob_state[3]) == 0 and float(fob_state[4]) == 1.0, "FOB HUD reports completed active installation")
 	check(String(view.command_hud.snapshot.get("fob_completion_notification", "")) == "FOB ONLINE  //  LOGISTICS LINK ESTABLISHED", "FOB HUD reports completion notification")
+	var attacker_id := int(view.player_entity_ids[1])
+	var enemy_spawn := fob_spawn + Vector2(0.0, 60.0)
+	var enemy_id: int = view.extension.call("create_unit_with_type", enemy_spawn.x, enemy_spawn.y, 3, 1)
+	check(enemy_id > 0, "enemy attack fixture is created")
+	view._register_presented_unit(enemy_id, 3, 1, enemy_spawn)
+	view.extension.call("update_simulation", 50.0)
+	view._clear_selection()
+	view._set_selected(attacker_id, true)
+	aim_camera_at(view, enemy_spawn)
+	check(view._issue_attack_order(view.camera.unproject_position(terrain_point(view, enemy_spawn))) == enemy_id, "Ctrl+right-click attacks the enemy under the cursor")
+	var far_site: Dictionary = view.material_site_state[901]
+	var near_miss: Vector2 = far_site.position + Vector2(40.0, 0.0)
+	aim_camera_at(view, far_site.position)
+	view._set_material_order_mode(1)
+	view._issue_material_site_order(view.camera.unproject_position(terrain_point(view, near_miss)))
+	check(int(view.material_site_state[901].owner) == -1, "a site click 40 m away misses at normal zoom")
+	view.camera_distance = 6000.0
+	view.target_camera_distance = 6000.0
+	view._update_camera(1.0)
+	view._set_material_order_mode(1)
+	view._issue_material_site_order(view.camera.unproject_position(terrain_point(view, near_miss)))
+	check(int(view.material_site_state[901].owner) == 0, "a site click 40 m away counts when zoomed far out")
+	var graded_target := Vector2.INF
+	var graded_cost := {}
+	for grid_x in range(-40, 40):
+		for grid_z in range(-40, 40):
+			var candidate := Vector2(grid_x * 450.0, grid_z * 450.0)
+			var candidate_site: Dictionary = view.extension.call("get_structure_site", 3, candidate.x, candidate.y)
+			if graded_target == Vector2.INF and bool(candidate_site.get("earthworks", false)) and absf(HeightMap.presentation_land_mask(candidate.x, view.terrain_world_width, candidate.y) - 1.0) < 0.001 and absf(HeightMap.presentation_land_mask(candidate.x + 150.0, view.terrain_world_width, candidate.y + 150.0) - 1.0) < 0.001:
+				graded_target = candidate
+				graded_cost = candidate_site
+	check(graded_target != Vector2.INF, "the theater has ground that needs earthworks")
+	view._clear_selection()
+	view._set_selected(view._player_engineer_id(), true)
+	var edge_a: float = view._terrain_height_at(graded_target.x - 25.0, graded_target.y - 25.0)
+	var edge_b: float = view._terrain_height_at(graded_target.x + 25.0, graded_target.y + 25.0)
+	check(absf(edge_a - edge_b) > 1.0, "the earthworks site starts uneven")
+	var stores_before_earthworks: Array = view.extension.call("economy_get_tactical_resources", commander_id)
+	check(view._queue_commander_structure(3, graded_target), "steep ground accepts a structure with earthworks")
+	view.pending_structure_position = Vector2.INF
+	for _tick in range(int(float(graded_cost.get("seconds", 0.0)) * 20.0) + 5):
+		view.extension.call("update_simulation", 50.0)
+	view._update_hud()
+	var stores_after_earthworks: Array = view.extension.call("economy_get_tactical_resources", commander_id)
+	check(float(stores_after_earthworks[2]) < float(stores_before_earthworks[2]) - float(graded_cost.get("fuel", 0.0)) * 0.9, "earthworks burn fuel")
+	check(absf(view._terrain_height_at(graded_target.x - 25.0, graded_target.y - 25.0) - view._terrain_height_at(graded_target.x + 25.0, graded_target.y + 25.0)) < 0.05, "the map shows flattened terrain once earthworks finish")
+	check(not bool(view.extension.call("get_structure_site", 3, graded_target.x, graded_target.y).get("earthworks", true)), "the simulation treats the site as flat ground")
+	var graded_grid := Vector2i(int((graded_target.x / view.terrain_world_width + 0.5) * 319.0), int((graded_target.y / view.terrain_world_height + 0.5) * 319.0))
+	var terrain_colors: PackedColorArray = view.terrain_mesh_arrays[Mesh.ARRAY_COLOR]
+	check(terrain_colors[graded_grid.y * 320 + graded_grid.x].g > 0.9, "levelled ground is painted as bare earth")
+	var pad_edge := Vector2(-16500.0, -1500.0)
+	for _step in range(800):
+		if not bool(view.extension.call("validate_structure_placement", 0, pad_edge.x, pad_edge.y)):
+			break
+		pad_edge.x -= 5.0
+	check(not bool(view.extension.call("validate_structure_placement", 0, pad_edge.x, pad_edge.y)), "approximate build fixture finds an invalid location beside a valid one")
+	var snapped_build: Vector2 = view._resolve_build_target(100, pad_edge)
+	check(snapped_build != Vector2.INF and snapped_build.distance_to(pad_edge) <= view._click_tolerance_meters() and bool(view.extension.call("validate_structure_placement", 0, snapped_build.x, snapped_build.y)), "zoomed-out build order moves to a valid spot beside the cursor")
+	view.camera_distance = 420.0
+	view.target_camera_distance = 420.0
+	check(view._resolve_build_target(100, pad_edge) == Vector2.INF, "close build order is refused rather than moved")
+	check(view.fuel_depot_state.size() == 6, "the theater holds civilian and enemy fuel depots")
+	for depot in view.fuel_depot_state.values():
+		check(absf(HeightMap.presentation_land_mask(depot.position.x, view.terrain_world_width, depot.position.y) - 1.0) < 0.001, "fuel depot %d stands inland" % int(depot.id))
+	var civilian_depot: Dictionary = view.fuel_depot_state[910]
+	var enemy_depot: Dictionary = view.fuel_depot_state[920]
+	check(int(civilian_depot.owner) == -1 and int(enemy_depot.owner) == 1, "civilian depots start unclaimed and enemy depots start enemy-held")
+	view.extension.call("update_simulation", 50.0)
+	view._update_hud()
+	check(is_equal_approx(float(enemy_depot.stock), 4000.0), "an enemy depot holds its stock until captured")
+	var fuel_before_capture := float(view.extension.call("economy_get_tactical_resources", commander_id)[2])
+	var capture_spawn: Vector2 = civilian_depot.position + Vector2(300.0, 0.0)
+	var capture_unit: int = view.extension.call("create_unit_with_type", capture_spawn.x, capture_spawn.y, 0, 0)
+	check(capture_unit > 0, "depot capture fixture is created")
+	view._register_presented_unit(capture_unit, 0, 0, capture_spawn)
+	view._clear_selection()
+	view._set_selected(capture_unit, true)
+	aim_camera_at(view, civilian_depot.position)
+	view._set_material_order_mode(1)
+	view._issue_material_site_order(view.camera.unproject_position(terrain_point(view, civilian_depot.position)))
+	view.extension.call("update_simulation", 50.0)
+	view._update_hud()
+	check(int(civilian_depot.owner) == -1 and bool(civilian_depot.capturing), "a capture order alone does not take a distant depot")
+	check(is_equal_approx(float(civilian_depot.stock), 1500.0), "a depot gives no fuel before a unit reaches it")
+	for _tick in range(4000):
+		view.extension.call("update_simulation", 50.0)
+		if _tick % 20 == 0:
+			view._sync_fuel_supply()
+			if int(civilian_depot.owner) == 0:
+				break
+	for _tick in range(40):
+		view.extension.call("update_simulation", 50.0)
+	view._update_hud()
+	check(int(civilian_depot.owner) == 0, "a unit reaching a civilian depot captures it")
+	check(float(civilian_depot.stock) < 1500.0, "a captured depot hands over its stock")
+	var fuel_after_capture := float(view.extension.call("economy_get_tactical_resources", commander_id)[2])
+	check(fuel_after_capture > fuel_before_capture, "captured stock reaches the fuel store")
+	check(is_equal_approx(fuel_after_capture - fuel_before_capture, 1500.0 - float(civilian_depot.stock)), "captured fuel equals the stock the depot lost")
+	check(view.resource_sites.get_node_or_null("FuelDepot_910") != null, "the captured depot is visible")
+	var materials_before_shipment := float(view.extension.call("economy_get_tactical_resources", commander_id)[0])
+	var fuel_before_shipment := float(view.extension.call("economy_get_tactical_resources", commander_id)[2])
+	var shipment_supply: Dictionary = view.extension.call("fuel_supply_state", 0)
+	var shipment_accepted: bool = view._request_fuel_shipment()
+	check(shipment_accepted and view.fuel_supply_status.contains("INBOUND"), "a friendly airfield accepts a fuel shipment and the player sees it inbound")
+	var stores_after_order: Array = view.extension.call("economy_get_tactical_resources", commander_id)
+	check(is_equal_approx(float(stores_after_order[0]), materials_before_shipment - float(shipment_supply.shipment_material_cost)), "a fuel shipment is paid for in Materials")
+	check(float(stores_after_order[2]) < fuel_before_shipment + 100.0, "shipped fuel is not there when ordered")
+	check(not view._request_fuel_shipment(), "only one fuel shipment flies at a time")
+	for _tick in range(int(float(shipment_supply.shipment_duration_ms) / 50.0) + 2):
+		view.extension.call("update_simulation", 50.0)
+	view._sync_fuel_supply()
+	var stores_after_flight: Array = view.extension.call("economy_get_tactical_resources", commander_id)
+	check(float(stores_after_flight[2]) >= fuel_before_shipment + float(shipment_supply.shipment_load), "shipped fuel arrives at the airfield")
+	check(view.fuel_supply_status.contains("DELIVERED"), "the player is told the shipment arrived")
 	view.camera_distance = 700.0
 	view.target_camera_distance = 700.0
 	view.camera_target = view._entity_world_position(view.player_entity_ids[0])
