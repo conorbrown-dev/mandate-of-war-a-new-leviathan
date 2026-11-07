@@ -1,0 +1,13 @@
+{
+  "version": 1,
+  "description": "Equal-budget ground armies used by rts_balance_benchmark. Score is the value left by the first faction minus the second, as a share of the budget.",
+  "budget": 40000,
+  "separation": 700,
+  "maximum_ticks": 6000,
+  "tolerance": 0.12,
+  "armies": [
+    {"faction": "ELITE_PRECISION", "units": {"ELITE_MAIN_BATTLE_TANK": 6, "ELITE_LONG_RANGE_ARTILLERY": 2, "ELITE_ANTI_AIR": 1}},
+    {"faction": "MASS_WARFARE", "units": {"MASS_SWARM_TANK": 6, "MASS_ASSAULT_VEHICLE": 3, "MASS_ANTI_AIR": 1}},
+    {"faction": "INDUSTRIAL_EXPERIMENTAL", "units": {"INDUSTRIAL_MBT": 6, "INDUSTRIAL_MISSILE_PLATFORM": 2}}
+  ]
+}

@@ -1,6 +1,8 @@
 class_name StrategicIconOverlay
 extends Control
 
+const UnitCatalog := preload("res://unit_catalog.gd")
+
 ## Screen-space strategic markers. These are deliberately independent from the
 ## 3D unit meshes so they remain a fixed, legible size at full-map zoom.
 
@@ -45,33 +47,31 @@ func _draw() -> void:
 func _draw_icon(unit_type: int, center: Vector2, faction_color: Color) -> void:
 	var fill := Color("#b8bec0")
 	var outline := faction_color.lightened(0.25)
-	match unit_type:
-		0, 6: # MBTs
+	match UnitCatalog.strategic_icon(unit_type):
+		"mbt":
 			_draw_polygon(_rect_points(center, Vector2(9, 12)), fill, outline)
-		1: # Artillery
+		"artillery":
 			_draw_polygon(_rect_points(center, Vector2(5, 17)), fill, outline)
-		2, 5: # Anti-air
+		"air_defense":
 			_draw_polygon(_regular_points(center, 9, 4, PI * 0.25), fill, outline)
-		3: # Swarm tank
+		"swarm":
 			_draw_polygon(_regular_points(center, 9, 6), fill, outline)
-		4: # Assault vehicle
+		"assault":
 			_draw_polygon(_rect_points(center, Vector2(14, 8)), fill, outline)
-		7: # Missile platform
+		"missile":
 			_draw_polygon(_regular_points(center, 10, 4, PI * 0.25), fill, outline)
-		8: # Engineer: octagonal utility marker with a clear center cross
+		"engineer": # Octagonal utility marker with a clear center cross
 			_draw_polygon(_regular_points(center, 10, 8), fill, outline)
 			draw_line(center + Vector2(-4, 0), center + Vector2(4, 0), Color("#30383a"), 2.0, true)
 			draw_line(center + Vector2(0, -4), center + Vector2(0, 4), Color("#30383a"), 2.0, true)
-		9: # Fighter: acute triangle
+		"fighter": # Acute triangle
 			_draw_polygon(PackedVector2Array([center + Vector2(0, -12), center + Vector2(-7, 8), center + Vector2(7, 8)]), fill, outline)
-		10: # VTOL
+		"vtol":
 			_draw_polygon(_regular_points(center, 10, 4), fill, outline)
-		11: # Patrol boat
+		"boat":
 			_draw_polygon(PackedVector2Array([center + Vector2(0, -10), center + Vector2(9, -3), center + Vector2(6, 9), center + Vector2(-6, 9), center + Vector2(-9, -3)]), fill, outline)
-		12: # Command Walker
+		"command":
 			_draw_polygon(_regular_points(center, 11, 6), fill, outline)
-		13: # Reserved bomber: broad obtuse triangle
-			_draw_polygon(PackedVector2Array([center + Vector2(0, -8), center + Vector2(-12, 8), center + Vector2(12, 8)]), fill, outline)
 		_:
 			_draw_polygon(_regular_points(center, 9, 6), fill, outline)
 

@@ -120,6 +120,10 @@ add_executable(rts_scale_benchmark benchmark/scale_benchmark.cpp)
 target_link_libraries(rts_scale_benchmark rts_simulation)
 target_include_directories(rts_scale_benchmark PUBLIC ${CMAKE_SOURCE_DIR}/src)
 
+add_executable(rts_balance_benchmark benchmark/balance_benchmark.cpp)
+target_link_libraries(rts_balance_benchmark rts_simulation)
+target_include_directories(rts_balance_benchmark PUBLIC ${CMAKE_SOURCE_DIR}/src)
+
 add_executable(rts_combat_benchmark benchmark/combat_benchmark.cpp)
 target_link_libraries(rts_combat_benchmark rts_simulation)
 target_include_directories(rts_combat_benchmark PUBLIC ${CMAKE_SOURCE_DIR}/src)
@@ -178,12 +182,18 @@ add_executable(rts_integration_tests
     tests/test_terrain.cpp
     tests/test_territorial_control.cpp
     tests/test_stats.cpp
+    tests/test_unit_cap.cpp
+    tests/test_unit_data.cpp
     tests/test_framework.hpp
 )
 target_link_libraries(rts_integration_tests rts_simulation)
 target_include_directories(rts_integration_tests PUBLIC ${CMAKE_SOURCE_DIR}/src)
 add_test(NAME rts_integration_tests COMMAND rts_integration_tests)
 set_tests_properties(rts_integration_tests PROPERTIES WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+
+# Equal-budget faction matchups. Failing means a unit data change broke balance.
+add_test(NAME faction_balance COMMAND rts_balance_benchmark)
+set_tests_properties(faction_balance PROPERTIES WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
 
 # Logistics benchmark
 add_executable(rts_logistics_benchmark benchmark/logistics_benchmark.cpp)

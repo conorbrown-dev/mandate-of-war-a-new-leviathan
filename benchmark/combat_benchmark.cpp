@@ -90,6 +90,8 @@ int parse_positive(const char* value, const char* name, int maximum) {
 
 CombatResult run_combat_scenario(int units_per_faction, int tick_count) {
     rts::Simulation simulation;
+    // This benchmark deliberately probes loads above the gameplay cap.
+    simulation.set_unit_cap_per_player(units_per_faction);
     simulation.start();
 
     constexpr float FACTION_A_X = 50.0f;

@@ -74,21 +74,34 @@ void AIManager::update_visibility() {
 
     // Per-faction current vision. Global remembered Intelligence records have
     // no observer faction, so they cannot authorize access to enemy state.
+    struct Sensor {
+        float x, y, range_squared;
+    };
+    std::vector<Sensor> sensors;
+    sensors.reserve(visible_units_.size());
     for (EntityId observer : visible_units_) {
         const auto* position = components.get_component<Position>(observer);
         const auto* unit = components.get_component<UnitData>(observer);
         if (!position || !unit || !std::isfinite(unit->view_range) ||
             unit->view_range <= 0.0f) continue;
-        for (EntityId candidate : simulation_->spatial_grid().query_in_region(
-                 position->x, position->y, unit->view_range)) {
-            const auto* faction = components.get_component<Faction>(candidate);
-            if (faction && faction->faction_id != faction_id_ && alive(candidate)) {
+        sensors.push_back({position->x, position->y, unit->view_range * unit->view_range});
+    }
+    // Each enemy stops at the first sensor that sees it, so a large battle does
+    // not pay for every observer and enemy pair on a decision tick.
+    for (EntityId candidate : simulation_->get_entity_list()) {
+        const auto* faction = components.get_component<Faction>(candidate);
+        const auto* position = components.get_component<Position>(candidate);
+        if (!faction || faction->faction_id == faction_id_ || !position || !alive(candidate)) continue;
+        for (const auto& sensor : sensors) {
+            const float dx = position->x - sensor.x;
+            const float dy = position->y - sensor.y;
+            if (dx * dx + dy * dy <= sensor.range_squared) {
                 enemy_units_.push_back(candidate);
+                break;
             }
         }
     }
     std::sort(enemy_units_.begin(), enemy_units_.end());
-    enemy_units_.erase(std::unique(enemy_units_.begin(), enemy_units_.end()), enemy_units_.end());
 }
 
 std::vector<EntityId> AIManager::get_visible_units() const {
@@ -106,16 +119,6 @@ void AIManager::set_objective(float x, float y) {
 
 void AIManager::gather_resources() {
     // Owned extractors run in the shared fixed-tick production phase.
-    if (!simulation_) return;
-    auto& production = simulation_->production_manager();
-    const auto base = production.faction_line(faction_id_);
-    if (base == INVALID_ENTITY) return;
-    for (uint32_t index = 0; index < get_research_projects().size(); ++index) {
-        if (production.can_research(faction_id_, Simulation::research_id(index))) {
-            simulation_->issue_commands({base}, faction_id_, CommandType::RESEARCH, 0, 0, index);
-            break;
-        }
-    }
 }
 
 void AIManager::produce_units() {

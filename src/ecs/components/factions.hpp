@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstdint>
+#include <optional>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -27,7 +28,9 @@ enum class SeizureCapability : uint8_t {
     HARVEST_SECURED = 7
 };
 
-// Unit type definitions for each faction
+// A unit type is the numeric id of an entry in data/unit_faction_stats.json, and
+// any id in that file is valid. These names exist only so tests and authored
+// scenarios can refer to the base roster; gameplay must read unit data instead.
 enum class UnitType : uint8_t {
     // Elite Precision (Faction A)
     ELITE_MAIN_BATTLE_TANK = 0,
@@ -48,6 +51,20 @@ enum class UnitType : uint8_t {
     ELITE_T1_FIGHTER = 9,
     ELITE_T1_VTOL = 10,
     ELITE_PATROL_BOAT = 11
+};
+
+// Gameplay-stabilization limit on live mobile units per player, commander
+// included. A player is one FactionId until the simulation models multiple
+// players per faction. Structures do not count.
+constexpr int MAX_UNITS_PER_PLAYER = 2000;
+
+struct WeaponProfile {
+    float damage = 0.0f;
+    float range = 0.0f;
+    float fire_rate = 1.0f;
+    float projectile_speed = 1.0f;
+    float aoe_radius = 0.0f;
+    float lead_bias = 0.0f;
 };
 
 struct UnitPrototype {
@@ -77,6 +94,11 @@ struct UnitPrototype {
     // from a donor model path, mesh name, or dimensions.
     std::string visual_id;
     std::string content_id = "";
+    std::string key = "";
+    std::string nato_symbol = "";
+    std::string strategic_icon = "";
+    bool construction_unit = false;
+    WeaponProfile weapon = {};
     std::vector<SeizureCapability> capabilities = {};
     // Ground-motion tuning is content-owned so factions and chassis can diverge
     // without simulation type checks. These fields are ignored by air and naval
@@ -104,7 +126,6 @@ struct FactionStartData {
     std::string name;
     float start_material;
     float start_energy;
-    float start_research;
     std::vector<UnitType> start_units;
     float production_bonus_metal;  // % bonus to metal production
     float production_bonus_energy; // % bonus to energy production
@@ -113,6 +134,10 @@ struct FactionStartData {
 
 // Faction data keyed by FactionId
 const std::unordered_map<FactionId, FactionStartData>& get_faction_start_data();
+
+// Parses the contents of a unit data file. Throws on invalid content.
+std::unordered_map<UnitType, UnitPrototype> parse_unit_catalog(const std::string& json);
+std::optional<UnitType> unit_type_from_key(const std::string& key);
 
 // Research project structure
 struct ResearchProject {
@@ -129,11 +154,5 @@ struct ResearchProject {
 // Research projects keyed by project ID
 const std::unordered_map<std::string, ResearchProject>& get_research_projects();
 
-// Research manager for a single faction
-struct FactionResearch {
-    std::unordered_map<std::string, ResearchProject> available_projects;
-    std::unordered_map<std::string, bool> completed_projects;
-    std::vector<std::string> active_queue;
-};
 
 } // namespace rts

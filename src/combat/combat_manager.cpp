@@ -1,5 +1,6 @@
 #include "combat/combat_manager.hpp"
 #include <cmath>
+#include <limits>
 #include <algorithm>
 #include <iostream>
 
@@ -114,7 +115,7 @@ void CombatManager::reset() {
 
 FireSolution CombatManager::find_target(
     float shooter_x, float shooter_y, float view_range, FactionId faction,
-    SpatialGrid& spatial_grid, ComponentManager& component_manager,
+    ComponentManager& component_manager,
     EntityId explicit_target
 ) {
     FireSolution solution{};
@@ -149,41 +150,84 @@ FireSolution CombatManager::find_target(
         }
     }
     
-    auto nearby_entities = spatial_grid.query_in_region(shooter_x, shooter_y, view_range);
-    
-    for (auto entity_id : nearby_entities) {
-        if (entity_id == 0) continue;
-        
-        auto* target_pos = component_manager.get_component<Position>(entity_id);
-        auto* target_faction = component_manager.get_component<Faction>(entity_id);
-        auto* target_health = component_manager.get_component<Health>(entity_id);
-        
-        if (!target_pos || !target_faction || !target_health) continue;
-        if (target_health->is_dead) continue;
-        if (target_faction->faction_id == faction) continue;
-        
-        float dx = target_pos->x - shooter_x;
-        float dy = target_pos->y - shooter_y;
-        float dist = std::sqrt(dx * dx + dy * dy);
-        
+    if (target_candidates_.empty()) return solution;
+    const auto cell_index = [this](float offset, int count) {
+        return std::clamp(static_cast<int>(std::floor(offset / target_cell_size_)), 0, count - 1);
+    };
+    const int first_column = cell_index(shooter_x - view_range - target_min_x_, target_columns_);
+    const int last_column = cell_index(shooter_x + view_range - target_min_x_, target_columns_);
+    const int first_row = cell_index(shooter_y - view_range - target_min_y_, target_rows_);
+    const int last_row = cell_index(shooter_y + view_range - target_min_y_, target_rows_);
 
-        if (dist <= view_range && (!solution.valid || (dist < solution.lead_bias || (dist == solution.lead_bias && entity_id < solution.target_id)))) {
-            auto* target_vel = component_manager.get_component<Velocity>(entity_id);
-            float target_vel_x = target_vel ? target_vel->x : 0.0f;
-            float target_vel_y = target_vel ? target_vel->y : 0.0f;
-            
-            solution.target_id = entity_id;
-            solution.aim_x = target_pos->x;
-            solution.aim_y = target_pos->y;
-            solution.projectile_speed = 0.0f;
-            solution.damage = 0.0f;
-            solution.aoe_radius = 0.0f;
-            solution.lead_bias = dist;
-            solution.valid = true;
+    for (int row = first_row; row <= last_row; ++row) {
+        const size_t row_offset = static_cast<size_t>(row) * static_cast<size_t>(target_columns_);
+        const uint32_t begin = target_cell_starts_[row_offset + first_column];
+        const uint32_t end = target_cell_starts_[row_offset + last_column + 1];
+        for (uint32_t index = begin; index < end; ++index) {
+            const auto& candidate = target_candidates_[index];
+            if (candidate.faction == faction) continue;
+            const float dx = candidate.x - shooter_x;
+            const float dy = candidate.y - shooter_y;
+            const float dist = std::sqrt(dx * dx + dy * dy);
+            if (dist <= view_range && (!solution.valid || dist < solution.lead_bias ||
+                                       (dist == solution.lead_bias && candidate.id < solution.target_id))) {
+                solution.target_id = candidate.id;
+                solution.aim_x = candidate.x;
+                solution.aim_y = candidate.y;
+                solution.projectile_speed = 0.0f;
+                solution.damage = 0.0f;
+                solution.aoe_radius = 0.0f;
+                solution.lead_bias = dist;
+                solution.valid = true;
+            }
         }
     }
-    
+
     return solution;
+}
+
+void CombatManager::build_target_index(const std::vector<EntityId>& entities, ComponentManager& component_manager) {
+    target_candidates_.clear();
+    float min_x = std::numeric_limits<float>::max(), min_y = min_x;
+    float max_x = std::numeric_limits<float>::lowest(), max_y = max_x;
+    for (const auto entity_id : entities) {
+        if (entity_id == 0) continue;
+        const auto* position = component_manager.get_component<Position>(entity_id);
+        const auto* faction = component_manager.get_component<Faction>(entity_id);
+        const auto* health = component_manager.get_component<Health>(entity_id);
+        if (!position || !faction || !health || health->is_dead ||
+            !std::isfinite(position->x) || !std::isfinite(position->y)) continue;
+        target_candidates_.push_back({entity_id, position->x, position->y, faction->faction_id});
+        min_x = std::min(min_x, position->x);
+        max_x = std::max(max_x, position->x);
+        min_y = std::min(min_y, position->y);
+        max_y = std::max(max_y, position->y);
+    }
+    if (target_candidates_.empty()) return;
+
+    // Cell size grows with the battlefield so the table stays bounded.
+    constexpr float MIN_CELL_SIZE = 32.0f;
+    constexpr float MAX_CELLS_PER_AXIS = 256.0f;
+    target_cell_size_ = std::max({MIN_CELL_SIZE, (max_x - min_x) / MAX_CELLS_PER_AXIS, (max_y - min_y) / MAX_CELLS_PER_AXIS});
+    target_min_x_ = min_x;
+    target_min_y_ = min_y;
+    target_columns_ = static_cast<int>((max_x - min_x) / target_cell_size_) + 1;
+    target_rows_ = static_cast<int>((max_y - min_y) / target_cell_size_) + 1;
+
+    // Counting sort into row-major cells, so a span of columns in one row is
+    // a single contiguous range.
+    const auto cell_of = [this](const TargetCandidate& candidate) {
+        const auto column = static_cast<size_t>((candidate.x - target_min_x_) / target_cell_size_);
+        const auto row = static_cast<size_t>((candidate.y - target_min_y_) / target_cell_size_);
+        return row * static_cast<size_t>(target_columns_) + column;
+    };
+    target_cell_starts_.assign(static_cast<size_t>(target_columns_) * target_rows_ + 1, 0);
+    for (const auto& candidate : target_candidates_) ++target_cell_starts_[cell_of(candidate) + 1];
+    for (size_t cell = 1; cell < target_cell_starts_.size(); ++cell) target_cell_starts_[cell] += target_cell_starts_[cell - 1];
+    target_cell_cursor_.assign(target_cell_starts_.begin(), target_cell_starts_.end() - 1);
+    target_sort_buffer_.resize(target_candidates_.size());
+    for (const auto& candidate : target_candidates_) target_sort_buffer_[target_cell_cursor_[cell_of(candidate)]++] = candidate;
+    target_candidates_.swap(target_sort_buffer_);
 }
 
 FireSolution CombatManager::calculate_fire_solution(
@@ -253,6 +297,8 @@ void CombatManager::resolve_fire(
     if (!have_opposing_factions) {
         return;
     }
+
+    build_target_index(entities, component_manager);
     
     for (auto entity_id : entities) {
         if (entity_id == 0) continue;
@@ -277,7 +323,7 @@ void CombatManager::resolve_fire(
                 pos->x, pos->y, component_manager.get_component<UnitData>(entity_id)
                     ? std::min(weapon->range, component_manager.get_component<UnitData>(entity_id)->view_range)
                     : weapon->range, faction->faction_id,
-                spatial_grid, component_manager,
+                component_manager,
                 explicit_attack_targets_.count(entity_id) > 0 ? pending_fire_.at(entity_id).target_id : 0
             );
             

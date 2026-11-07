@@ -1,4 +1,5 @@
 #include "map/map_loader.hpp"
+#include "simulation/terrain.hpp"
 #include "data/json_parser.hpp"
 #include <sstream>
 #include <fstream>
@@ -59,8 +60,8 @@ std::optional<MapData> MapLoader::load_map(const fs::path& map_path) {
             return std::nullopt;
         }
         
-        auto terrain_path = map_path.parent_path() / "terrain.bin";
-        if (!load_terrain_binary(terrain_path, map_data)) {
+        auto terrain_path = map_path.parent_path() / "terrain.json";
+        if (!load_terrain_file(terrain_path, map_data)) {
             return std::nullopt;
         }
         
@@ -120,16 +121,11 @@ bool MapLoader::save_map(const fs::path& map_path, const MapData& map) {
         return false;
     }
 
-    std::ofstream terrain(map_path.parent_path() / "terrain.bin", std::ios::binary | std::ios::trunc);
-    if (!terrain) {
-        add_error("Failed to write terrain data");
-        return false;
-    }
-    terrain.write(reinterpret_cast<const char*>(map.terrain_heights.data()),
-                  static_cast<std::streamsize>(map.terrain_heights.size() * sizeof(float)));
-    terrain.close();
-    if (!terrain) {
-        add_error("Failed to finish terrain data");
+    try {
+        write_heightfield((map_path.parent_path() / "terrain.json").string(), static_cast<int>(map.tiles_x),
+                          static_cast<int>(map.tiles_y), map.terrain_heights);
+    } catch (const std::exception& error) {
+        add_error(std::string("Failed to write terrain data: ") + error.what());
         return false;
     }
 
@@ -342,23 +338,19 @@ bool MapLoader::load_yaml_header(const fs::path& map_path, MapData& map_data) {
     return true;
 }
 
-bool MapLoader::load_terrain_binary(const fs::path& bin_path, MapData& map_data) {
-    std::ifstream stream(bin_path, std::ios::binary);
-    if (!stream.is_open()) {
-        add_error("Failed to open terrain binary file: " + bin_path.string());
+bool MapLoader::load_terrain_file(const fs::path& path, MapData& map_data) {
+    try {
+        auto field = read_heightfield(path.string());
+        if (static_cast<uint32_t>(field.width) != map_data.tiles_x ||
+            static_cast<uint32_t>(field.height) != map_data.tiles_y) {
+            add_error("Terrain file size mismatch: " + path.string());
+            return false;
+        }
+        map_data.terrain_heights = std::move(field.heights);
+    } catch (const std::exception& error) {
+        add_error(std::string("Failed to read terrain file: ") + error.what());
         return false;
     }
-    
-    size_t expected_size = map_data.tiles_x * map_data.tiles_y * sizeof(float);
-    map_data.terrain_heights.resize(map_data.tiles_x * map_data.tiles_y);
-    
-    stream.read(reinterpret_cast<char*>(map_data.terrain_heights.data()), expected_size);
-    
-    if (stream.gcount() != static_cast<std::streamsize>(expected_size)) {
-        add_error("Terrain binary file size mismatch");
-        return false;
-    }
-    
     return true;
 }
 

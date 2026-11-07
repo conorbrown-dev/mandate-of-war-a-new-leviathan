@@ -10,7 +10,7 @@
       {"id": "west_landmass", "center": [-12500, 0], "size": [14000, 38000]},
       {"id": "east_landmass", "center": [12500, 0], "size": [14000, 38000]}
     ],
-    "terrain": {"type": "heightmap", "data": "res://scenarios/terrain.bin", "tiles_x": 320, "tiles_y": 320}
+    "terrain": {"type": "heightmap", "data": "res://scenarios/terrain.json", "tiles_x": 320, "tiles_y": 320}
   },
   "player": {"faction_id": 0, "spawn": [-12500, 0], "units": [{"unit_type": 0, "count": 1}]},
   "ai": {"faction_id": 1, "spawn": [12500, 0], "units": [{"unit_type": 3, "count": 1}]},

@@ -409,7 +409,7 @@ TEST(theater_spawn_rules_keep_ground_units_out_of_water) {
 
 TEST(structure_placement_validates_land_footprint_and_boundaries) {
     Simulation s;
-    s.terrain().load_from_binary("godot/project/scenarios/terrain.bin");
+    s.terrain().load_from_file("godot/project/scenarios/terrain.json");
     s.configure_world_size(40000.0f, 40000.0f);
     s.configure_theater_landmasses(-12500.0f, 0.0f, 14000.0f, 38000.0f,
                                    12500.0f, 0.0f, 14000.0f, 38000.0f);
@@ -429,7 +429,7 @@ TEST(structure_placement_validates_land_footprint_and_boundaries) {
 
 TEST(engineers_spawn_only_on_ground_suitable_for_construction) {
     Simulation s;
-    s.terrain().load_from_binary("godot/project/scenarios/terrain.bin");
+    s.terrain().load_from_file("godot/project/scenarios/terrain.json");
     s.configure_world_size(40000.0f, 40000.0f);
     s.configure_theater_landmasses(-12500.0f, 0.0f, 14000.0f, 38000.0f,
                                    12500.0f, 0.0f, 14000.0f, 38000.0f);
@@ -577,7 +577,7 @@ TEST(commands_stop_simulation_freezes_ticks) {
     s.stop(); s.update(250);
     check(s.simulation_tick() == 0 && s.get_unit_x(own) == 0, "stopped simulation cannot consume commands or advance ticks");
 }
-TEST(commands_owned_factory_build_research_and_destruction) {
+TEST(commands_owned_factory_build_and_destruction) {
     Simulation s; s.start();
     s.ai_manager().set_faction_id(FactionId::INDUSTRIAL_EXPERIMENTAL);
     auto base = s.create_faction_base(FactionId::ELITE_PRECISION, -100, 0);
@@ -587,8 +587,7 @@ TEST(commands_owned_factory_build_research_and_destruction) {
     const auto initial = p.storages().at(base);
     s.update(50);
     check(p.storages().at(base).metal_storage == initial.metal_storage &&
-          p.storages().at(base).energy_storage == initial.energy_storage &&
-          p.storages().at(base).research_storage == initial.research_storage, "commander has no automatic local resource income");
+          p.storages().at(base).energy_storage == initial.energy_storage, "commander has no automatic local resource income");
     p.add_resource_node(900, ResourceNode{-80, 0, 100000, 100000, ResourceNode::Type::METAL, false});
     check(s.issue_harvest_commands({base}, FactionId::ELITE_PRECISION, -80, 0) == 1, "commander accepts a territory extraction claim");
     s.update(50);
@@ -604,20 +603,19 @@ TEST(commands_owned_factory_build_research_and_destruction) {
     check(p.storages().at(base).metal_storage < initial.metal_storage, "build reserves material");
     for (int i = 0; i < 310; ++i) s.update(50);
     check(p.get_construction_count() == 1 && s.entity_count() == 3, "paid build produces unit through simulation");
-    check(s.issue_build_commands({base}, FactionId::ELITE_PRECISION, 0, 0, 1) == 0, "artillery production requires research");
-    uint32_t research_index = 0;
-    while (Simulation::research_id(research_index) != "advance_ballistics" && research_index < 100) ++research_index;
-    check(s.issue_commands({base}, FactionId::ELITE_PRECISION, CommandType::RESEARCH, 0, 0, research_index) == 1, "owned research command accepted");
-    s.update(50);
-    check(!p.research(FactionId::ELITE_PRECISION).active_queue.empty(), "research enters timed project queue");
-    for (int i = 0; i < 1001; ++i) s.update(50);
-    check(p.research(FactionId::ELITE_PRECISION).completed_projects.at("advance_ballistics"), "research completes through fixed ticks");
-    check(s.issue_build_commands({base}, FactionId::ELITE_PRECISION, 0, 0, 1) == 1, "completed research unlocks artillery production");
+    check(p.can_queue_unit(base, FactionId::ELITE_PRECISION, UnitType::ELITE_LONG_RANGE_ARTILLERY),
+          "research is decided outside the match, so it does not gate artillery here");
     s.destroy_unit(base);
     check(s.issue_build_commands({base}, FactionId::ELITE_PRECISION, 0, 0, 0) == 0, "destroyed factory cannot build");
     const auto balance = p.storages().at(base).metal_storage;
     s.update(50);
     check(p.storages().at(base).metal_storage == balance, "destroyed economy stops gathering");
+}
+TEST(commands_retired_research_command_is_refused) {
+    Simulation s; s.start();
+    const auto base = s.create_faction_base(FactionId::ELITE_PRECISION, -100, 0);
+    check(s.issue_commands({base}, FactionId::ELITE_PRECISION, static_cast<CommandType>(RETIRED_RESEARCH_COMMAND), 0, 0, 0) == 0,
+          "research cannot be started inside a match");
 }
 TEST(commands_runway_aircraft_ferries_in_airborne_from_outside_theater) {
     Simulation s;

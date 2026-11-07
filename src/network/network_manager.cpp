@@ -13,6 +13,8 @@
 #include <unistd.h>
 #include <openssl/sha.h>
 
+static_assert(rts::MAX_SNAPSHOT_ENTITIES >= 3 * rts::MAX_UNITS_PER_PLAYER, "snapshots must hold every faction at its unit cap");
+
 namespace rts {
 
 NetworkManager::NetworkManager()
@@ -252,16 +254,19 @@ bool NetworkManager::receive_command(InputCommand& cmd) {
       
       auto state = simulation_->get_state();
       
-      Snapshot snapshot{};
+      // Too large for the stack at the current entity limit.
+      const auto snapshot_storage = std::make_unique<Snapshot>();
+      Snapshot& snapshot = *snapshot_storage;
       snapshot.tick = current_tick_;
       snapshot.entity_count = 0;
 
       for (size_t i = 0; i < state.entity_ids.size(); ++i) {
-          if (snapshot.entity_count >= MAX_SNAPSHOT_ENTITIES) {
-              break;
+          if (state.is_dead[i]) {
+              continue;
           }
 
-          if (state.is_dead[i]) {
+          if (snapshot.entity_count >= MAX_SNAPSHOT_ENTITIES) {
+              ++snapshot_entities_dropped_;
               continue;
           }
 
@@ -412,7 +417,8 @@ void NetworkManager::send_delta_snapshot(uint32_t reference_tick) {
     
     // Build delta snapshot - mark all entities as changed since reference state
     // TODO: Implement proper delta compression against reference_tick
-    DeltaSnapshot delta;
+    const auto delta_storage = std::make_unique<DeltaSnapshot>();
+    DeltaSnapshot& delta = *delta_storage;
     delta.tick = state.tick_number;
     delta.sequence_id = current_tick_;
     delta.reference_tick = reference_tick;

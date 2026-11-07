@@ -1,5 +1,6 @@
 #pragma once
 
+#include <array>
 #include <unordered_map>
 #include <vector>
 
@@ -195,7 +196,6 @@ public:
      size_t submit_commands(const std::vector<InputCommand>& commands);
      size_t issue_commands(const std::vector<EntityId>& entities, FactionId player,
                            CommandType type, float x = 0, float y = 0, uint32_t extra = 0);
-      static std::string research_id(uint32_t index);
     TerritorialControlManager& territorial_control_manager() { return territorial_control_; }
 
 
@@ -227,12 +227,15 @@ public:
     // Faction initialization
     EntityId create_faction_base(FactionId faction, float x, float y);
     void initialize_faction(FactionId faction_id, float x, float y);
+    // Returns -1 without creating anything when the faction is at its unit cap.
     int create_unit_with_type(float x, float y, UnitType unit_type, FactionId faction_id);
+    int unit_count(FactionId faction_id) const;
+    int unit_cap_per_player() const { return unit_cap_per_player_; }
+    // Benchmarks raise this to probe beyond the gameplay limit.
+    void set_unit_cap_per_player(int cap) { unit_cap_per_player_ = cap; }
+    bool at_unit_cap(FactionId faction_id) const { return unit_count(faction_id) >= unit_cap_per_player_; }
     void set_unit_faction(EntityId entity, FactionId faction_id);
 
-    // Faction research
-    const FactionResearch& get_faction_research(FactionId faction_id) const;
-    void set_faction_research(FactionId faction_id, const FactionResearch& research);
     
     uint32_t simulation_tick() const { return tick_; }
     void enable_ai(bool enabled) { ai_enabled_ = enabled; }
@@ -249,6 +252,12 @@ public:
     const ReinforcementDelivery& reinforcement_delivery() const { return reinforcement_delivery_; }
 
 private:
+    void refresh_unit_counts();
+    static constexpr size_t FACTION_COUNT = 3;
+    // Recounted every economy phase so deaths free slots; creation increments.
+    std::array<int, FACTION_COUNT> unit_counts_{};
+    int unit_cap_per_player_ = MAX_UNITS_PER_PLAYER;
+
     bool running_{false};
     bool ai_enabled_ = true;
     std::vector<InputCommand> command_log_;
@@ -275,7 +284,6 @@ private:
     std::unordered_map<EntityId, MoveTarget> move_targets_;
     struct PatrolOrder { Position origin; Position destination; bool returning = false; };
     std::unordered_map<EntityId, PatrolOrder> patrol_orders_;
-    std::unordered_map<FactionId, FactionResearch> faction_research_;
     Terrain terrain_;
     RoadNetwork road_network_;
     TerritorialControlManager territorial_control_;

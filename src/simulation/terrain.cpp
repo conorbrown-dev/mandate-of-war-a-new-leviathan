@@ -2,17 +2,61 @@
 #include <algorithm>
 #include <cmath>
 #include <fstream>
+#include <sstream>
 #include <stdexcept>
+#include <utility>
+
+#include "data/json_parser.hpp"
 
 namespace rts {
-void Terrain::load_from_binary(const std::string& path) {
-    std::ifstream input(path, std::ios::binary);
-    if (!input) throw std::runtime_error("Heightmap file unavailable: " + path);
-    
-    heights_.resize(GRID_SIZE * GRID_SIZE);
-    input.read(reinterpret_cast<char*>(heights_.data()), heights_.size() * sizeof(float));
-    
-    if (!input) throw std::runtime_error("Heightmap file read failed");
+Heightfield read_heightfield(const std::string& path) {
+    std::ifstream input(path);
+    if (!input) throw std::runtime_error("Heightfield file unavailable: " + path);
+    std::stringstream buffer;
+    buffer << input.rdbuf();
+    const auto root = data::JsonParser::parse(buffer.str());
+    if (!root) throw std::runtime_error("Heightfield is not valid JSON: " + path);
+    const auto format = root->get("format");
+    const auto width = root->get("width");
+    const auto height = root->get("height");
+    const auto heights = root->get("heights");
+    if (!format || format->as_string() != "heightfield" || !width || !height || !heights ||
+        heights->type() != data::JsonValue::Type::Array) {
+        throw std::runtime_error("Malformed heightfield: " + path);
+    }
+    Heightfield field;
+    field.width = static_cast<int>(width->as_number());
+    field.height = static_cast<int>(height->as_number());
+    const auto& samples = heights->as_array();
+    if (field.width <= 0 || field.height <= 0 ||
+        samples.size() != static_cast<size_t>(field.width) * static_cast<size_t>(field.height)) {
+        throw std::runtime_error("Heightfield size mismatch: " + path);
+    }
+    field.heights.reserve(samples.size());
+    for (const auto& sample : samples) field.heights.push_back(static_cast<float>(sample.as_number()));
+    return field;
+}
+
+void write_heightfield(const std::string& path, int width, int height, const std::vector<float>& heights) {
+    std::ofstream output(path, std::ios::trunc);
+    if (!output) throw std::runtime_error("Heightfield file unavailable: " + path);
+    output << "{\"format\":\"heightfield\",\"version\":1,\"width\":" << width
+           << ",\"height\":" << height << ",\"heights\":[";
+    output.precision(9);
+    for (size_t index = 0; index < heights.size(); ++index) {
+        if (index > 0) output << ',';
+        output << heights[index];
+    }
+    output << "]}\n";
+    if (!output) throw std::runtime_error("Heightfield write failed: " + path);
+}
+
+void Terrain::load_from_file(const std::string& path) {
+    auto field = read_heightfield(path);
+    if (field.width != GRID_SIZE || field.height != GRID_SIZE) {
+        throw std::runtime_error("Terrain must be a " + std::to_string(GRID_SIZE) + " square grid: " + path);
+    }
+    heights_ = std::move(field.heights);
 }
 
 void Terrain::set_world_bounds(float width, float height) {

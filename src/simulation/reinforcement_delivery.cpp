@@ -33,9 +33,10 @@ void ReinforcementDelivery::require_airfield_selection() {
     }
 }
 
-bool ReinforcementDelivery::request(bool has_resources) {
+bool ReinforcementDelivery::request(bool has_resources, bool has_unit_slot) {
     if (state_ != ReinforcementDeliveryState::SELECTED) { reason_ = "SELECT A FRIENDLY AIRFIELD FIRST"; return false; }
     if (!has_resources) { reason_ = "INSUFFICIENT MATERIALS OR ENERGY"; return false; }
+    if (!has_unit_slot) { reason_ = "UNIT CAP REACHED"; return false; }
     state_ = ReinforcementDeliveryState::INCOMING;
     elapsed_ms_ = 0.0f;
     delivery_completed_ = false;

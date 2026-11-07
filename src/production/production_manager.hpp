@@ -34,7 +34,7 @@ public:
     const TacticalResources* tactical_resources(EntityId storage_id) const;
     TacticalResources* tactical_resources(EntityId storage_id);
     bool set_tactical_power(EntityId storage_id, float generation_mw, float demand_mw);
-    void update_storage(EntityId storage_id, float metal, float energy, float research);
+    void update_storage(EntityId storage_id, float metal, float energy);
     
     void add_to_queue(EntityId production_line_id, const ConstructionQueueEntry& entry);
     void complete_construction(EntityId entity_id);
@@ -43,6 +43,10 @@ public:
     
     // Add unit to production queue by type
     void add_unit_to_queue(EntityId production_line_id, FactionId faction_id, UnitType unit_type);
+    // Remaining unit completions allowed for a faction this tick. A unit at the
+    // head of a queue pauses, spending nothing, while its faction has no slots.
+    // Factions with no recorded value are unlimited.
+    void set_unit_slots(FactionId faction_id, int slots) { unit_slots_[faction_id] = slots; }
     
     void add_transport(EntityId transport_id, const Transport& transport);
     void update_transports(float delta_ms);
@@ -59,7 +63,7 @@ public:
     std::unordered_map<EntityId, Transport>& transports() { return transports_; }
 
     bool verify_extraction_rate(EntityId extractor_id, float expected_rate, float tolerance = 0.01f);
-    bool verify_storage_capacity(EntityId storage_id, float expected_metal, float expected_energy, float expected_research);
+    bool verify_storage_capacity(EntityId storage_id, float expected_metal, float expected_energy);
     bool verify_queue_length(EntityId production_line_id, int expected_length);
     
     // Faction-specific methods
@@ -72,17 +76,12 @@ public:
     bool can_queue_requisition(EntityId line, FactionId faction, UnitType type, float x, float y) const;
     bool queue_requisition(EntityId line, FactionId faction, UnitType type, float x, float y);
     EntityId faction_line(FactionId faction) const;
-    const FactionResearch& research(FactionId faction) const;
-    bool can_research(FactionId faction, const std::string& project) const;
-    bool begin_research(FactionId faction, const std::string& project);
     
     // Economy: deduct resources from faction's production line storage
     bool deduct_faction_resources(FactionId faction, float metal, float energy);
-    float research_progress(FactionId faction) const;
     float get_unit_metal_cost(FactionId faction_id, UnitType unit_type) const;
      float get_build_time_seconds(UnitType unit_type) const;
     
-    void set_faction_research(FactionId faction_id, const FactionResearch& research);
     
     // Completed constructions since last update
     std::vector<CompletedConstruction>& get_completed_constructions() { return completed_constructions_; }
@@ -110,9 +109,7 @@ private:
     int construction_count_ = 0;
     int transport_count_ = 0;
     
-    // Research state per faction
-    std::unordered_map<FactionId, FactionResearch> faction_research_;
-    std::unordered_map<FactionId, float> research_elapsed_;
+    std::unordered_map<FactionId, int> unit_slots_;
     
     // Queue of completed constructions (to be spawned by Simulation)
     std::vector<CompletedConstruction> completed_constructions_;

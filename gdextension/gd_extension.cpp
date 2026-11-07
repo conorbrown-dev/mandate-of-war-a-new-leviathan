@@ -193,6 +193,7 @@ protected:
         ClassDB::bind_method(D_METHOD("configure_world_size", "width", "height"), &RtsExtension::configure_world_size);
         ClassDB::bind_method(D_METHOD("configure_theater_landmasses", "first_center_x", "first_center_y", "first_width", "first_height", "second_center_x", "second_center_y", "second_width", "second_height"), &RtsExtension::configure_theater_landmasses);
         ClassDB::bind_method(D_METHOD("load_terrain_heightmap", "path"), &RtsExtension::load_terrain_heightmap);
+        ClassDB::bind_method(D_METHOD("skirmish_set_ai_enabled", "enabled"), &RtsExtension::skirmish_set_ai_enabled);
         ClassDB::bind_method(D_METHOD("is_land_position", "x", "y"), &RtsExtension::is_land_position);
         ClassDB::bind_method(D_METHOD("block_civilian_area", "x", "y", "radius"), &RtsExtension::block_civilian_area);
         ClassDB::bind_method(D_METHOD("validate_structure_placement", "structure_type", "x", "y"), &RtsExtension::validate_structure_placement);
@@ -419,7 +420,7 @@ public:
         stats_->record_match(rts::MatchStats{
             skirmish_->name(), static_cast<uint64_t>(seconds), "player", "Elite Precision",
             skirmish_->result() == 0, static_cast<uint32_t>(skirmish_->checksums().size()),
-            0, 0, 0, 0, 0, 0, 0});
+            0, 0, 0, 0, 0, 0});
         recorded_result_ = skirmish_->result();
     }
     void skirmish_update_intelligence(int64_t entity_id, double x, double y, int64_t tick) {
@@ -557,23 +558,6 @@ public:
             resources.append(resource);
         }
         state["resources"] = resources;
-        Array projects;
-        for(uint32_t i=0;i<rts::get_research_projects().size();++i) {
-            const auto id=rts::Simulation::research_id(i);
-            const auto& project=rts::get_research_projects().at(id);
-            bool owned=false;
-            for(auto type:project.unlocks) if(rts::get_unit_prototypes().at(type).faction==rts::FactionId::ELITE_PRECISION) owned=true;
-            if(!owned) continue;
-            Dictionary row; row["index"]=i; row["name"]=String(project.name.c_str());
-            row["available"]=production.can_research(rts::FactionId::ELITE_PRECISION,id);
-            const auto& research=production.research(rts::FactionId::ELITE_PRECISION);
-            const auto completed=research.completed_projects.find(id);
-            row["complete"]=completed!=research.completed_projects.end() && completed->second;
-            row["active"]=!research.active_queue.empty() && research.active_queue.front()==id;
-            row["progress"]=production.research_progress(rts::FactionId::ELITE_PRECISION);
-            projects.append(row);
-        }
-        state["projects"]=projects;
         return state;
     }
 
@@ -626,13 +610,17 @@ public:
             static_cast<float>(second_center_x), static_cast<float>(second_center_y), static_cast<float>(second_width), static_cast<float>(second_height));
     }
 
+    void skirmish_set_ai_enabled(bool enabled) {
+        rts::runtime_simulation()->enable_ai(enabled);
+    }
+
     bool load_terrain_heightmap(const String& path) const {
         String resolved_path = path;
         if (path.begins_with("res://")) {
             resolved_path = ProjectSettings::get_singleton()->globalize_path(path);
         }
         try {
-            rts::runtime_simulation()->terrain().load_from_binary(resolved_path.utf8().get_data());
+            rts::runtime_simulation()->terrain().load_from_file(resolved_path.utf8().get_data());
             return true;
         } catch (const std::exception&) {
             return false;
@@ -683,12 +671,7 @@ public:
                 rts::runtime_simulation()->territorial_control_manager().has_active_installation(faction, rts::InstallationType::AIRFIELD);
             entry["available"] = line != rts::INVALID_ENTITY && airfield_ready && production.can_queue_unit(line, faction, type);
             entry["is_structure"] = false;
-            entry["nato_symbol_id"] = type == rts::UnitType::INDUSTRIAL_ENGINEERING ? String("combat_engineer") :
-                type == rts::UnitType::ELITE_T1_FIGHTER || type == rts::UnitType::ELITE_T1_VTOL ? String("fighter") :
-                type == rts::UnitType::ELITE_PATROL_BOAT ? String("patrol_boat") :
-                type == rts::UnitType::ELITE_LONG_RANGE_ARTILLERY ? String("artillery") :
-                type == rts::UnitType::ELITE_ANTI_AIR || type == rts::UnitType::MASS_ANTI_AIR ? String("air_defense") :
-                type == rts::UnitType::INDUSTRIAL_MISSILE_PLATFORM ? String("rocket_artillery") : String("medium_armor");
+            entry["nato_symbol_id"] = String(prototype.nato_symbol.c_str());
             catalog.append(entry);
         }
         for (uint8_t structure = 0; structure < 4; ++structure) {

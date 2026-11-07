@@ -58,7 +58,6 @@ void Simulation::start() {
     command_manager_.clear();
     command_log_.clear();
     ai_enabled_ = true;
-    faction_research_.clear();
     territorial_control_.reset();
     control_point_battle_.reset();
     reinforcement_delivery_.reset();
@@ -85,6 +84,21 @@ void Simulation::clear_entities() {
     component_manager_.cleanup_all();
     spatial_grid_.clear();
     entity_manager_.clear();
+    unit_counts_.fill(0);
+}
+
+void Simulation::refresh_unit_counts() {
+    unit_counts_.fill(0);
+    for (const auto entity : component_manager_.entities_with<Faction, UnitData>(entity_manager_.get_entities())) {
+        const auto index = static_cast<size_t>(component_manager_.get_component<Faction>(entity)->faction_id);
+        const auto* health = component_manager_.get_component<Health>(entity);
+        if (index < FACTION_COUNT && (!health || !health->is_dead)) ++unit_counts_[index];
+    }
+}
+
+int Simulation::unit_count(FactionId faction_id) const {
+    const auto index = static_cast<size_t>(faction_id);
+    return index < FACTION_COUNT ? unit_counts_[index] : 0;
 }
 
 void Simulation::update(float delta_ms) {
@@ -515,12 +529,6 @@ void Simulation::defend_area(EntityId entity, float x, float y) {
     }
 }
 
-std::string Simulation::research_id(uint32_t index) {
-    std::vector<std::string> ids;
-    for (const auto& [id, project] : get_research_projects()) ids.push_back(id);
-    std::sort(ids.begin(), ids.end());
-    return index < ids.size() ? ids[index] : "";
-}
 
 bool Simulation::is_visible_to(FactionId faction, EntityId target) const {
     const auto* position = component_manager_.get_component<Position>(target);
@@ -571,7 +579,8 @@ bool Simulation::is_position_visible_to(FactionId faction, float x, float y) con
 
 bool Simulation::validate_command(const InputCommand& cmd, uint32_t execution_tick) const {
     if (cmd.tick_id != execution_tick || cmd.player_id > 2 ||
-        cmd.cmd_type > static_cast<uint8_t>(CommandType::INSTALL)) {
+        cmd.cmd_type > static_cast<uint8_t>(CommandType::INSTALL) ||
+        cmd.cmd_type == RETIRED_RESEARCH_COMMAND) {
         fprintf(stderr, "VALIDATE_FAIL: tick_id mismatch or invalid player_id/cmd_type (entity=%u player=%u tick=%u exec=%u type=%u)\n", cmd.entity_id, cmd.player_id, cmd.tick_id, execution_tick, cmd.cmd_type);
         return false;
     }
@@ -655,12 +664,6 @@ bool Simulation::validate_command(const InputCommand& cmd, uint32_t execution_ti
         if (ok && prototype != get_unit_prototypes().end() && prototype->second.is_aircraft && prototype->second.requires_runway)
             ok = territorial_control_.has_active_installation(owner->faction_id, InstallationType::AIRFIELD);
         if (!ok) fprintf(stderr, "VALIDATE_FAIL: BUILD check failed (entity=%u extra=%u type=%u)\n", cmd.entity_id, cmd.extra, static_cast<unsigned>(cmd.extra));
-        return ok;
-    }
-    if (type == CommandType::RESEARCH) {
-        bool ok = production_manager_.faction_line(owner->faction_id) == cmd.entity_id &&
-                production_manager_.can_research(owner->faction_id, research_id(cmd.extra));
-        if (!ok) fprintf(stderr, "VALIDATE_FAIL: RESEARCH check failed (entity=%u extra=%u)\n", cmd.entity_id, cmd.extra);
         return ok;
     }
     if (type == CommandType::INSTALL) {
@@ -1025,6 +1028,14 @@ void Simulation::logistics_phase(float delta_ms) {
 }
 
 void Simulation::economy_phase(float delta_ms) {
+     refresh_unit_counts();
+     for (size_t index = 0; index < FACTION_COUNT; ++index) {
+         const auto faction = static_cast<FactionId>(index);
+         // An inbound delivery was paid for, so production must leave it a slot.
+         const int reserved = reinforcement_delivery_.state() == ReinforcementDeliveryState::INCOMING &&
+             reinforcement_delivery_.owner() == faction ? 1 : 0;
+         production_manager_.set_unit_slots(faction, unit_cap_per_player_ - unit_counts_[index] - reserved);
+     }
      production_manager_.update_all(delta_ms);
      requisition_manager_.update(delta_ms, production_manager_, *this);
      update_harvesters(delta_ms);
@@ -1169,7 +1180,7 @@ bool Simulation::request_reinforcement_delivery(FactionId player) {
     const auto storage = production_manager_.storages().find(line);
     const bool funded = storage != production_manager_.storages().end() &&
         storage->second.tactical.materials.current >= package.material_cost;
-    if (!reinforcement_delivery_.request(funded)) return false;
+    if (!reinforcement_delivery_.request(funded, !at_unit_cap(player))) return false;
     return production_manager_.deduct_faction_resources(player, package.material_cost, 0.0f);
 }
 
@@ -1528,7 +1539,6 @@ extern "C" {
         switch (type) {
             case 0: node.type = rts::ResourceNode::Type::METAL; break;
             case 1: node.type = rts::ResourceNode::Type::ENERGY; break;
-            case 2: node.type = rts::ResourceNode::Type::RESEARCH; break;
             default: return;
         }
         
@@ -1547,16 +1557,14 @@ extern "C" {
         get_simulation()->production_manager().extractors()[static_cast<EntityId>(extractor_id)] = extractor;
     }
 
-    void economy_add_storage(int storage_id, float x, float y, float metal_capacity, float energy_capacity, float research_capacity) {
+    void economy_add_storage(int storage_id, float x, float y, float metal_capacity, float energy_capacity) {
         rts::Storage storage{};
         storage.x = x;
         storage.y = y;
         storage.metal_capacity = metal_capacity;
         storage.energy_capacity = energy_capacity;
-        storage.research_capacity = research_capacity;
         storage.metal_storage = 0.0f;
         storage.energy_storage = 0.0f;
-        storage.research_storage = 0.0f;
         
         get_simulation()->production_manager().add_storage(static_cast<EntityId>(storage_id), storage);
     }
@@ -2089,12 +2097,10 @@ EntityId Simulation::create_faction_base(FactionId faction, float x, float y) {
     component_manager_.add_component(id, Health{1500, 1500});
     const auto& start = data->second;
     production_manager_.add_storage(id, Storage{x, y, start.start_material, start.start_energy,
-        start.start_research, 10000, 10000, 2000});
+        10000, 10000});
     ProductionLine line{}; line.storage_id = id; line.max_jobs = 5;
     production_manager_.add_production_line(id, line);
     production_manager_.add_faction_production_line(faction, id);
-    FactionResearch research{}; research.available_projects = get_research_projects();
-    production_manager_.set_faction_research(faction, research);
     // Starting commanders do not generate resources. Economy comes from
     // territory sites claimed with harvest/extraction commands.
     return id;
@@ -2118,10 +2124,8 @@ void Simulation::initialize_faction(FactionId faction_id, float x, float y) {
     storage.y = y;
     storage.metal_storage = start_data.start_material;
     storage.energy_storage = start_data.start_energy;
-    storage.research_storage = start_data.start_research;
     storage.metal_capacity = 10000.0f;
     storage.energy_capacity = 10000.0f;
-    storage.research_capacity = 2000.0f;
     
     production_manager_.add_storage(static_cast<EntityId>(storage_id), storage);
     
@@ -2137,12 +2141,6 @@ void Simulation::initialize_faction(FactionId faction_id, float x, float y) {
     production_manager_.add_production_line(static_cast<EntityId>(line_id), line);
     production_manager_.add_faction_production_line(faction_id, static_cast<EntityId>(line_id));
     
-    // Initialize faction research state
-    FactionResearch faction_research{};
-    faction_research.available_projects = get_research_projects();
-    faction_research.completed_projects = {};
-    faction_research.active_queue = {};
-    production_manager_.set_faction_research(faction_id, faction_research);
     
     // Spawn starting units
     for (size_t i = 0; i < start_data.start_units.size(); ++i) {
@@ -2153,7 +2151,7 @@ void Simulation::initialize_faction(FactionId faction_id, float x, float y) {
 }
 
 int rts::Simulation::create_unit_with_type(float x, float y, rts::UnitType unit_type, rts::FactionId faction_id) {
-    if (!std::isfinite(x) || !std::isfinite(y)) {
+    if (!std::isfinite(x) || !std::isfinite(y) || at_unit_cap(faction_id)) {
         return -1;
     }
 
@@ -2166,7 +2164,7 @@ int rts::Simulation::create_unit_with_type(float x, float y, rts::UnitType unit_
     }
 
     const auto& proto = proto_it->second;
-    if (unit_type == UnitType::INDUSTRIAL_ENGINEERING && !validate_engineer_placement(x, y)) {
+    if (proto.construction_unit && !validate_engineer_placement(x, y)) {
         return -1;
     }
     const auto& navigation = proto.is_naval ? naval_pathfinding_ : pathfinding_;
@@ -2181,6 +2179,7 @@ int rts::Simulation::create_unit_with_type(float x, float y, rts::UnitType unit_
         !navigation.is_walkable(navigation.to_grid_x(x), navigation.to_grid_y(y))) return -1;
 
     Entity entity = entity_manager_.create_entity();
+    if (static_cast<size_t>(faction_id) < FACTION_COUNT) ++unit_counts_[static_cast<size_t>(faction_id)];
     
     float terrain_height = terrain_.height_at(x, y);
     Position pos = {x, y, terrain_height};
@@ -2193,8 +2192,12 @@ int rts::Simulation::create_unit_with_type(float x, float y, rts::UnitType unit_
     
     Faction faction = {faction_id};
     
-    // Weapon stats - simplified based on unit type
-    Weapon wep = {proto.range / 2.0f, 200.0f, 1.0f, 0.0f, proto.range, 0.5f, 5.0f, 1.0f};
+    const auto& weapon = proto.weapon;
+    // A deterministic per-unit offset keeps an army from firing as one volley,
+    // which would put every target search on the same tick.
+    const float first_shot_delay = weapon.fire_rate * (0.25f + 0.75f * static_cast<float>(entity.id % 97u) / 96.0f);
+    Weapon wep = {weapon.damage, weapon.range, weapon.fire_rate, 0.0f,
+                  weapon.projectile_speed, weapon.lead_bias, weapon.aoe_radius, first_shot_delay};
     
     component_manager_.add_component(entity.id, pos);
     component_manager_.add_component(entity.id, vel);
@@ -2223,16 +2226,6 @@ int rts::Simulation::create_unit_with_type(float x, float y, rts::UnitType unit_
         for (const auto capability : proto.capabilities) {
             territorial_control_.assign_capability(entity, capability);
         }
-    } else if (unit_type == UnitType::INDUSTRIAL_ENGINEERING &&
-               faction_id == FactionId::INDUSTRIAL_EXPERIMENTAL) {
-        territorial_control_.assign_capability(entity, SeizureCapability::RECON);
-        territorial_control_.assign_capability(entity, SeizureCapability::SEIZURE);
-        territorial_control_.assign_capability(entity, SeizureCapability::SECURE);
-        territorial_control_.assign_capability(entity, SeizureCapability::CONSTRUCT_FOB);
-        territorial_control_.assign_capability(entity, SeizureCapability::CONSTRUCT_LOGISTICS);
-        territorial_control_.assign_capability(entity, SeizureCapability::ESTABLISH_BASE);
-        territorial_control_.assign_capability(entity, SeizureCapability::DEFEND);
-        territorial_control_.assign_capability(entity, SeizureCapability::HARVEST_SECURED);
     } else {
         territorial_control_.assign_capability(entity, SeizureCapability::SEIZURE);
         territorial_control_.assign_capability(entity, SeizureCapability::SECURE);
@@ -2284,18 +2277,7 @@ void rts::Simulation::set_unit_faction(EntityId entity, FactionId faction_id) {
     }
 }
 
-const rts::FactionResearch& rts::Simulation::get_faction_research(FactionId faction_id) const {
-    static const FactionResearch empty_research{};
-    auto it = faction_research_.find(faction_id);
-    if (it == faction_research_.end()) {
-        return empty_research;
-    }
-    return it->second;
-}
 
-void rts::Simulation::set_faction_research(FactionId faction_id, const FactionResearch& research) {
-    faction_research_[faction_id] = research;
-}
 
 void rts::Simulation::process_commands() {
     const auto local_commands = command_manager_.get_local_commands();
@@ -2374,10 +2356,6 @@ void rts::Simulation::process_command_internal(const InputCommand& cmd) {
             const float build_y = static_cast<float>(cmd.target_y) / command_position_scale_;
             const UnitType unit_type = static_cast<UnitType>(cmd.extra);
             build_structure(static_cast<EntityId>(cmd.entity_id), build_x, build_y, unit_type);
-            break;
-        }
-        case static_cast<uint8_t>(CommandType::RESEARCH): {
-            production_manager_.begin_research(static_cast<FactionId>(cmd.player_id), research_id(cmd.extra));
             break;
         }
         case static_cast<uint8_t>(CommandType::INSTALL): {
@@ -2459,18 +2437,16 @@ extern "C" {
         return true;
     }
     
-    bool economy_get_storage_info(int storage_id, float* out_metal_storage, float* out_energy_storage, float* out_research_storage, 
-                                  float* out_metal_capacity, float* out_energy_capacity, float* out_research_capacity) {
+    bool economy_get_storage_info(int storage_id, float* out_metal_storage, float* out_energy_storage,
+                                  float* out_metal_capacity, float* out_energy_capacity) {
         auto it = get_simulation()->production_manager().storages().find(static_cast<EntityId>(storage_id));
         if (it == get_simulation()->production_manager().storages().end()) {
             return false;
         }
         *out_metal_storage = it->second.metal_storage;
         *out_energy_storage = it->second.energy_storage;
-        *out_research_storage = it->second.research_storage;
         *out_metal_capacity = it->second.metal_capacity;
         *out_energy_capacity = it->second.energy_capacity;
-        *out_research_capacity = it->second.research_capacity;
         return true;
     }
 

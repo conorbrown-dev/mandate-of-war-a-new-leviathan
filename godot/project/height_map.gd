@@ -1,6 +1,7 @@
 class_name HeightMap
 extends RefCounted
 
+const MASK_SIZE := 640
 const TERRAIN_WIDTH := 320
 const TERRAIN_HEIGHT := 320
 const BIOME_OCEAN := 0
@@ -10,29 +11,18 @@ const BIOME_HILLS := 3
 const BIOME_MOUNTAINS := 4
 
 
+# Reads the JSON heightfield format described in src/simulation/terrain.hpp.
 static func load_from_file(path: String) -> PackedFloat32Array:
-	var file := FileAccess.open(path, FileAccess.READ)
-	if file == null:
-		print("ERROR: Could not open heightmap file: %s" % path)
+	var text := FileAccess.get_file_as_string(path)
+	var parsed: Variant = JSON.parse_string(text) if not text.is_empty() else null
+	if typeof(parsed) != TYPE_DICTIONARY or parsed.get("format", "") != "heightfield":
+		print("ERROR: Could not read heightfield: %s" % path)
 		return PackedFloat32Array()
-	
-	var size := file.get_length()
-	var expected_size := TERRAIN_WIDTH * TERRAIN_HEIGHT * 4
-	if size != expected_size:
-		print("ERROR: Heightmap file size mismatch. Expected %d bytes, got %d" % [expected_size, size])
-		file.close()
+	var samples: Array = parsed.get("heights", [])
+	if int(parsed.get("width", 0)) != TERRAIN_WIDTH or int(parsed.get("height", 0)) != TERRAIN_HEIGHT or samples.size() != TERRAIN_WIDTH * TERRAIN_HEIGHT:
+		print("ERROR: Heightfield size mismatch: %s" % path)
 		return PackedFloat32Array()
-	
-	var buffer := file.get_buffer(size)
-	file.close()
-	
-	var heights := PackedFloat32Array()
-	heights.resize(TERRAIN_WIDTH * TERRAIN_HEIGHT)
-	for i in range(TERRAIN_WIDTH * TERRAIN_HEIGHT):
-		var byte_offset := i * 4
-		heights[i] = buffer.decode_float(byte_offset)
-	
-	return heights
+	return PackedFloat32Array(samples)
 
 
 static func get_biome(height: float) -> int:
@@ -48,11 +38,11 @@ static func get_biome(height: float) -> int:
 		return BIOME_MOUNTAINS
 
 
-static func presentation_height(height: float, world_x: float, world_width := 320.0) -> float:
+static func presentation_height(height: float, world_x: float, world_width := 320.0, world_z := 0.0) -> float:
 	# The simulation heightfield stores broad land relief.  Broken Strait's map
 	# metadata defines two landmasses but the original binary contains no ocean
 	# samples, so derive the visual channel here without changing simulation data.
-	var land_mask := presentation_land_mask(world_x, world_width)
+	var land_mask := presentation_land_mask(world_x, world_width, world_z)
 	# Heightfield values are authored in meters. The old 5% presentation scale
 	# flattened 1.9 km mountain belts into a nearly featureless 95 m surface.
 	# Preserve mountain-scale relief so ridges, valleys, and ravines read across
@@ -61,8 +51,36 @@ static func presentation_height(height: float, world_x: float, world_width := 32
 	return lerpf(-0.70, land_height, land_mask)
 
 
-static func presentation_land_mask(world_x: float, world_width := 320.0) -> float:
-	return smoothstep(world_width * 0.14, world_width * 0.22, absf(world_x))
+static func presentation_land_mask(world_x: float, world_width := 320.0, world_z := 0.0) -> float:
+	var shore := absf(world_x) + coast_wobble(world_z, world_width)
+	var outer := maxf(
+		absf(world_x) + coast_wobble(world_z + world_width * 0.0225, world_width) * 0.5,
+		absf(world_z) + coast_wobble(world_x + world_width * 0.0525, world_width) * 0.5)
+	return smoothstep(world_width * 0.14, world_width * 0.22, shore) * (1.0 - smoothstep(world_width * 0.452, world_width * 0.482, outer))
+
+
+# Keep in step with coast_wobble() in tools/generate_terrain.py. The offset stays
+# inside the existing shoreline band, so visible land never enters simulated water.
+static func coast_wobble(world_z: float, world_width := 320.0) -> float:
+	var scale := world_width / 40000.0
+	var z := world_z / scale
+	return scale * (850.0 * sin(z / 2600.0 + 1.1) + 430.0 * sin(z / 1130.0 + 0.4) + 220.0 * sin(z / 510.0 + 2.3))
+
+
+# Baked RGBA masks from tools/generate_terrain.py: river, forest, light, variation.
+static func load_masks(path: String) -> PackedByteArray:
+	var image := Image.new()
+	if image.load_png_from_buffer(FileAccess.get_file_as_bytes(path)) != OK or image.get_width() != MASK_SIZE or image.get_height() != MASK_SIZE:
+		push_warning("Terrain masks are missing or have the wrong size: %s" % path)
+		return PackedByteArray()
+	image.convert(Image.FORMAT_RGBA8)
+	return image.get_data()
+
+
+static func masks_texture(masks: PackedByteArray) -> ImageTexture:
+	var image := Image.create_from_data(MASK_SIZE, MASK_SIZE, false, Image.FORMAT_RGBA8, masks)
+	image.generate_mipmaps()
+	return ImageTexture.create_from_image(image)
 
 
 static func generate_terrain_mesh(heights: PackedFloat32Array, world_width := 320.0, world_height := 320.0) -> ArrayMesh:
@@ -82,7 +100,7 @@ static func generate_terrain_mesh(heights: PackedFloat32Array, world_width := 32
 			var idx := y * width + x
 			var world_x := (float(x) / float(width - 1) - 0.5) * world_width
 			var world_z := (float(y) / float(height - 1) - 0.5) * world_height
-			var world_y := presentation_height(heights[idx], world_x, world_width)
+			var world_y := presentation_height(heights[idx], world_x, world_width, world_z)
 			vertices.append(Vector3(world_x, world_y, world_z))
 			uvs.append(Vector2(float(x) / float(width - 1), float(y) / float(height - 1)))
 	
@@ -118,9 +136,7 @@ static func generate_terrain_mesh(heights: PackedFloat32Array, world_width := 32
 		normals[i] = normals[i].normalized()
 	
 	for i in range(vertices.size()):
-		var x := int(i % width)
-		var world_x := (float(x) / float(width - 1) - 0.5) * world_width
-		colors.append(Color(presentation_land_mask(world_x, world_width), 0.0, 0.0, 1.0))
+		colors.append(Color(presentation_land_mask(vertices[i].x, world_width, vertices[i].z), 0.0, 0.0, 1.0))
 	
 	var surface_arrays := []
 	surface_arrays.resize(Mesh.ARRAY_MAX)

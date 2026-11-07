@@ -40,6 +40,9 @@ const MESH_BASE_PATH := "res://scenarios/meshes/"
 const TERRAIN_SAMPLE_WIDTH := 320
 const TERRAIN_SAMPLE_HEIGHT := 320
 const CIVILIAN_DRESSING_PATH := "res://scenarios/civilian_dressing.json"
+const TerrainVegetation := preload("res://terrain_vegetation.gd")
+const UnitCatalog := preload("res://unit_catalog.gd")
+const TERRAIN_MASKS_PATH := "res://scenarios/terrain_masks.png"
 const TREE_INSTANCE_TARGET := 960
 const TREE_CLUSTER_COUNT := 9
 const SkirmishConfigLoader := preload("res://skirmish_config.gd")
@@ -95,6 +98,7 @@ var unit_multimesh: MultiMesh
 var demo_unit_views: Dictionary = {}
 var demo_mode := false
 var terrain_heights := PackedFloat32Array()
+var terrain_vegetation: TerrainVegetation
 var terrain_world_width := 320.0
 var terrain_world_height := 320.0
 
@@ -269,7 +273,7 @@ var free_camera_yaw := 0.0
 var free_camera_pitch := 38.0
 var tactical_camera_yaw := 0.0
 var environment_debug_brightness := 0.72
-var environment_debug_fog := 0.000018
+var environment_debug_fog := 0.000009
 var environment_debug_exposure := 1.08
 var environment_debug_sliders: Dictionary = {}
 var environment_debug_value_labels: Dictionary = {}
@@ -666,11 +670,11 @@ func _apply_environment_weather(weather_name: String) -> void:
 			environment_weather_terrain_multiplier = 0.66
 			environment_weather_terrain_ambient = 0.12
 		_:
-			environment.fog_density = 0.000018
-			environment.fog_light_color = Color("#859499")
+			environment.fog_density = 0.000009
+			environment.fog_light_color = Color("#9ab0bd")
 			environment.fog_light_energy = 0.65
-			sky_material.sky_top_color = Color("#132133")
-			sky_material.sky_horizon_color = Color("#6e808c")
+			sky_material.sky_top_color = Color("#1a3a5c")
+			sky_material.sky_horizon_color = Color("#8ea5b3")
 			battlefield_light.light_color = Color("#f0e3c7")
 			environment_weather_sun_multiplier = 1.0
 			environment_weather_terrain_multiplier = 1.0
@@ -710,7 +714,7 @@ func _reset_environment_debug() -> void:
 	for key in ["brightness", "fog", "exposure"]:
 		var slider := environment_debug_sliders.get(key) as HSlider
 		if slider != null:
-			slider.value = 0.72 if key == "brightness" else 0.000018 if key == "fog" else 1.08
+			slider.value = 0.72 if key == "brightness" else 0.000009 if key == "fog" else 1.08
 	if environment_debug_weather_option != null:
 		environment_debug_weather_option.select(1)
 	_apply_environment_weather("OVERCAST")
@@ -820,6 +824,7 @@ func _configure_scenario_theater() -> void:
 			for landmass in landmass_nodes:
 				landmass.visible = false
 			_rebuild_terrain_trees()
+			_apply_terrain_masks()
 
 
 func _start_scale_profile() -> void:
@@ -1523,7 +1528,7 @@ func _visual_id_for_unit_faction(unit_type: int, faction_id: int) -> String:
 
 
 func _unit_model_ground_clearance(unit_type: int) -> float:
-	return ENGINEER_MODEL_GROUND_CLEARANCE if unit_type == 8 else UNIT_MODEL_GROUND_CLEARANCE
+	return ENGINEER_MODEL_GROUND_CLEARANCE if UnitCatalog.is_construction_unit(unit_type) else UNIT_MODEL_GROUND_CLEARANCE
 
 
 func _register_presented_unit(entity_id: int, unit_type: int, faction_id: int, world: Vector2) -> void:
@@ -1976,7 +1981,66 @@ func _terrain_height_at(world_x: float, world_z: float) -> float:
 
 func _terrain_vertex_height(sample_x: int, sample_z: int) -> float:
 	var vertex_world_x := (float(sample_x) / float(TERRAIN_SAMPLE_WIDTH - 1) - 0.5) * terrain_world_width
-	return HeightMap.presentation_height(terrain_heights[sample_z * TERRAIN_SAMPLE_WIDTH + sample_x], vertex_world_x, terrain_world_width)
+	var vertex_world_z := (float(sample_z) / float(TERRAIN_SAMPLE_HEIGHT - 1) - 0.5) * terrain_world_height
+	return HeightMap.presentation_height(terrain_heights[sample_z * TERRAIN_SAMPLE_WIDTH + sample_x], vertex_world_x, terrain_world_width, vertex_world_z)
+
+
+func _apply_terrain_masks() -> void:
+	var masks := HeightMap.load_masks(TERRAIN_MASKS_PATH)
+	territory_material.set_shader_parameter("world_size", terrain_world_width)
+	territory_material.set_shader_parameter("masks_enabled", not masks.is_empty())
+	if masks.is_empty():
+		return
+	territory_material.set_shader_parameter("terrain_masks", HeightMap.masks_texture(masks))
+	_ensure_open_sea()
+	if terrain_vegetation == null:
+		terrain_vegetation = TerrainVegetation.new()
+		terrain_vegetation.name = "TerrainVegetation"
+		add_child(terrain_vegetation)
+	var spawn: Array = scenario_definition.get("player", {}).get("spawn", [0.0, 0.0])
+	terrain_vegetation.rebuild(masks, terrain_world_width, terrain_world_height, _terrain_height_at, Vector2(float(spawn[0]), float(spawn[1])))
+
+
+# The heightfield stops at the theater edge. A ring around it, never beneath it,
+# carries the same water to the horizon without depth conflicts over the land.
+func _ensure_open_sea() -> void:
+	if has_node("OpenSea"):
+		return
+	var half := Vector2(terrain_world_width, terrain_world_height) * 0.5
+	var reach := camera.far * 1.5
+	var vertices := PackedVector3Array()
+	var uvs := PackedVector2Array()
+	var indices := PackedInt32Array()
+	var bands := [
+		[-reach, -reach, reach, -half.y], [-reach, half.y, reach, reach],
+		[-reach, -half.y, -half.x, half.y], [half.x, -half.y, reach, half.y],
+	]
+	for band in bands:
+		var first := vertices.size()
+		for corner in [Vector2(band[0], band[1]), Vector2(band[2], band[1]), Vector2(band[0], band[3]), Vector2(band[2], band[3])]:
+			vertices.append(Vector3(corner.x, -0.7, corner.y))
+			uvs.append(Vector2(corner.x / terrain_world_width + 0.5, corner.y / terrain_world_height + 0.5))
+		indices.append_array(PackedInt32Array([first, first + 2, first + 1, first + 1, first + 2, first + 3]))
+	var normals := PackedVector3Array()
+	var colors := PackedColorArray()
+	for _vertex in vertices:
+		normals.append(Vector3.UP)
+		colors.append(Color(0.0, 0.0, 0.0, 1.0))
+	var arrays := []
+	arrays.resize(Mesh.ARRAY_MAX)
+	arrays[Mesh.ARRAY_VERTEX] = vertices
+	arrays[Mesh.ARRAY_NORMAL] = normals
+	arrays[Mesh.ARRAY_COLOR] = colors
+	arrays[Mesh.ARRAY_TEX_UV] = uvs
+	arrays[Mesh.ARRAY_INDEX] = indices
+	var ring := ArrayMesh.new()
+	ring.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
+	var sea := MeshInstance3D.new()
+	sea.name = "OpenSea"
+	sea.mesh = ring
+	sea.material_override = territory_material
+	sea.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	add_child(sea)
 
 
 func _rebuild_terrain_trees() -> void:

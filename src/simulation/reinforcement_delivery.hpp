@@ -20,7 +20,7 @@ public:
     bool configure(float zone_x, float zone_y, float zone_radius, FactionId owner);
     bool select_airfield(float x, float y);
     void require_airfield_selection();
-    bool request(bool has_resources);
+    bool request(bool has_resources, bool has_unit_slot = true);
     bool update(float delta_ms);
     void reset();
     void reject(const std::string& reason);

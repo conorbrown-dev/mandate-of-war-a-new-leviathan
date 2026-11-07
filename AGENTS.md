@@ -104,12 +104,8 @@ desktop-dense and presentation-only; simulation rules remain native C++.
 
 ## Scale Targets
 
-These remain aspirational until representative benchmarks prove them:
-
-- 10,000 active units: excellent
-- 25,000 active units: practical target
-- 50,000 active units: stretch
-- 100,000 total simplified entities: investigate
+The gameplay limit is 2,000 live units per player (`MAX_UNITS_PER_PLAYER`) until
+gameplay is solid. Earlier 10,000 to 100,000 unit targets are suspended.
 
 Never translate a headless simulation result into a rendering/FPS claim.
 

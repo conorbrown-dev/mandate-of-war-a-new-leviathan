@@ -9,19 +9,17 @@ int checks=0;
 void verify(bool condition,const char* reason) { ++checks; if(!condition) throw std::runtime_error(reason); }
 }
 
-TEST(terrain_load_binary_heightmap) {
+TEST(terrain_load_heightfield_file) {
     std::vector<float> test_data(320 * 320);
     for (size_t i = 0; i < test_data.size(); ++i) {
         test_data[i] = static_cast<float>(i);
     }
     
-    std::string path = "/tmp/test_heightmap.bin";
-    std::ofstream output(path, std::ios::binary);
-    output.write(reinterpret_cast<const char*>(test_data.data()), test_data.size() * sizeof(float));
-    output.close();
+    std::string path = "/tmp/test_heightmap.json";
+    write_heightfield(path, 320, 320, test_data);
     
     Terrain terrain;
-    terrain.load_from_binary(path);
+    terrain.load_from_file(path);
     
     verify(terrain.data().size() == 320 * 320, "terrain data size matches grid");
     for (int y = 0; y < 320; ++y) {
@@ -41,13 +39,11 @@ TEST(terrain_height_at_coordinates) {
         }
     }
     
-    std::string path = "/tmp/test_heightmap.bin";
-    std::ofstream output(path, std::ios::binary);
-    output.write(reinterpret_cast<const char*>(test_data.data()), test_data.size() * sizeof(float));
-    output.close();
+    std::string path = "/tmp/test_heightmap.json";
+    write_heightfield(path, 320, 320, test_data);
     
     Terrain terrain;
-    terrain.load_from_binary(path);
+    terrain.load_from_file(path);
     
     // The 320 samples include both world edges, matching Godot's terrain mesh.
     verify(std::abs(terrain.height_at(-160.0f, -160.0f) - 0.0f) < 0.001f, "height at corner (-160,-160)");
@@ -58,13 +54,11 @@ TEST(terrain_height_at_coordinates) {
 
 TEST(terrain_out_of_bounds_returns_zero) {
     std::vector<float> test_data(320 * 320, 50.0f);
-    std::string path = "/tmp/test_heightmap.bin";
-    std::ofstream output(path, std::ios::binary);
-    output.write(reinterpret_cast<const char*>(test_data.data()), test_data.size() * sizeof(float));
-    output.close();
+    std::string path = "/tmp/test_heightmap.json";
+    write_heightfield(path, 320, 320, test_data);
     
     Terrain terrain;
-    terrain.load_from_binary(path);
+    terrain.load_from_file(path);
     
     verify(std::abs(terrain.height_at(-200.0f, 0.0f)) < 0.001f, "out-of-bounds west");
     verify(std::abs(terrain.height_at(200.0f, 0.0f)) < 0.001f, "out-of-bounds east");
@@ -75,14 +69,12 @@ TEST(terrain_out_of_bounds_returns_zero) {
 
 TEST(terrain_ground_units_follow_heightfield) {
     std::vector<float> test_data(320 * 320, 12.0f);
-    const std::string path = "/tmp/test_heightmap_ground_units.bin";
-    std::ofstream output(path, std::ios::binary);
-    output.write(reinterpret_cast<const char*>(test_data.data()), test_data.size() * sizeof(float));
-    output.close();
+    const std::string path = "/tmp/test_heightmap_ground_units.json";
+    write_heightfield(path, 320, 320, test_data);
 
     Simulation simulation;
     simulation.start();
-    simulation.terrain().load_from_binary(path);
+    simulation.terrain().load_from_file(path);
     simulation.terrain().set_world_bounds(320.0f, 320.0f);
     const auto entity = simulation.create_unit_with_type(-100.0f, -100.0f,
         UnitType::ELITE_MAIN_BATTLE_TANK, FactionId::ELITE_PRECISION);

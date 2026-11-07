@@ -20,7 +20,6 @@ struct MatchStats {
     uint64_t units_destroyed;
     uint64_t material_collected;
     uint64_t energy_collected;
-    uint64_t research_generated;
     uint32_t peak_army_size;
 };
 

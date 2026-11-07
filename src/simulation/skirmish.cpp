@@ -40,7 +40,7 @@ bool Skirmish::load(const std::string& path) {
         const auto& root = *parsed;
         // Godot's process working directory is the project directory, not
         // the repository root. Configure content lookup before any prototype
-        // or research singleton is first read so the player route uses the
+        // singleton is first read so the player route uses the
         // exact data that is hashed into the replay.
         // <repo>/godot/project/scenarios/<scenario>.json: four parents up is
         // the repository root where authored data/ is stored.
@@ -112,7 +112,7 @@ bool Skirmish::load(const std::string& path) {
                     if (heightmap->type() == JsonValue::Type::Object) {
                         const auto& hm_obj = heightmap->as_object();
                         if (field(*heightmap, "data").type() == JsonValue::Type::String) {
-                            simulation_.terrain().load_from_binary(field(*heightmap, "data").as_string().substr(3)); // Skip "res://"
+                            simulation_.terrain().load_from_file(field(*heightmap, "data").as_string().substr(3)); // Skip "res://"
                         }
                     }
                 }
@@ -141,7 +141,6 @@ bool Skirmish::load(const std::string& path) {
                 ResourceNode::Type type;
                 if (type_name == "METAL") type = ResourceNode::Type::METAL;
                 else if (type_name == "ENERGY") type = ResourceNode::Type::ENERGY;
-                else if (type_name == "RESEARCH") type = ResourceNode::Type::RESEARCH;
                 else throw std::runtime_error("Unsupported resource type");
                 const float amount = number(field(resource, "amount"));
                 if (amount <= 0) throw std::runtime_error("Resource amount must be positive");

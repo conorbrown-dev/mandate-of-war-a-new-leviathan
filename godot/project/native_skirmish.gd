@@ -123,7 +123,7 @@ func _update_hud() -> void:
 		float(state.get("fuel", 0.0)), float(state.get("fuel_capacity", 0.0)),
 		float(state.get("power_generation_mw", 0.0)), float(state.get("power_demand_mw", 0.0)), float(state.get("power_reserve_mw", 0.0)),
 		int(state.get("tick", 0)), "PAUSED" if paused else "LIVE", logistics]
-	help.text = "%s\n[P] pause  [X] stop  [R] return/recover  [B] queue MBT  [T] research  [H] harvest  [K] patrol  [D] defend  [Right-click] move  [Ctrl+Right-click] attack" % status_message
+	help.text = "%s\n[P] pause  [X] stop  [R] return/recover  [B] queue MBT  [H] harvest  [K] patrol  [D] defend  [Right-click] move  [Ctrl+Right-click] attack" % status_message
 
 func _map_rect() -> Rect2:
 	var viewport := get_viewport_rect().size
@@ -179,7 +179,6 @@ func _unhandled_input(event: InputEvent) -> void:
 			KEY_X: _submit(2)
 			KEY_R: _submit(5)
 			KEY_B: _submit_world(3, Vector2(-92.0, 0.0), 0, PackedInt32Array([int(state.get("base", 0))]))
-			KEY_T: _submit_world(8, Vector2.ZERO, 0, PackedInt32Array([int(state.get("base", 0))]))
 			KEY_H: _harvest_nearest_resource()
 			KEY_K: _submit_world(7, Vector2(0.0, 0.0))
 			KEY_D: _submit_world(6, Vector2(0.0, 0.0))

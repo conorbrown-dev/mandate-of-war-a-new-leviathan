@@ -1,5 +1,6 @@
 #include "test_framework.hpp"
 #include "map/map_loader.hpp"
+#include "simulation/terrain.hpp"
 
 #include <filesystem>
 #include <fstream>
@@ -30,12 +31,10 @@ TEST(map_loader_load_empty_header) {
     
     rts::MapLoader loader;
     
-    std::ofstream terrain_file(test_dir / "terrain.bin", std::ios::binary);
     uint32_t tiles_x = 1024 / 16;
     uint32_t tiles_y = 1024 / 16;
     std::vector<float> heights(tiles_x * tiles_y, 0.0f);
-    terrain_file.write(reinterpret_cast<const char*>(heights.data()), heights.size() * sizeof(float));
-    terrain_file.close();
+    rts::write_heightfield((test_dir / "terrain.json").string(), static_cast<int>(tiles_x), static_cast<int>(tiles_y), heights);
     
     auto map_opt = loader.load_map(map_path);
     
@@ -182,12 +181,10 @@ TEST(map_loader_load_spawnpoints) {
     spawnpoints_file << "    type: \"land\"\n";
     spawnpoints_file.close();
     
-    std::ofstream terrain_file(test_dir / "terrain.bin", std::ios::binary);
     uint32_t tiles_x = 512 / 16;
     uint32_t tiles_y = 512 / 16;
     std::vector<float> heights(tiles_x * tiles_y, 100.0f);
-    terrain_file.write(reinterpret_cast<const char*>(heights.data()), heights.size() * sizeof(float));
-    terrain_file.close();
+    rts::write_heightfield((test_dir / "terrain.json").string(), static_cast<int>(tiles_x), static_cast<int>(tiles_y), heights);
     
     rts::MapLoader loader;
     auto map_opt = loader.load_map(map_path);
@@ -240,12 +237,10 @@ TEST(map_loader_load_resources) {
     resources_file << "    quality: 1.0\n";
     resources_file.close();
     
-    std::ofstream terrain_file(test_dir / "terrain.bin", std::ios::binary);
     uint32_t tiles_x = 512 / 16;
     uint32_t tiles_y = 512 / 16;
     std::vector<float> heights(tiles_x * tiles_y, 100.0f);
-    terrain_file.write(reinterpret_cast<const char*>(heights.data()), heights.size() * sizeof(float));
-    terrain_file.close();
+    rts::write_heightfield((test_dir / "terrain.json").string(), static_cast<int>(tiles_x), static_cast<int>(tiles_y), heights);
     
     rts::MapLoader loader;
     auto map_opt = loader.load_map(map_path);
@@ -295,12 +290,10 @@ TEST(map_loader_load_entities) {
     entities_file << "    hp: 1.0\n";
     entities_file.close();
     
-    std::ofstream terrain_file(test_dir / "terrain.bin", std::ios::binary);
     uint32_t tiles_x = 512 / 16;
     uint32_t tiles_y = 512 / 16;
     std::vector<float> heights(tiles_x * tiles_y, 100.0f);
-    terrain_file.write(reinterpret_cast<const char*>(heights.data()), heights.size() * sizeof(float));
-    terrain_file.close();
+    rts::write_heightfield((test_dir / "terrain.json").string(), static_cast<int>(tiles_x), static_cast<int>(tiles_y), heights);
     
     rts::MapLoader loader;
     auto map_opt = loader.load_map(map_path);
