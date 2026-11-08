@@ -56,8 +56,9 @@ func refresh_catalog(catalog: Array, can_build: bool) -> void:
 	instruction.text = "SELECT A BLUEPRINT OR USE ITS HOTKEY"
 	instruction.theme_type_variation = "MutedLabel"
 	content.add_child(instruction)
-	_add_section(content, "UNITS", catalog.filter(func(entry): return not bool(entry.get("is_structure", false)) and not bool(entry.get("is_aircraft", false))), ["1", "4", "5", "9", "0", "P"])
-	_add_section(content, "STRUCTURES", catalog.filter(func(entry): return bool(entry.get("is_structure", false))), ["6", "7", "A", "L"])
+	# The engineer builds structures and earthworks only: forces are ordered from
+	# Strategic Command (G) and flown in.
+	_add_section(content, "STRUCTURES", catalog.filter(func(entry): return bool(entry.get("is_structure", false))), ["6", "7", "T", "L"])
 
 func get_hover_context(pointer: Vector2) -> Dictionary:
 	for entry in _entries:

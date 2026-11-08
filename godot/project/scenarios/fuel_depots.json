@@ -1,11 +1,11 @@
 {
   "version": 1,
   "depots": [
-    {"id": 910, "name": "CIVILIAN FUEL TERMINAL", "kind": "civilian", "position": [-13000, -10000], "stock": 1500},
-    {"id": 911, "name": "CIVILIAN FUEL TERMINAL", "kind": "civilian", "position": [-13000, 10200], "stock": 1500},
-    {"id": 912, "name": "CIVILIAN FUEL TERMINAL", "kind": "civilian", "position": [13000, -10000], "stock": 1500},
-    {"id": 913, "name": "CIVILIAN FUEL TERMINAL", "kind": "civilian", "position": [13000, 10200], "stock": 1500},
-    {"id": 920, "name": "MILITARY FUEL DEPOT", "kind": "military", "position": [15500, -3000], "stock": 4000, "owner": 1},
-    {"id": 921, "name": "MILITARY FUEL DEPOT", "kind": "military", "position": [15500, 3500], "stock": 4000, "owner": 1}
+    {"id": 910, "name": "CIVILIAN FUEL TERMINAL", "kind": "civilian", "position": [-10000, -8500], "stock": 1500},
+    {"id": 911, "name": "CIVILIAN FUEL TERMINAL", "kind": "civilian", "position": [-16500, 2500], "stock": 1500},
+    {"id": 912, "name": "CIVILIAN FUEL TERMINAL", "kind": "civilian", "position": [-9000, 2500], "stock": 1500},
+    {"id": 913, "name": "CIVILIAN FUEL TERMINAL", "kind": "civilian", "position": [-13000, -3200], "stock": 1500},
+    {"id": 920, "name": "MILITARY FUEL DEPOT", "kind": "military", "position": [-17000, -5500], "stock": 4000, "owner": 1},
+    {"id": 921, "name": "MILITARY FUEL DEPOT", "kind": "military", "position": [-15500, -9000], "stock": 4000, "owner": 1}
   ]
 }

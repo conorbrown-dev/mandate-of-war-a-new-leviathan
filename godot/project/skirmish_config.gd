@@ -80,15 +80,12 @@ static func validate_definition(definition: Dictionary, terrain_path: String = "
 			return "Scenario landmass ids must be unique"
 		landmass_ids[landmass_id] = true
 
-	var side_landmass_indices: Dictionary = {}
 	for side_name in ["player", "ai"]:
 		var side_error := _validate_side(side_name, definition[side_name])
 		if side_error != "":
 			return side_error
-		var landmass_index := _landmass_index_for_point(definition[side_name].spawn, theater.landmasses)
-		if landmass_index < 0:
+		if _landmass_index_for_point(definition[side_name].spawn, theater.landmasses) < 0:
 			return "Scenario %s spawn must be on a defined landmass" % side_name
-		side_landmass_indices[side_name] = landmass_index
 
 	if terrain_path != "":
 		var terrain_result := load_terrain_file(terrain_path)
@@ -97,8 +94,10 @@ static func validate_definition(definition: Dictionary, terrain_path: String = "
 
 	if int(definition.player.faction_id) == int(definition.ai.faction_id):
 		return "Player and AI factions must be different"
-	if side_landmass_indices.player == side_landmass_indices.ai:
-		return "Player and AI spawns must use different landmasses"
+	# The keys are checked against data/ai_doctrines.json when the match starts.
+	for style_key in ["doctrine", "difficulty"]:
+		if definition.ai.has(style_key) and not _is_nonempty_string(definition.ai[style_key]):
+			return "Scenario ai.%s must be a non-empty string" % style_key
 
 	if typeof(definition.victory) != TYPE_DICTIONARY:
 		return "Scenario victory must be an object"

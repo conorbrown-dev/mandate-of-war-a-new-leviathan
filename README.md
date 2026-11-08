@@ -4,7 +4,7 @@
 
 ## Reproducible quick start
 
-On Windows, install Visual Studio or its Build Tools with the C++ workload and Godot 4.7.2, then run `tools/build_windows.ps1` and `tools/run_game.ps1`.
+On Windows, install Visual Studio or its Build Tools with the C++ workload and Godot 4.7.2, then run `tools/build_windows.ps1` and `tools/run_game.ps1`. To play a skirmish against the AI, double-click `Play vs AI.cmd`: it builds what changed, asks for the AI's style and difficulty, and starts the match (`tools/play_vs_ai.ps1 -Style swarm -Difficulty hard` skips the questions). In a match, press F1 for the hotkey sheet.
 
 On Linux x86_64, install CMake 3.20+, a C++20 compiler, Python 3, Git, and Godot 4.7.2. Set `GODOT_BIN` if Godot is not on `PATH`, then run:
 
@@ -66,8 +66,10 @@ with:
 
 It rebuilds the native extension, opens Godot, and starts the 20-versus-26
 skirmish automatically. Blue units are Elite Precision; red units are Mass
-Warfare. Drag-select blue units, right-click to issue a move, use the wheel to
-zoom, WASD/arrow keys to pan, and `X` to stop.
+Warfare. Drag-select blue units, right-click to issue a move, Shift + right-click
+to queue further waypoints, hold Shift to see every queued leg, use the wheel to
+zoom, WASD/arrow keys to pan, and `X` to stop (it also clears queued waypoints).
+F1 lists every control.
 
 ## Canonical Milestone Order
 

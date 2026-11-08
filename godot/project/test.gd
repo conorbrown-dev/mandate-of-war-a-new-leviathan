@@ -44,8 +44,8 @@ func _init() -> void:
 		return
 	invalid_definition = scenario_definition.duplicate(true)
 	invalid_definition.ai.spawn = [-105, 0]
-	if SkirmishConfigLoader.validate_definition(invalid_definition) == "":
-		push_error("Goal 08 scenario validation accepted both sides on one landmass")
+	if SkirmishConfigLoader.validate_definition(invalid_definition) != "":
+		push_error("Scenario validation refused both sides on one landmass, which is how the demo battle is fought")
 		quit(1)
 		return
 	invalid_definition = scenario_definition.duplicate(true)

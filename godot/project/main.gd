@@ -16,14 +16,49 @@ const FACTION_UNIT_VISUAL_OVERRIDES := {
 	# presentation definition rather than the Elite donor visual.
 	0: {9: "visual.industrial.fighter.f15c.prototype"}
 }
-const BUILD_UNIT_SHORTCUTS := ["1", "4", "5", "9", "0", "P"]
 const CAMERA_MIN_DISTANCE := 24.0
 const CAMERA_MAX_DISTANCE := 26000.0
 # From this zoom a pixel covers metres of ground, so clicks are approximate.
 const APPROXIMATE_CLICK_MIN_CAMERA_DISTANCE := 2000.0
 const APPROXIMATE_CLICK_PIXELS := 24.0
 const CAMERA_MIN_FAR_DISTANCE := 120000.0
+# The near plane follows zoom. A fixed 5 cm near plane against a 120 km far
+# plane leaves too little depth precision to keep flat paving off the ground.
+const CAMERA_NEAR_PER_DISTANCE := 0.01
+const CAMERA_MIN_NEAR := 0.05
+const CAMERA_MAX_NEAR := 40.0
+# The airfield fills the 250 x 750 m site the native rules level for it
+# (structure_sites.hpp): local X across the site, local Z along it. All paving
+# lies on one plane and the pieces only meet edge to edge, so none overlap.
+const AirfieldSurfaceShader := preload("res://structures/airfield_surface.gdshader")
+const AIRFIELD_PAVING_HEIGHT := 0.25
+const AIRFIELD_RUNWAY_LENGTH := 700.0
+const AIRFIELD_PAVING := [
+	# Runway: 45 m wide. At 19.44 m an F-15C is about 1/36 of its length.
+	{"kind": 0, "center": Vector2(-55.0, 0.0), "size": Vector2(45.0, AIRFIELD_RUNWAY_LENGTH), "yaw": 0.0},
+	# Parallel taxiway and the two link taxiways at the runway ends.
+	# Its runway-side edge line stops where the link taxiways join it.
+	{"kind": 1, "center": Vector2(12.0, 0.0), "size": Vector2(18.0, 600.0), "yaw": 0.0, "edge_gap": Vector3(-1.0, 282.0, 301.0)},
+	{"kind": 1, "center": Vector2(-14.75, 291.0), "size": Vector2(18.0, 35.5), "yaw": 90.0},
+	{"kind": 1, "center": Vector2(-14.75, -291.0), "size": Vector2(18.0, 35.5), "yaw": 90.0},
+	# Concrete apron in front of the hangar.
+	{"kind": 2, "center": Vector2(52.0, -20.0), "size": Vector2(62.0, 200.0), "yaw": 0.0},
+]
+const AIRFIELD_HANGAR_SIZE := Vector3(36.0, 12.0, 56.0)
+const AIRFIELD_HANGAR_POSITION := Vector3(101.0, 6.0, -40.0)
+const AIRFIELD_TOWER_POSITION := Vector3(100.0, 10.0, 110.0)
 const CAMERA_TERRAIN_CLEARANCE := 6.0
+# Drawn flight height. Real cruise heights would put aircraft off screen at
+# tactical zoom, so this is compressed like the rest of the battlefield.
+# A drawn unit further than this from its new simulated position jumps
+# straight there instead of sliding across the gap.
+const UNIT_SNAP_DISTANCE := 60.0
+# Half the distance over which the ground slope under a vehicle is measured.
+const UNIT_TILT_SAMPLE_SPAN := 3.0
+const AIRCRAFT_CRUISE_ALTITUDE := 160.0
+const AIRCRAFT_CLIMB_RATE := 45.0
+# Matches the water surface drawn by the Ocean and OpenSea meshes.
+const AIRCRAFT_SEA_LEVEL := 0.0
 const UNIT_MODEL_GROUND_CLEARANCE := 1.2
 const ENGINEER_MODEL_GROUND_CLEARANCE := 0.05
 const FREE_CAMERA_MIN_PITCH := 12.0
@@ -45,6 +80,9 @@ const TERRAIN_SAMPLE_HEIGHT := 320
 const CIVILIAN_DRESSING_PATH := "res://scenarios/civilian_dressing.json"
 const FUEL_DEPOTS_PATH := "res://scenarios/fuel_depots.json"
 const FUEL_STATUS_SECONDS := 8.0
+const RECON_PLANE_UNIT_TYPE := 14
+const FogShader := preload("res://fog_of_war.gdshader")
+const MatchEndPanelScript := preload("res://ui/components/match_end_panel.gd")
 const TerrainVegetation := preload("res://terrain_vegetation.gd")
 const UnitCatalog := preload("res://unit_catalog.gd")
 const TERRAIN_MASKS_PATH := "res://scenarios/terrain_masks.png"
@@ -54,13 +92,16 @@ const SkirmishConfigLoader := preload("res://skirmish_config.gd")
 const ControlPointPresentationScript := preload("res://control_point_presentation.gd")
 const ReinforcementPresentationScript := preload("res://reinforcement_delivery_presentation.gd")
 const OrderOverlayRendererScript := preload("res://order_overlay_renderer.gd")
-const StrategicCommandScene := preload("res://ui/showcase/ui_design_system_showcase.tscn")
+const UnitRouteRendererScript := preload("res://unit_route_renderer.gd")
+## How often held-Shift route lines re-read the native routes as units move.
+const UNIT_ROUTE_REFRESH_SECONDS := 0.1
+const StrategicCommandPanelScript := preload("res://ui/components/strategic_command_panel.gd")
 const ArmorTexture := preload("res://assets/units/near_future_armor_tile_v1.png")
 const MATERIAL_SITES := [
-	{"id": 900, "name": "RARE METALS", "position": Vector2(-15500, -9000), "owner": -1, "color": Color("#ffbd52")},
-	{"id": 901, "name": "SILICON", "position": Vector2(-10500, 11000), "owner": -1, "color": Color("#47d9ff")},
-	{"id": 902, "name": "POLYMER FEEDSTOCK", "position": Vector2(10500, -11000), "owner": 1, "color": Color("#ce82ff")},
-	{"id": 903, "name": "COMPOSITES", "position": Vector2(15500, 9000), "owner": 1, "color": Color("#7ad99b")},
+	{"id": 900, "name": "RARE METALS", "position": Vector2(-10500, -3500), "owner": -1, "color": Color("#ffbd52")},
+	{"id": 901, "name": "SILICON", "position": Vector2(-15500, 4000), "owner": -1, "color": Color("#47d9ff")},
+	{"id": 902, "name": "POLYMER FEEDSTOCK", "position": Vector2(-17500, -8500), "owner": 1, "color": Color("#ce82ff")},
+	{"id": 903, "name": "COMPOSITES", "position": Vector2(-12500, -9500), "owner": 1, "color": Color("#7ad99b")},
 ]
 
 @onready var camera: Camera3D = $Camera3D
@@ -99,6 +140,8 @@ const MATERIAL_SITES := [
 
 var extension: Object
 var order_overlay_renderer: Node3D
+var unit_route_renderer: Node3D
+var unit_route_refresh_seconds := 0.0
 var unit_multimesh: MultiMesh
 var demo_unit_views: Dictionary = {}
 var demo_mode := false
@@ -209,6 +252,12 @@ var visual_registry
 var visual_spawn_bridge
 var prototype_visual_views: Dictionary = {}
 var unit_visual_headings: Dictionary = {}
+var aircraft_heights: Dictionary = {}
+# Frame interpolation between simulation ticks: each unit's pose at the
+# previous and the latest tick seen, as Vector3(x, z, heading).
+var interpolation_tick := -1
+var interpolation_from: Dictionary = {}
+var simulated_poses: Dictionary = {}
 var commander_ids: Dictionary = {}
 var engineer_ids: Dictionary = {}
 var hidden_base_ids: Dictionary = {}
@@ -217,6 +266,8 @@ var pending_structure_type := -1
 var pending_structure_position := Vector2.ZERO
 var completed_structure_views: Array[Node3D] = []
 var build_mode_type := -1
+# Metres beyond a structure footprint where the engineer stands to build it.
+const BUILD_STANDOFF_MARGIN := 10.0
 var build_ghost: Node3D
 var build_ghost_material: ShaderMaterial
 var road_build_mode := false
@@ -247,6 +298,21 @@ var fuel_supply_status := ""
 var fuel_supply_reason_seen := ""
 var fuel_supply_status_expires_msec := 0
 var fuel_shipment_presentation: Node3D
+var assault_enabled := true
+var match_finished := false
+var match_record_path := ""
+var ai_style_state: Dictionary = {}
+var match_end_panel: Control
+var command_post_views: Dictionary = {}
+var fog_view: MeshInstance3D
+var fog_texture: ImageTexture
+var vision_revision_seen := -1
+var seen_enemy_ids: Dictionary = {}
+var removed_entity_ids: Dictionary = {}
+# Flat x, y, seconds since seen, unit type for each enemy now out of sight.
+var last_known_contacts := PackedFloat32Array()
+var recon_targeting := false
+var enemy_post_discovered := false
 var material_order_mode := 0 # 0 normal, 1 claim/capture, 2 demolish
 var fob_build_mode := false
 var fob_build_target := Vector2.INF
@@ -262,6 +328,9 @@ var reinforcement_delivery_selecting := false
 var reinforcement_delivery_status := ""
 var reinforcement_delivery_waiting_for_airfield := false
 var strategic_command_view: Control
+var reinforcement_transport_has_landed := false
+# Seconds of flight every delivery spends in the air (Simulation::kTransitSeconds).
+const Simulation_TRANSIT_MS := 20000.0
 
 func _get_visible_unit_count() -> int:
 	var env_count := OS.get_environment("UNIT_COUNT")
@@ -427,6 +496,7 @@ func _on_native_skirmish_pressed() -> void:
 
 
 func _start_control_point_skirmish() -> void:
+	assault_enabled = false
 	if match_started:
 		return
 	_on_start_skirmish_pressed()
@@ -462,6 +532,7 @@ func _start_control_point_skirmish() -> void:
 
 
 func _start_reinforcement_delivery_smoke() -> void:
+	assault_enabled = false
 	if match_started:
 		return
 	_on_start_skirmish_pressed()
@@ -493,13 +564,13 @@ func _activate_reinforcement_delivery_from_airfield() -> void:
 
 
 func _setup_strategic_command_view() -> void:
-	strategic_command_view = StrategicCommandScene.instantiate()
+	strategic_command_view = StrategicCommandPanelScript.new()
 	strategic_command_view.name = "StrategicCommand"
 	strategic_command_view.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	strategic_command_view.visible = false
-	strategic_command_view.select_delivery_zone.connect(_on_strategic_command_select_zone)
-	strategic_command_view.request_package.connect(_on_strategic_command_request_package)
+	strategic_command_view.order_unit.connect(_on_strategic_command_order_unit)
 	strategic_command_view.request_fuel.connect(_request_fuel_shipment)
+	strategic_command_view.request_recon.connect(_begin_recon_targeting)
 	strategic_command_view.dismissed.connect(_close_strategic_command)
 	ui_root.add_child(strategic_command_view)
 
@@ -510,9 +581,7 @@ func _toggle_strategic_command() -> void:
 	if strategic_command_view.visible:
 		_close_strategic_command()
 		return
-	if not reinforcement_delivery_enabled:
-		reinforcement_delivery_status = "STRATEGIC COMMAND REQUIRES AN ACTIVE DELIVERY OPERATION"
-		_update_hud()
+	if not match_started or extension == null:
 		return
 	strategic_command_view.visible = true
 	_sync_strategic_command()
@@ -544,17 +613,65 @@ func _on_strategic_command_request_package() -> void:
 
 
 func _sync_strategic_command() -> void:
-	if strategic_command_view == null or not strategic_command_view.visible:
+	if strategic_command_view == null or not strategic_command_view.visible or extension == null:
 		return
-	var state: Dictionary = extension.call("reinforcement_delivery_state") if reinforcement_delivery_enabled else {}
-	var status := reinforcement_delivery_status if not reinforcement_delivery_status.is_empty() else String(state.get("reason", "DELIVERY ACCESS UNAVAILABLE"))
-	strategic_command_view.set_delivery_state(int(state.get("state", 0)), _with_fuel_status(status))
+	var delivery: Dictionary = extension.call("delivery_state", HUMAN_PLAYER_ID)
+	var status := reinforcement_delivery_status
+	if status.is_empty():
+		status = "FORCES FLY IN TO YOUR AIRFIELD" if bool(delivery.get("has_site", false)) else "BUILD AN AIRFIELD TO RECEIVE FORCES"
+	strategic_command_view.set_state(extension.call("get_build_catalog", HUMAN_PLAYER_ID), delivery.get("inbound", []), _with_fuel_status(status))
+
+
+# Forces are ordered here, not by the engineer. The unit is paid for now and
+# lands at the airfield when its build and flight time are up.
+func _on_strategic_command_order_unit(unit_type: int) -> void:
+	var accepted := _order_unit_by_transport(unit_type)
+	var refusal := ""
+	if not accepted:
+		for entry in extension.call("get_build_catalog", HUMAN_PLAYER_ID):
+			if int(entry.get("type", -1)) == unit_type:
+				refusal = String(entry.get("reason", ""))
+		reinforcement_delivery_status = refusal if not refusal.is_empty() else "ORDER REFUSED"
+	else:
+		reinforcement_delivery_status = "FORCES ORDERED // INBOUND"
+	_sync_strategic_command()
+	_update_hud()
+
+
+# The native call answers at once, so the panel can say whether the order was
+# taken. A ground unit is paid for and sent; an aircraft joins the airfield queue.
+func _order_unit_by_transport(unit_type: int) -> bool:
+	if int(commander_ids.get(HUMAN_PLAYER_ID, -1)) < 0:
+		return false
+	return bool(extension.call("queue_faction_unit", HUMAN_PLAYER_ID, unit_type, 0.0, 0.0))
 
 
 func _with_fuel_status(status: String) -> String:
 	if fuel_supply_status.is_empty():
 		return status
 	return fuel_supply_status if status.is_empty() else "%s // %s" % [status, fuel_supply_status]
+
+
+# The next map click sets the flight plan. The plane uses no airfield: it comes in
+# from off the map, flies straight there, and leaves when its time on station ends.
+func _begin_recon_targeting() -> void:
+	_cancel_tactical_modes()
+	_close_strategic_command()
+	recon_targeting = true
+	_announce_intel("SELECT RECON TARGET")
+
+
+func _order_recon_flight(target: Vector2) -> bool:
+	recon_targeting = false
+	var before: int = (extension.call("get_hud_state", HUMAN_PLAYER_ID, int(commander_ids.get(HUMAN_PLAYER_ID, -1)), -1, 0.0, 0.0, false).get("production_queue", []) as Array).size()
+	_order_commander_unit(RECON_PLANE_UNIT_TYPE, target)
+	extension.call("update_simulation", 50.0)
+	var queued: int = (extension.call("get_hud_state", HUMAN_PLAYER_ID, int(commander_ids.get(HUMAN_PLAYER_ID, -1)), -1, 0.0, 0.0, false).get("production_queue", []) as Array).size()
+	var accepted := queued > before
+	_announce_intel("RECON FLIGHT INBOUND" if accepted else "RECON FLIGHT REFUSED")
+	_sync_strategic_command()
+	_update_hud()
+	return accepted
 
 
 func _request_fuel_shipment() -> bool:
@@ -939,10 +1056,18 @@ func _on_start_skirmish_pressed() -> void:
 	engineer_ids.clear()
 	hidden_base_ids.clear()
 	pending_player_build_types.clear()
+	recon_targeting = false
+	removed_entity_ids.clear()
+	last_known_contacts = PackedFloat32Array()
 	material_site_state.clear()
 	fuel_depot_state.clear()
 	fuel_supply_status = ""
 	fuel_supply_reason_seen = ""
+	match_finished = false
+	command_post_views.clear()
+	seen_enemy_ids.clear()
+	vision_revision_seen = -1
+	enemy_post_discovered = false
 	material_order_mode = 0
 	if not _spawn_commander_start():
 		push_error("Failed to create the authoritative engineer-start forces")
@@ -962,6 +1087,7 @@ func _on_start_skirmish_pressed() -> void:
 	_spawn_material_sites()
 	_spawn_fuel_depots()
 	_spawn_civilian_buildings()
+	_begin_battle()
 	_set_selected(_player_engineer_id(), true)
 
 	startup_overlay.visible = false
@@ -1017,11 +1143,14 @@ func _process(delta: float) -> void:
 				ghost_earthworks = bool(site.get("earthworks", false))
 		_set_build_ghost_valid(ghost_valid, ghost_earthworks)
 		build_ghost.position = Vector3(ghost_target.x, _terrain_height_at(ghost_target.x, ghost_target.y) + 0.08, ghost_target.y)
-	if extension == null or not match_started:
+	_update_unit_routes(delta)
+	if extension == null or not match_started or match_finished:
 		return
 
 	var simulation_start_us := Time.get_ticks_usec()
 	extension.call("update_simulation", delta * 1000.0)
+	_update_match_state()
+	_sync_vision()
 	_process_pending_build_order()
 	var simulation_call_ms := float(Time.get_ticks_usec() - simulation_start_us) / 1000.0
 	_sync_new_entities()
@@ -1073,9 +1202,30 @@ func _update_reinforcement_presentation() -> void:
 		return
 	var delivery: Dictionary = extension.call("reinforcement_delivery_state")
 	if reinforcement_presentation != null:
-		reinforcement_presentation.sync(delivery, func(x: float, z: float): return _terrain_height_at(x, z))
-	if not String(delivery.get("reason", "")).is_empty():
+		reinforcement_presentation.sync(_transport_flight_snapshot(delivery), func(x: float, z: float): return _terrain_height_at(x, z))
+	if not String(delivery.get("reason", "")).is_empty() and String(delivery.get("reason", "")) != "AIRFIELD SELECTED":
 		reinforcement_delivery_status = String(delivery.get("reason", reinforcement_delivery_status))
+
+
+# The F-15C is drawn flying in for the last stretch of the next delivery: its
+# approach follows how much of the flight time is left. Between deliveries it
+# sits parked on the airfield, as before.
+func _transport_flight_snapshot(anchor: Dictionary) -> Dictionary:
+	var flight_ms := Simulation_TRANSIT_MS
+	var inbound: Array = extension.call("delivery_state", HUMAN_PLAYER_ID).get("inbound", [])
+	var snapshot := anchor.duplicate()
+	snapshot["duration_ms"] = flight_ms
+	if inbound.is_empty():
+		snapshot["state"] = 4 if reinforcement_transport_has_landed else int(anchor.get("state", 0))
+		return snapshot
+	var remaining := float(inbound[0].remaining_ms)
+	if remaining > flight_ms:
+		snapshot["state"] = 4 if reinforcement_transport_has_landed else 2
+		return snapshot
+	reinforcement_transport_has_landed = true
+	snapshot["state"] = 3
+	snapshot["elapsed_ms"] = flight_ms - remaining
+	return snapshot
 
 
 func _update_territory() -> void:
@@ -1132,6 +1282,13 @@ func _update_territory() -> void:
 
 
 func _unhandled_input(event: InputEvent) -> void:
+	if event is InputEventKey and event.pressed and not event.echo and event.keycode == KEY_F1:
+		if hotkey_display != null:
+			hotkey_display.toggle()
+		return
+	if event is InputEventKey and event.pressed and event.keycode == KEY_ESCAPE and hotkey_display != null and hotkey_display.visible:
+		hotkey_display.set_sheet_visible(false)
+		return
 	if event is InputEventKey and event.pressed and event.keycode == KEY_G:
 		_toggle_strategic_command()
 		return
@@ -1142,7 +1299,7 @@ func _unhandled_input(event: InputEvent) -> void:
 		if strategic_command_view != null and strategic_command_view.visible:
 			_close_strategic_command()
 			return
-		if build_mode_type >= 0 or fob_build_mode or material_order_mode != 0:
+		if build_mode_type >= 0 or fob_build_mode or material_order_mode != 0 or recon_targeting:
 			_cancel_tactical_modes()
 			return
 		get_tree().quit()
@@ -1176,17 +1333,14 @@ func _unhandled_input(event: InputEvent) -> void:
 			material_order_mode = 0
 			_update_hud()
 			return
-		var unit_shortcut_index := _build_unit_shortcut_index(event.keycode)
-		if unit_shortcut_index >= 0:
-			var unit_type := _build_unit_type_at_index(unit_shortcut_index)
-			if unit_type >= 0:
-				_begin_build_placement(unit_type)
-			return
 		if event.keycode == KEY_6:
 			_begin_build_placement(100)
 			return
 		if event.keycode == KEY_7:
 			_begin_build_placement(101)
+			return
+		if event.keycode == KEY_T:
+			_begin_build_placement(102)
 			return
 		if event.keycode == KEY_L:
 			_begin_build_placement(103)
@@ -1212,6 +1366,9 @@ func _unhandled_input(event: InputEvent) -> void:
 				zoom_focus_pending = false
 		elif event.button_index == MOUSE_BUTTON_LEFT:
 			if event.pressed:
+				if recon_targeting:
+					_order_recon_flight(_screen_to_world(event.position))
+					return
 				if reinforcement_delivery_selecting:
 					var airfield_target := _screen_to_world(event.position)
 					reinforcement_delivery_selecting = false
@@ -1255,7 +1412,7 @@ func _unhandled_input(event: InputEvent) -> void:
 				else:
 					_finish_selection(event.position)
 		elif event.button_index == MOUSE_BUTTON_RIGHT and event.pressed:
-			if build_mode_type >= 0 or fob_build_mode:
+			if build_mode_type >= 0 or fob_build_mode or recon_targeting:
 				_cancel_tactical_modes()
 				return
 			if material_order_mode != 0:
@@ -1264,10 +1421,13 @@ func _unhandled_input(event: InputEvent) -> void:
 			# RTS primary command: right-click sends selected units to the terrain
 			# position.  Attack is deliberately an explicit modifier so an empty
 			# patch of ground can never turn a move order into a rejected attack.
+			# Shift appends a waypoint to each selected unit's queue instead of
+			# replacing its order. Shift + left click (add to selection) and
+			# held Shift (route overlay) use other buttons or no click at all.
 			if event.ctrl_pressed:
 				_issue_attack_order(event.position)
 			else:
-				_issue_move_order(event.position)
+				_issue_move_order(event.position, event.shift_pressed)
 
 	if event is InputEventKey and event.pressed:
 		if _handle_hotkey(event.keycode, event):
@@ -1425,6 +1585,11 @@ func _spawn_material_sites() -> void:
 				extension.call("issue_harvest_commands", PackedInt32Array([enemy_commander]), 1, position.x, position.y)
 	# Apply initial enemy ownership through the same fixed-tick command path.
 	extension.call("update_simulation", 50.0)
+	# The claim also sends the claimant to the site, but a command post stays put.
+	var enemy_post := int(commander_ids.get(1, -1))
+	if enemy_post > 0:
+		extension.call("issue_stop_commands", PackedInt32Array([enemy_post]), 1)
+		extension.call("update_simulation", 50.0)
 	_rebuild_material_site_views()
 
 
@@ -1457,8 +1622,226 @@ func _spawn_fuel_depots() -> void:
 			"stock": stock,
 			"capacity": stock,
 			"capturing": false,
+			# Civilian terminals are on the recon map. Military depots must be found.
+			"discovered": owner < 0,
+			"known_owner": -1,
 		}
 	_rebuild_material_site_views()
+
+
+func _begin_battle() -> void:
+	_apply_ai_style()
+	extension.call("match_begin", int(commander_ids.get(HUMAN_PLAYER_ID, -1)), int(commander_ids.get(1, -1)))
+	_apply_force_arrival_rules()
+	match_record_path = ""
+	extension.call("match_record_set_info", "scenario", String(scenario_definition.get("id", "")))
+	extension.call("match_record_set_info", "scenario_name", String(scenario_definition.get("display_name", "")))
+	extension.call("match_record_set_info", "started_at", Time.get_datetime_string_from_system(true))
+	extension.call("match_record_set_info", "player_faction", str(int(scenario_definition.player.faction_id)))
+	extension.call("match_record_set_info", "ai_faction", str(int(scenario_definition.ai.faction_id)))
+	for entry in [[scenario_definition.player, PLAYER_FACTION_COLOR], [scenario_definition.ai, AI_FACTION_COLOR]]:
+		var side: Dictionary = entry[0]
+		_add_command_post_view(int(side.faction_id), Vector2(float(side.spawn[0]), float(side.spawn[1])), entry[1])
+	var assault: Dictionary = scenario_definition.ai.get("assault", {})
+	if assault_enabled and not assault.is_empty():
+		# The sector the briefing names. The AI is told no more than the player.
+		var area: Array = assault.search_area
+		extension.call("ai_configure_assault", float(area[0]), float(area[1]), float(area[2]), float(area[3]),
+			int(assault.get("first_wave", 6)), int(assault.get("wave_growth", 4)), int(assault.get("max_wave", 24)))
+	control_point_battle_status = String(scenario_definition.get("objective", ""))
+	_setup_fog()
+
+
+# Forces fly in rather than being built on the field. The player lands at an
+# airfield they must build. The AI, which cannot build one yet, is given a
+# landing zone beside its command post, so its orders cost the same and take
+# the same build and flight time.
+func _apply_force_arrival_rules() -> void:
+	if not bool(scenario_definition.get("forces_by_transport", false)):
+		return
+	extension.call("forces_by_transport_set", true)
+	var ai_side: Dictionary = scenario_definition.ai
+	var post := Vector2(float(ai_side.spawn[0]), float(ai_side.spawn[1]))
+	var zone: Array = ai_side.get("landing_zone", [])
+	var candidates: Array[Vector2] = []
+	if zone.size() == 2:
+		candidates.append(Vector2(float(zone[0]), float(zone[1])))
+	for offset in [Vector2(300, 0), Vector2(-300, 0), Vector2(0, 300), Vector2(0, -300), Vector2(500, 0), Vector2(-500, 0), Vector2(0, 500), Vector2(0, -500)]:
+		candidates.append(post + offset)
+	for candidate in candidates:
+		if bool(extension.call("landing_zone_set", int(ai_side.faction_id), candidate.x, candidate.y)):
+			return
+	push_warning("The AI has no valid landing zone; it cannot receive forces")
+
+
+func _setup_fog() -> void:
+	if fog_view == null:
+		fog_view = MeshInstance3D.new()
+		fog_view.name = "FogOfWar"
+		var quad := QuadMesh.new()
+		fog_view.mesh = quad
+		fog_view.extra_cull_margin = 16384.0
+		fog_view.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		var material := ShaderMaterial.new()
+		material.shader = FogShader
+		material.render_priority = 100
+		fog_view.material_override = material
+		add_child(fog_view)
+	var fog_material := fog_view.material_override as ShaderMaterial
+	fog_material.set_shader_parameter("world_size", Vector2(terrain_world_width, terrain_world_height))
+	fog_texture = null
+	_sync_vision()
+
+
+# Only native sight reveals an enemy. Everything shown about them goes through here.
+func _sync_vision() -> void:
+	var revision := int(extension.call("vision_revision"))
+	if revision == vision_revision_seen:
+		return
+	vision_revision_seen = revision
+	var state: Dictionary = extension.call("vision_state", HUMAN_PLAYER_ID)
+	var cells: PackedByteArray = state.get("cells", PackedByteArray())
+	var width := int(state.get("width", 0))
+	var height := int(state.get("height", 0))
+	if width > 0 and height > 0 and cells.size() == width * height:
+		var image := Image.create_from_data(width, height, false, Image.FORMAT_R8, cells)
+		if fog_texture == null:
+			fog_texture = ImageTexture.create_from_image(image)
+			(fog_view.material_override as ShaderMaterial).set_shader_parameter("vision_texture", fog_texture)
+		else:
+			fog_texture.update(image)
+	seen_enemy_ids.clear()
+	for id in state.get("seen_enemies", PackedInt32Array()):
+		seen_enemy_ids[int(id)] = true
+	last_known_contacts = state.get("last_known", PackedFloat32Array())
+	removed_entity_ids.clear()
+	for id in extension.call("get_removed_entities", PackedInt32Array(entity_ids)):
+		removed_entity_ids[int(id)] = true
+		aircraft_heights.erase(int(id))
+		simulated_poses.erase(int(id))
+		interpolation_from.erase(int(id))
+	var enemy_post := int(commander_ids.get(1, -1))
+	if not enemy_post_discovered and seen_enemy_ids.has(enemy_post):
+		enemy_post_discovered = true
+		var post: Node3D = command_post_views.get(1)
+		if post != null:
+			post.visible = true
+		_announce_intel("ENEMY COMMAND POST LOCATED")
+	_refresh_site_intel()
+
+
+func _is_unit_shown(entity_id: int) -> bool:
+	if removed_entity_ids.has(entity_id):
+		return false
+	return not ai_entity_ids.has(entity_id) or seen_enemy_ids.has(entity_id)
+
+
+func _announce_intel(message: String) -> void:
+	fuel_supply_status = message
+	fuel_supply_status_expires_msec = Time.get_ticks_msec() + int(FUEL_STATUS_SECONDS * 1000.0)
+
+
+# Who holds a site is only known from the last time it was seen.
+func _refresh_site_intel() -> void:
+	var changed := false
+	for site in material_site_state.values():
+		if bool(site.get("destroyed", false)):
+			continue
+		var position: Vector2 = site.position
+		if bool(extension.call("can_see", HUMAN_PLAYER_ID, position.x, position.y)) and int(site.get("known_owner", -1)) != int(site.owner):
+			site.known_owner = int(site.owner)
+			changed = true
+	for site in fuel_depot_state.values():
+		var position: Vector2 = site.position
+		if not bool(extension.call("can_see", HUMAN_PLAYER_ID, position.x, position.y)):
+			continue
+		if not bool(site.discovered) or int(site.known_owner) != int(site.owner):
+			if not bool(site.discovered) and String(site.kind) == "military":
+				_announce_intel("ENEMY FUEL DEPOT LOCATED")
+			site.discovered = true
+			site.known_owner = int(site.owner)
+			changed = true
+	if changed:
+		_rebuild_material_site_views()
+
+
+func _add_command_post_view(faction_id: int, position: Vector2, color: Color) -> void:
+	var root := Node3D.new()
+	root.name = "CommandPost_%d" % faction_id
+	root.position = Vector3(position.x, _terrain_height_at(position.x, position.y), position.y)
+	root.visible = faction_id == HUMAN_PLAYER_ID
+	add_child(root)
+	command_post_views[faction_id] = root
+	var hull := _demo_material(Color("#3a4447"))
+	var signal_material := _demo_material(color, 1.4)
+	_add_box_model(root, Vector3(26.0, 0.8, 18.0), Vector3(0, 0.4, 0), _demo_material(Color("#2b3537")))
+	_add_box_model(root, Vector3(14.0, 5.0, 9.0), Vector3(-3.0, 3.1, 0), hull)
+	_add_box_model(root, Vector3(14.4, 0.5, 9.4), Vector3(-3.0, 5.7, 0), signal_material)
+	_add_box_model(root, Vector3(0.5, 16.0, 0.5), Vector3(8.0, 8.8, 0), hull)
+	_add_cylinder_model(root, 1.8, 0.5, Vector3(8.0, 17.0, 0), signal_material)
+
+
+# The enemy's style and difficulty: RTS_AI_DOCTRINE and RTS_AI_DIFFICULTY
+# override the scenario, which overrides data/ai_doctrines.json's defaults.
+func _apply_ai_style() -> void:
+	var styles: Dictionary = extension.call("ai_styles")
+	var side: Dictionary = scenario_definition.get("ai", {})
+	var doctrine := String(side.get("doctrine", styles.default_doctrine))
+	var difficulty := String(side.get("difficulty", styles.default_difficulty))
+	if OS.get_environment("RTS_AI_DOCTRINE") != "":
+		doctrine = OS.get_environment("RTS_AI_DOCTRINE")
+	if OS.get_environment("RTS_AI_DIFFICULTY") != "":
+		difficulty = OS.get_environment("RTS_AI_DIFFICULTY")
+	if not bool(extension.call("ai_set_style", doctrine, difficulty)):
+		push_warning("Unknown AI style '%s' on '%s'; using the defaults" % [doctrine, difficulty])
+		extension.call("ai_set_style", String(styles.default_doctrine), String(styles.default_difficulty))
+	ai_style_state = extension.call("ai_style")
+
+
+# Every finished match is kept for study and, later, for training the AI.
+func _save_match_record() -> String:
+	var folder := OS.get_environment("RTS_MATCH_RECORD_DIR")
+	if folder == "":
+		folder = "user://match_records"
+	if DirAccess.make_dir_recursive_absolute(folder) != OK and not DirAccess.dir_exists_absolute(folder):
+		push_warning("Could not create the match record folder %s" % folder)
+		return ""
+	var stamp := Time.get_datetime_string_from_system(true).replace(":", "-")
+	var path := "%s/%s_%s.json" % [folder, String(scenario_definition.get("id", "match")), stamp]
+	var file := FileAccess.open(path, FileAccess.WRITE)
+	if file == null:
+		push_warning("Could not write the match record %s" % path)
+		return ""
+	file.store_string(String(extension.call("match_record_json")))
+	file.close()
+	return path
+
+
+func _update_match_state() -> void:
+	var state: Dictionary = extension.call("match_state")
+	var result := int(state.get("result", -1))
+	if result < 0:
+		return
+	match_finished = true
+	if match_record_path == "" and bool(extension.call("match_record_state").get("finished", false)):
+		match_record_path = _save_match_record()
+	var post: Node3D = command_post_views.get(1 if result == 0 else HUMAN_PLAYER_ID)
+	if post != null and result != 2:
+		post.visible = false
+	var seconds := int(float(state.get("seconds", 0.0)))
+	var titles := ["VICTORY", "DEFEAT", "DRAW"]
+	var subtitles := ["ENEMY COMMAND POST DESTROYED", "YOUR COMMAND POST WAS DESTROYED", "BOTH COMMAND POSTS DESTROYED"]
+	if match_end_panel == null:
+		match_end_panel = MatchEndPanelScript.new()
+		match_end_panel.name = "MatchEnd"
+		match_end_panel.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+		match_end_panel.play_again_requested.connect(func(): get_tree().reload_current_scene())
+		match_end_panel.quit_requested.connect(func(): get_tree().quit())
+		ui_root.add_child(match_end_panel)
+	var accents := [Color("#7ad99b"), Color("#ff6d65"), Color("#ffbd52")]
+	match_end_panel.show_result(titles[result], subtitles[result],
+		"MATCH TIME %d:%02d  //  ENEMY WAVES %d\nENEMY COMMANDER  %s  //  %s" % [seconds / 60, seconds % 60, int(state.get("waves", 0)),
+			String(ai_style_state.get("doctrine_name", "")).to_upper(), String(ai_style_state.get("difficulty_name", "")).to_upper()], accents[result])
 
 
 func _clear_material_sites() -> void:
@@ -1477,7 +1860,7 @@ func _rebuild_material_site_views() -> void:
 		var position: Vector2 = site.position
 		root.position = Vector3(position.x, _terrain_height_at(position.x, position.y), position.y)
 		resource_sites.add_child(root)
-		var owner := int(site.get("owner", -1))
+		var owner := int(site.get("known_owner", -1))
 		var signal_color: Color = PLAYER_FACTION_COLOR if owner == HUMAN_PLAYER_ID else AI_FACTION_COLOR if owner == 1 else Color("#ffbd52")
 		var hull := _demo_material(Color("#2b3537"))
 		var signal_material := _demo_material(signal_color, 1.2)
@@ -1487,7 +1870,8 @@ func _rebuild_material_site_views() -> void:
 		_add_box_model(root, Vector3(0.22, 2.2, 0.22), Vector3(1.55, 1.25, -0.85), signal_material)
 		_add_cylinder_model(root, 0.25, 0.16, Vector3(0, 1.72, 0), signal_material)
 	for site in fuel_depot_state.values():
-		_add_fuel_depot_view(site)
+		if bool(site.discovered):
+			_add_fuel_depot_view(site)
 
 
 func _add_fuel_depot_view(site: Dictionary) -> void:
@@ -1496,7 +1880,7 @@ func _add_fuel_depot_view(site: Dictionary) -> void:
 	var position: Vector2 = site.position
 	root.position = Vector3(position.x, _terrain_height_at(position.x, position.y), position.y)
 	resource_sites.add_child(root)
-	var owner := int(site.get("owner", -1))
+	var owner := int(site.get("known_owner", -1))
 	var signal_color: Color = PLAYER_FACTION_COLOR if owner == HUMAN_PLAYER_ID else AI_FACTION_COLOR if owner == 1 else Color("#d9d3c4")
 	var tank := _demo_material(Color("#5d6468"))
 	var signal_material := _demo_material(signal_color, 1.2)
@@ -1634,6 +2018,8 @@ func _issue_material_site_order(screen_position: Vector2) -> void:
 			nearest_distance = distance
 			selected_site = site
 	for site in fuel_depot_state.values():
+		if not bool(site.discovered):
+			continue
 		var distance := target.distance_to(site.position)
 		if distance <= nearest_distance:
 			nearest_distance = distance
@@ -1722,7 +2108,7 @@ func _sync_new_entities() -> void:
 		if faction_id < 0 or faction_id > 2:
 			continue
 		var position := Vector2(float(entity.get("x", 0.0)), float(entity.get("y", 0.0)))
-		var unit_type := 0
+		var unit_type := maxi(int(entity.get("unit_type", 0)), 0)
 		if faction_id == HUMAN_PLAYER_ID and not pending_player_build_types.is_empty():
 			unit_type = pending_player_build_types.pop_front()
 		_register_presented_unit(entity_id, unit_type, faction_id, position)
@@ -1779,23 +2165,59 @@ func _sync_unit_transforms() -> Vector2:
 		return Vector2(fetch_ms, 0.0)
 	unit_positions = PackedFloat32Array()
 	unit_positions.resize(entity_ids.size() * 2)
+	var airborne: PackedByteArray = extension.call("get_airborne_flags", entity_ids)
+	if airborne.size() != entity_ids.size():
+		airborne.resize(entity_ids.size())
+	var climb_step := AIRCRAFT_CLIMB_RATE * maxf(get_process_delta_time(), 1.0 / 60.0)
+	# The simulation advances in 50 ms ticks. Drawing only the latest tick makes
+	# units move and turn in visible steps, so the view blends each unit from
+	# its previous simulated pose to its latest one by the time elapsed since
+	# that tick. Like Forged Alliance, the picture runs up to one tick behind.
+	var clock: PackedFloat64Array = extension.call("get_tick_clock")
+	var tick := int(clock[0]) if clock.size() == 2 else -1
+	var blend := float(clock[1]) if clock.size() == 2 else 1.0
+	var new_tick := tick != interpolation_tick
+	interpolation_tick = tick
 	var upload_start_us := Time.get_ticks_usec()
 	for index in range(entity_ids.size()):
-		var x := latest_transforms[index * 3]
-		var z := latest_transforms[index * 3 + 1]
-		unit_positions[index * 2] = x
-		unit_positions[index * 2 + 1] = z
-		var heading := latest_transforms[index * 3 + 2] + PI
-		unit_visual_headings[entity_ids[index]] = heading
+		var entity_id: int = entity_ids[index]
+		var sim_x := latest_transforms[index * 3]
+		var sim_z := latest_transforms[index * 3 + 1]
+		var sim_heading := latest_transforms[index * 3 + 2] + PI
+		unit_positions[index * 2] = sim_x
+		unit_positions[index * 2 + 1] = sim_z
+		var target := Vector3(sim_x, sim_z, sim_heading)
+		if new_tick or not interpolation_from.has(entity_id):
+			var from: Vector3 = simulated_poses.get(entity_id, target)
+			# A unit that jumped (spawned, teleported, fast-forwarded) snaps.
+			if Vector2(from.x - sim_x, from.y - sim_z).length() > UNIT_SNAP_DISTANCE:
+				from = target
+			interpolation_from[entity_id] = from
+			simulated_poses[entity_id] = target
+		var start: Vector3 = interpolation_from[entity_id]
+		var x := lerpf(start.x, sim_x, blend)
+		var z := lerpf(start.y, sim_z, blend)
+		var heading := lerp_angle(start.z, sim_heading, blend)
+		unit_visual_headings[entity_id] = heading
 		var basis := Basis(Vector3.UP, heading)
 		if prototype_visuals_enabled and prototype_visual_views.has(entity_ids[index]):
 			var wrapper = prototype_visual_views[entity_ids[index]]
-			wrapper.apply_simulation_transform(Transform3D(basis, Vector3(x, _terrain_height_at(x, z) + _unit_model_ground_clearance(int(entity_unit_types.get(entity_ids[index], 0))), z)))
+			var ground := _terrain_height_at(x, z)
+			var height := ground + _unit_model_ground_clearance(int(entity_unit_types.get(entity_ids[index], 0)))
+			height = _presented_flight_height(entity_ids[index], airborne[index] != 0, x, z, height, climb_step)
+			# Vehicles on land sit on the slope beneath them; aircraft in the air
+			# and vessels on the water stay level.
+			if not aircraft_heights.has(entity_id) and ground > AIRCRAFT_SEA_LEVEL + 0.5:
+				basis = Basis(Quaternion(Vector3.UP, _terrain_normal_at(x, z))) * basis
+			wrapper.apply_simulation_transform(Transform3D(basis, Vector3(x, height, z)))
 			wrapper.update_lod(camera_distance)
+			wrapper.visible = _is_unit_shown(entity_ids[index])
 		else:
-			unit_multimesh.set_instance_transform(index, Transform3D(basis, Vector3(x, 0.4, z)))
+			var shown := _is_unit_shown(entity_ids[index])
+			unit_multimesh.set_instance_transform(index, Transform3D(basis if shown else basis.scaled(Vector3.ZERO), Vector3(x, 0.4, z)))
 			var demo_root: Node3D = demo_unit_views.get(entity_ids[index], null)
 			if demo_root != null:
+				demo_root.visible = shown
 				demo_root.transform = Transform3D(
 					basis.scaled(demo_root.scale),
 					Vector3(x, _terrain_height_at(x, z), z)
@@ -1803,6 +2225,37 @@ func _sync_unit_transforms() -> Vector2:
 				_set_unit_lod(demo_root)
 	var upload_ms := float(Time.get_ticks_usec() - upload_start_us) / 1000.0
 	return Vector2(fetch_ms, upload_ms)
+
+
+# Ground normal from the heights either side of a point, about a hull's length.
+func _terrain_normal_at(x: float, z: float) -> Vector3:
+	var span := UNIT_TILT_SAMPLE_SPAN
+	var normal := Vector3(
+		_terrain_height_at(x - span, z) - _terrain_height_at(x + span, z),
+		2.0 * span,
+		_terrain_height_at(x, z - span) - _terrain_height_at(x, z + span))
+	return normal.normalized()
+
+
+# Aircraft in flight are drawn at cruise altitude over whatever is higher, the
+# ground or the sea, and climb or descend to it smoothly. Units on the ground
+# keep their ground height. The simulation stays 2D; this is presentation only.
+func _presented_flight_height(entity_id: int, in_flight: bool, x: float, z: float, ground_height: float, climb_step: float) -> float:
+	if not in_flight and not aircraft_heights.has(entity_id):
+		return ground_height
+	var target := ground_height
+	if in_flight:
+		target = maxf(_terrain_height_at(x, z), AIRCRAFT_SEA_LEVEL) + AIRCRAFT_CRUISE_ALTITUDE
+	# An aircraft first seen in flight (a ferry arriving) is already at altitude.
+	var current: float = aircraft_heights.get(entity_id, target)
+	current = move_toward(current, target, climb_step)
+	# Never let a climb or descent cut through rising ground.
+	current = maxf(current, ground_height)
+	if not in_flight and is_equal_approx(current, ground_height):
+		aircraft_heights.erase(entity_id)
+	else:
+		aircraft_heights[entity_id] = current
+	return current
 
 
 func _validate_state() -> void:
@@ -1924,6 +2377,7 @@ func _rotate_camera_facing(direction: float, delta: float) -> void:
 
 func _update_camera(delta: float) -> void:
 	camera_distance = lerpf(camera_distance, target_camera_distance, clampf(delta * 9.0, 0.0, 1.0))
+	camera.near = clampf(camera_distance * CAMERA_NEAR_PER_DISTANCE, CAMERA_MIN_NEAR, CAMERA_MAX_NEAR)
 	var desired_offset := Vector3(
 		sin(tactical_camera_yaw) * camera_distance,
 		camera_distance * 0.78,
@@ -2026,6 +2480,8 @@ func _update_hover_context() -> void:
 	var next_context: Dictionary = command_hud.get_build_hover_context()
 	if next_context.is_empty():
 		for entity_id in entity_ids:
+			if not _is_unit_shown(entity_id):
+				continue
 			var world_position := _entity_world_position(entity_id)
 			if camera.is_position_behind(world_position):
 				continue
@@ -2054,6 +2510,8 @@ func _update_hover_context() -> void:
 					"accent": Color("#47d9ff"),
 				}
 		for site in fuel_depot_state.values():
+			if not bool(site.discovered):
+				continue
 			var site_position: Vector2 = site.position
 			var world_position := Vector3(site_position.x, _terrain_height_at(site_position.x, site_position.y), site_position.y)
 			if camera.is_position_behind(world_position):
@@ -2061,7 +2519,7 @@ func _update_hover_context() -> void:
 			var distance := camera.unproject_position(world_position).distance_to(pointer)
 			if distance < nearest_distance:
 				nearest_distance = distance
-				var owner := int(site.owner)
+				var owner := int(site.known_owner)
 				var allegiance: String = "FRIENDLY" if owner == HUMAN_PLAYER_ID else "HOSTILE" if owner >= 0 else "UNCLAIMED"
 				next_context = {
 					"key": "fuel:%d:%d:%d" % [int(site.id), owner, int(float(site.stock) / 50.0)],
@@ -2725,7 +3183,10 @@ func _set_demo_unit_color(entity_id: int, color: Color) -> void:
 			ring.visible = true
 
 
-func _issue_move_order(screen_position: Vector2) -> void:
+## Sends selected units to the clicked ground. `queued` (Shift + right click)
+## appends the spot as a waypoint after each unit's current orders; otherwise
+## it replaces them.
+func _issue_move_order(screen_position: Vector2, queued := false) -> void:
 	if selected_ids.is_empty():
 		var commander_id := int(commander_ids.get(HUMAN_PLAYER_ID, -1))
 		if commander_id <= 0:
@@ -2735,21 +3196,40 @@ func _issue_move_order(screen_position: Vector2) -> void:
 		return
 
 	var target := _screen_to_world(screen_position)
+	# A queued arrow starts where the units' queues currently end.
+	var queue_end := _queued_order_end() if queued else Vector2.INF
 	var accepted_count: int = extension.call(
 		"issue_move_commands",
 		selected_ids,
 		HUMAN_PLAYER_ID,
 		target.x,
 		target.y,
-		UNIT_SPACING
+		UNIT_SPACING,
+		queued
 	)
 	if accepted_count != selected_ids.size():
 		push_warning("Move order rejected: accepted=%d/%d entity=%d target=(%.6f,%.6f)" % [accepted_count, selected_ids.size(), selected_ids[0], target.x, target.y])
 		return
-	_show_command_feedback(target)
+	_show_command_feedback(target, queue_end)
+	# Held Shift shows the new leg as soon as the simulation accepts it.
+	unit_route_refresh_seconds = 0.0
 
 
-func _show_command_feedback(target: Vector2) -> void:
+## Mean of the selected units' last queued destinations, or INF when none of
+## them has a move order.
+func _queued_order_end() -> Vector2:
+	var waypoints: Array = extension.call("get_unit_waypoints", selected_ids, HUMAN_PLAYER_ID)
+	var total := Vector2.ZERO
+	var count := 0
+	for unit_waypoints in waypoints:
+		var points := unit_waypoints as PackedVector2Array
+		if not points.is_empty():
+			total += points[points.size() - 1]
+			count += 1
+	return total / float(count) if count > 0 else Vector2.INF
+
+
+func _show_command_feedback(target: Vector2, from := Vector2.INF) -> void:
 	_order_overlay_renderer_setup()
 	var origin := Vector2.ZERO
 	var count := 0
@@ -2759,6 +3239,8 @@ func _show_command_feedback(target: Vector2) -> void:
 		count += 1
 	if count > 0:
 		origin /= float(count)
+	if from != Vector2.INF:
+		origin = from
 	order_overlay_renderer.show_move_order(origin, target)
 	command_feedback_marker = order_overlay_renderer.get("destination_marker").get_child(0)
 	command_feedback_marker.visible = true
@@ -2795,6 +3277,31 @@ func _update_command_feedback(_delta: float) -> void:
 		command_feedback_pending_ids = PackedInt32Array()
 
 
+## While Shift is held, draw each selected unit's remaining route as the
+## native movement system will drive it, turns included. Release hides it.
+func _update_unit_routes(delta: float) -> void:
+	var showing := Input.is_key_pressed(KEY_SHIFT) and not selected_ids.is_empty()
+	showing = showing and extension != null and match_started and not match_finished
+	if not showing:
+		if unit_route_renderer != null and unit_route_renderer.visible:
+			unit_route_renderer.clear_routes()
+		unit_route_refresh_seconds = 0.0
+		return
+	if unit_route_renderer == null:
+		unit_route_renderer = UnitRouteRendererScript.new()
+		unit_route_renderer.name = "UnitRouteRoot"
+		unit_route_renderer.set_terrain_height_sampler(func(world_x: float, world_z: float): return _terrain_height_at(world_x, world_z))
+		add_child(unit_route_renderer)
+	unit_route_renderer.set_camera_distance(camera_distance)
+	unit_route_refresh_seconds -= delta
+	if unit_route_refresh_seconds > 0.0:
+		return
+	unit_route_refresh_seconds = UNIT_ROUTE_REFRESH_SECONDS
+	var routes: Array = extension.call("get_unit_routes", selected_ids, HUMAN_PLAYER_ID)
+	var waypoints: Array = extension.call("get_unit_waypoints", selected_ids, HUMAN_PLAYER_ID)
+	unit_route_renderer.show_routes(routes, waypoints)
+
+
 func _issue_stop_order() -> void:
 	if selected_ids.is_empty():
 		return
@@ -2829,8 +3336,14 @@ func _order_fob(screen_position: Vector2) -> void:
 
 
 func _queue_commander_unit(unit_type: int, target: Vector2 = Vector2.ZERO) -> void:
+	if selected_ids.has(_player_engineer_id()):
+		_order_commander_unit(unit_type, target)
+
+
+# Strategic Command orders come through here too, whatever is selected.
+func _order_commander_unit(unit_type: int, target: Vector2) -> void:
 	var commander_id := int(commander_ids.get(HUMAN_PLAYER_ID, -1))
-	if commander_id < 0 or not selected_ids.has(_player_engineer_id()):
+	if commander_id < 0:
 		return
 	var accepted_count: int = extension.call("issue_build_commands", PackedInt32Array([commander_id]), HUMAN_PLAYER_ID, target.x, target.y, unit_type)
 	if accepted_count == 1:
@@ -2853,7 +3366,7 @@ func _order_commander_to_build(build_type: int, target: Vector2) -> void:
 		direction = Vector2.RIGHT
 	# Stop beyond the scaffold footprint rather than pathing the commander into
 	# the finished building. The original target remains the construction site.
-	var approach_target := target - direction * 7.0
+	var approach_target := target - direction * _build_standoff(build_type, direction)
 	# The authoritative move validator rejects zero formation spacing. A single
 	# commander still uses the normal RTS spacing contract used by manual moves.
 	var accepted := int(extension.call("issue_move_commands", PackedInt32Array([commander_id]), HUMAN_PLAYER_ID, approach_target.x, approach_target.y, UNIT_SPACING))
@@ -2861,6 +3374,23 @@ func _order_commander_to_build(build_type: int, target: Vector2) -> void:
 		push_warning("Field Engineer could not reach the build location")
 		return
 	pending_build_order = {"type": build_type, "target": target, "approach": approach_target}
+
+## How far from the site centre the engineer stops, along `direction` (site
+## toward engineer, negated): on clear ground just past the structure's footprint.
+func _build_standoff(build_type: int, direction: Vector2) -> float:
+	if build_type < 100:
+		return 7.0
+	var site: Dictionary = extension.call("get_structure_site", build_type - 100, 0.0, 0.0)
+	var half := Vector2(float(site.get("clearance_x", 0.0)), float(site.get("clearance_y", 0.0)))
+	if half.x <= 0.0 or half.y <= 0.0:
+		return 7.0
+	var edge := INF
+	if absf(direction.x) > 0.0001:
+		edge = minf(edge, half.x / absf(direction.x))
+	if absf(direction.y) > 0.0001:
+		edge = minf(edge, half.y / absf(direction.y))
+	return edge + BUILD_STANDOFF_MARGIN
+
 
 func _process_pending_build_order() -> void:
 	if pending_build_order.is_empty():
@@ -2964,6 +3494,7 @@ func _begin_build_placement(build_type: int) -> void:
 
 
 func _cancel_tactical_modes() -> void:
+	recon_targeting = false
 	build_mode_type = -1
 	blueprint_pointer_down = false
 	road_build_mode = false
@@ -2997,22 +3528,17 @@ func _blueprint_at_screen(pos: Vector2) -> int:
 	return -1
 
 
-func _build_unit_shortcut_index(keycode: Key) -> int:
-	match keycode:
-		KEY_1: return 0
-		KEY_4: return 1
-		KEY_5: return 2
-		KEY_9: return 3
-		KEY_0: return 4
-		KEY_P: return 5
-	return -1
-
-
 func _hotkey_setup_from_manager() -> void:
 	if hotkey_manager == null:
 		hotkey_manager = preload("res://hotkey_manager.gd").new()
 		hotkey_manager.name = "HotkeyManager"
 		add_child(hotkey_manager)
+	if hotkey_display == null:
+		var ui_root := get_node_or_null("HUD/UIRoot")
+		if ui_root != null:
+			hotkey_display = preload("res://hotkey_display.gd").new()
+			hotkey_display.name = "HotkeyDisplay"
+			ui_root.add_child(hotkey_display)
 	if hotkey_display != null:
 		hotkey_display.hotkey_manager = hotkey_manager
 
@@ -3064,13 +3590,6 @@ func _handle_hotkey(keycode: Key, event: InputEventKey) -> bool:
 			material_order_mode = 0
 			_update_hud()
 			return true
-		"unit_shortcut_1", "unit_shortcut_4", "unit_shortcut_5", "unit_shortcut_9", "unit_shortcut_0", "unit_shortcut_P":
-			var unit_shortcut_index := _build_unit_shortcut_index(keycode)
-			if unit_shortcut_index >= 0:
-				var unit_type := _build_unit_type_at_index(unit_shortcut_index)
-				if unit_type >= 0:
-					_begin_build_placement(unit_type)
-			return true
 		"build_structure_1":
 			_begin_build_placement(100)
 			return true
@@ -3079,6 +3598,9 @@ func _handle_hotkey(keycode: Key, event: InputEventKey) -> bool:
 			return true
 		"build_structure_3":
 			_begin_build_placement(103)
+			return true
+		"build_airfield":
+			_begin_build_placement(102)
 			return true
 		"road_build":
 			_begin_road_placement()
@@ -3093,12 +3615,10 @@ func _handle_hotkey(keycode: Key, event: InputEventKey) -> bool:
 	return false
 
 
+# The Field Engineer builds structures and earthworks only. Forces are ordered
+# from Strategic Command and flown in, so the engineer's blueprints list no units.
 func _build_unit_catalog() -> Array:
-	var catalog: Array = extension.call("get_build_catalog", HUMAN_PLAYER_ID) if extension != null else []
-	# Air units are airfield operations, never Field Engineer blueprints.
-	var units: Array = catalog.filter(func(entry): return not bool(entry.get("is_structure", false)) and not bool(entry.get("is_aircraft", false)))
-	units.sort_custom(func(left, right): return int(left.get("type", -1)) < int(right.get("type", -1)))
-	return units
+	return []
 
 
 func _build_unit_type_at_index(index: int) -> int:
@@ -3117,11 +3637,11 @@ func _make_build_ghost(build_type: int) -> Node3D:
 		1:
 			_add_build_ghost_cylinder(root, 0.35, 8.0, Vector3(0.0, 4.0, 0.0))
 		2:
-			# Match the completed crossed-runway airfield silhouette.
-			for runway_angle in [-45.0, 45.0]:
-				_add_build_ghost_box(root, Vector3(45.0, 0.08, 1200.0), Vector3(0.0, 0.04, 0.0), runway_angle)
-			_add_build_ghost_box(root, Vector3(56.0, 12.0, 38.0), Vector3(280.0, 6.0, 0.0))
-			_add_build_ghost_cylinder(root, 7.0, 20.0, Vector3(240.0, 10.0, 46.0), 5.0)
+			# Match the completed airfield's paved areas and buildings.
+			for piece in AIRFIELD_PAVING:
+				_add_build_ghost_box(root, Vector3(piece.size.x, 0.4, piece.size.y), Vector3(piece.center.x, 0.2, piece.center.y))
+			_add_build_ghost_box(root, AIRFIELD_HANGAR_SIZE, AIRFIELD_HANGAR_POSITION)
+			_add_build_ghost_cylinder(root, 7.0, 20.0, AIRFIELD_TOWER_POSITION, 5.0)
 		3:
 			_add_build_ghost_cylinder(root, 0.3, 15.0, Vector3(0.0, 7.5, 0.0))
 		_:
@@ -3284,6 +3804,130 @@ func _queue_commander_structure(structure_type: int, target: Vector2) -> bool:
 		push_warning("Field Engineer could not queue this structure")
 		return false
 
+var _airfield_materials := {}
+
+
+func _airfield_material(piece: Dictionary) -> ShaderMaterial:
+	var kind: int = piece.kind
+	var size: Vector2 = piece.size
+	var edge_gap: Vector3 = piece.get("edge_gap", Vector3.ZERO)
+	var key := "%d:%s:%s" % [kind, size, edge_gap]
+	if _airfield_materials.has(key):
+		return _airfield_materials[key]
+	var material := ShaderMaterial.new()
+	material.shader = AirfieldSurfaceShader
+	material.set_shader_parameter("asphalt_albedo", load("res://assets/airfield/asphalt_track_diff_2k.jpg"))
+	material.set_shader_parameter("asphalt_normal", load("res://assets/airfield/asphalt_track_nor_gl_2k.jpg"))
+	material.set_shader_parameter("concrete_albedo", load("res://assets/airfield/concrete_floor_02_diff_2k.jpg"))
+	material.set_shader_parameter("concrete_normal", load("res://assets/airfield/concrete_floor_02_nor_gl_2k.jpg"))
+	material.set_shader_parameter("surface_kind", kind)
+	material.set_shader_parameter("surface_width", size.x)
+	material.set_shader_parameter("surface_length", size.y)
+	material.set_shader_parameter("edge_gap_side", edge_gap.x)
+	material.set_shader_parameter("edge_gap_range", Vector2(edge_gap.y, edge_gap.z))
+	_airfield_materials[key] = material
+	return material
+
+
+func _add_airfield_paving(root: Node3D) -> void:
+	for piece in AIRFIELD_PAVING:
+		var paving := MeshInstance3D.new()
+		paving.name = "Runway" if piece.kind == 0 else "Taxiway" if piece.kind == 1 else "Apron"
+		var plane := PlaneMesh.new()
+		plane.size = piece.size
+		# Enough vertices that the lit surface keeps its shape at grazing angles.
+		plane.subdivide_depth = int(piece.size.y / 50.0)
+		paving.mesh = plane
+		paving.position = Vector3(piece.center.x, AIRFIELD_PAVING_HEIGHT, piece.center.y)
+		paving.rotation_degrees.y = piece.yaw
+		paving.material_override = _airfield_material(piece)
+		paving.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		root.add_child(paving)
+	# Runway designators, painted 9 m tall beyond each threshold. The runway
+	# runs north-south (-Z is north), so it is 36 from the south and 18 from
+	# the north; each number reads upright to a pilot landing over it.
+	var runway: Dictionary = AIRFIELD_PAVING[0]
+	for end in [1.0, -1.0]:
+		var number := Label3D.new()
+		number.name = "RunwayDesignator%s" % ("36" if end > 0.0 else "18")
+		number.text = "36" if end > 0.0 else "18"
+		number.font_size = 96
+		number.outline_size = 0
+		number.pixel_size = 0.115
+		number.modulate = Color(0.86, 0.87, 0.84, 0.92)
+		number.shaded = true
+		number.double_sided = false
+		number.alpha_cut = Label3D.ALPHA_CUT_DISCARD
+		number.texture_filter = BaseMaterial3D.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS_ANISOTROPIC
+		number.position = Vector3(runway.center.x, AIRFIELD_PAVING_HEIGHT + 0.04, end * (AIRFIELD_RUNWAY_LENGTH * 0.5 - 48.0))
+		number.rotation_degrees = Vector3(-90.0, 0.0 if end > 0.0 else 180.0, 0.0)
+		number.scale = Vector3(0.7, 1.0, 1.0)
+		root.add_child(number)
+
+
+func _matte_material(color: Color, roughness := 0.8, metallic := 0.1) -> StandardMaterial3D:
+	var material := StandardMaterial3D.new()
+	material.albedo_color = color
+	material.roughness = roughness
+	material.metallic = metallic
+	return material
+
+
+func _add_airfield_part(root: Node3D, mesh: Mesh, position: Vector3, material: Material, rotation := Vector3.ZERO, scale := Vector3.ONE) -> MeshInstance3D:
+	var part := MeshInstance3D.new()
+	part.mesh = mesh
+	part.position = position
+	part.rotation_degrees = rotation
+	part.scale = scale
+	part.material_override = material
+	root.add_child(part)
+	return part
+
+
+# A steel hangar with an arched roof and its doors facing the apron, and a
+# concrete control tower with a glazed cab overlooking the runway.
+func _add_airfield_buildings(root: Node3D) -> void:
+	var size := AIRFIELD_HANGAR_SIZE
+	var wall_height := size.y * 0.6
+	var cladding := _matte_material(Color("#7b8079"), 0.6, 0.35)
+	var walls := BoxMesh.new()
+	walls.size = Vector3(size.x, wall_height, size.z)
+	var hangar := _add_airfield_part(root, walls, AIRFIELD_HANGAR_POSITION + Vector3(0.0, wall_height * 0.5 - size.y * 0.5, 0.0), cladding)
+	hangar.name = "Hangar"
+	# The arched roof is a cylinder along the hangar's length, flattened.
+	var roof := CylinderMesh.new()
+	roof.top_radius = size.x * 0.5
+	roof.bottom_radius = size.x * 0.5
+	roof.height = size.z
+	roof.radial_segments = 32
+	_add_airfield_part(root, roof, AIRFIELD_HANGAR_POSITION + Vector3(0.0, wall_height - size.y * 0.5, 0.0),
+		_matte_material(Color("#6a7068"), 0.5, 0.45), Vector3(90.0, 0.0, 0.0), Vector3(1.0, 1.0, (size.y - wall_height) / (size.x * 0.5)))
+	# Sliding doors across most of the apron-facing wall.
+	var doors := BoxMesh.new()
+	doors.size = Vector3(0.4, wall_height * 0.9, size.z * 0.8)
+	_add_airfield_part(root, doors, AIRFIELD_HANGAR_POSITION + Vector3(-size.x * 0.5 - 0.2, wall_height * 0.45 - size.y * 0.5, 0.0),
+		_matte_material(Color("#3b4146"), 0.55, 0.4))
+	var concrete := _matte_material(Color("#9a978d"), 0.9, 0.0)
+	var shaft := CylinderMesh.new()
+	shaft.top_radius = 3.0
+	shaft.bottom_radius = 3.6
+	shaft.height = 18.0
+	var base := AIRFIELD_TOWER_POSITION - Vector3(0.0, AIRFIELD_TOWER_POSITION.y, 0.0)
+	_add_airfield_part(root, shaft, base + Vector3(0.0, 9.0, 0.0), concrete).name = "ControlTower"
+	var cab := CylinderMesh.new()
+	cab.top_radius = 5.8
+	cab.bottom_radius = 4.6
+	cab.height = 3.6
+	cab.radial_segments = 8
+	_add_airfield_part(root, cab, base + Vector3(0.0, 19.8, 0.0), _matte_material(Color("#1d3138"), 0.15, 0.6))
+	var cap := CylinderMesh.new()
+	cap.top_radius = 6.2
+	cap.bottom_radius = 6.2
+	cap.height = 0.6
+	cap.radial_segments = 8
+	_add_airfield_part(root, cap, base + Vector3(0.0, 21.9, 0.0), concrete)
+
+
 func _spawn_completed_structure_view(structure_type: int, target: Vector2) -> void:
 	var root := Node3D.new()
 	root.name = "Built_%s" % ("Outpost" if structure_type == 0 else "RadarMast" if structure_type == 1 else "Airfield" if structure_type == 2 else "Floodlight")
@@ -3298,34 +3942,8 @@ func _spawn_completed_structure_view(structure_type: int, target: Vector2) -> vo
 		mesh.material_override = _demo_material(Color("#d09a45") if structure_type == 0 else Color("#55b9c9"), 0.0)
 		root.add_child(mesh)
 	if structure_type == 2:
-		# Two compressed 1,200 m tactical runways form the standard X pattern.
-		# At 19.44 m long, an F-15C is roughly 1/62 of a runway length.
-		for runway_angle in [-45.0, 45.0]:
-			var runway := MeshInstance3D.new()
-			var runway_mesh := BoxMesh.new()
-			runway_mesh.size = Vector3(45.0, 0.08, 1200.0)
-			runway.mesh = runway_mesh
-			runway.position.y = 0.04
-			runway.rotation_degrees.y = runway_angle
-			runway.material_override = _demo_material(Color("#8aa0a8"), 0.0)
-			root.add_child(runway)
-		# A small operations hangar sits clear of the runway intersection.
-		var hangar := MeshInstance3D.new()
-		var hangar_mesh := BoxMesh.new()
-		hangar_mesh.size = Vector3(56.0, 12.0, 38.0)
-		hangar.mesh = hangar_mesh
-		hangar.position = Vector3(280.0, 6.0, 0.0)
-		hangar.material_override = _demo_material(Color("#50636a"), 0.0)
-		root.add_child(hangar)
-		var tower := MeshInstance3D.new()
-		var tower_mesh := CylinderMesh.new()
-		tower_mesh.top_radius = 5.0
-		tower_mesh.bottom_radius = 7.0
-		tower_mesh.height = 20.0
-		tower.mesh = tower_mesh
-		tower.position = Vector3(240.0, 10.0, 46.0)
-		tower.material_override = _demo_material(Color("#6d8790"), 0.0)
-		root.add_child(tower)
+		_add_airfield_paving(root)
+		_add_airfield_buildings(root)
 	if structure_type == 1:
 		var mast := MeshInstance3D.new()
 		var pole := CylinderMesh.new()
@@ -3439,6 +4057,8 @@ func _issue_attack_order(screen_position: Vector2) -> int:
 	var nearest_distance := 9999.0
 
 	for entity_id in ai_entity_ids:
+		if not seen_enemy_ids.has(entity_id):
+			continue
 		var entity_pos := _entity_world_position(entity_id)
 		var dx := entity_pos.x - mouse_x
 		var dz := entity_pos.z - mouse_z
@@ -3446,6 +4066,10 @@ func _issue_attack_order(screen_position: Vector2) -> int:
 		if dist < nearest_distance:
 			nearest_distance = dist
 			nearest_enemy_id = entity_id
+
+	var enemy_post := int(commander_ids.get(1, -1))
+	if enemy_post > 0 and seen_enemy_ids.has(enemy_post) and _native_unit_position(enemy_post).distance_to(Vector2(mouse_x, mouse_z)) < nearest_distance:
+		nearest_enemy_id = enemy_post
 
 	if nearest_enemy_id >= 0:
 		var accepted_count: int = extension.call("issue_attack_commands", selected_ids, HUMAN_PLAYER_ID, nearest_enemy_id)
@@ -3522,6 +4146,7 @@ func _update_hud() -> void:
 	if extension != null and match_started:
 		_sync_terrain_edits()
 		_sync_fuel_supply()
+		_sync_strategic_command()
 	_activate_reinforcement_delivery_from_airfield()
 	_update_steering_debug()
 	var scenario_name: String = scenario_definition.get("display_name", "Scale profile")
@@ -3581,7 +4206,7 @@ func _update_hud() -> void:
 	command_hud.refresh({
 		"scenario": scenario_name,
 		"friendly": player_entity_ids.size(),
-		"enemy": ai_entity_ids.size(),
+		"enemy": seen_enemy_ids.size(),
 		"selected": selected_ids.size(),
 		"selection_detail": selection_detail,
 		"unit_name": selected_unit.get("name", ""),

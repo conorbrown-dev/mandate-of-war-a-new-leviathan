@@ -2,7 +2,8 @@
   "version": 1,
   "id": "commander_start_skirmish_v1",
   "display_name": "Broken Strait",
-  "description": "Begin with one Command Walker, build an army over time, and destroy the opposing commander.",
+  "description": "Long-range reconnaissance places enemy forces somewhere in this sector, but it could not resolve them any closer. Scout the sector, find their command post and destroy it before they find yours.",
+  "objective": "DESTROY THE ENEMY COMMAND POST",
   "theater": {
     "width": 40000,
     "height": 40000,
@@ -13,6 +14,7 @@
     "terrain": {"type": "heightmap", "data": "res://scenarios/terrain.json", "tiles_x": 320, "tiles_y": 320}
   },
   "player": {"faction_id": 0, "spawn": [-12500, 0], "units": [{"unit_type": 0, "count": 1}]},
-  "ai": {"faction_id": 1, "spawn": [12500, 0], "units": [{"unit_type": 3, "count": 1}]},
-  "victory": {"type": "command_center", "description": "Destroy the opposing commander."}
+  "ai": {"faction_id": 1, "spawn": [-15000, -6500], "units": [{"unit_type": 3, "count": 1}], "doctrine": "balanced", "difficulty": "normal", "assault": {"search_area": [-19500, -19000, -5500, 19000], "first_wave": 6, "wave_growth": 4, "max_wave": 24}},
+  "forces_by_transport": true,
+  "victory": {"type": "command_center", "description": "Destroy the enemy command post."}
 }

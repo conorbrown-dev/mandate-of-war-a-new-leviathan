@@ -100,7 +100,7 @@ func _run() -> void:
 	check(not view.debug_panel.visible, "F8 closes the developer environment panel")
 	check(view.player_entity_ids.size() == 1 and view.ai_entity_ids.size() == 1 and view.player_entity_ids[0] == view._player_engineer_id(), "each side starts with a visible Field Engineer while production bases stay presentation-hidden")
 	check(view.prototype_visual_views.size() == 2, "each opening Field Engineer receives its registered imported model")
-	check(view.material_site_state.size() == 4 and view.fuel_depot_state.size() == 6 and view.resource_sites.get_child_count() == 10 and view.extension.call("economy_get_resource_node_count") == 10, "four material facilities and six fuel depots are registered with the simulation")
+	check(view.material_site_state.size() == 4 and view.fuel_depot_state.size() == 6 and view.resource_sites.get_child_count() == 8 and view.extension.call("economy_get_resource_node_count") == 10, "four material facilities and six fuel depots are registered, with the two enemy depots still undiscovered")
 	check(view.civilian_building_instance_count >= 20 and view.civilian_buildings.get_child_count() == 3, "civilian dressing creates clustered instanced building groups")
 	var civilian_land_only := true
 	var first_civilian_position := Vector3.INF
@@ -190,34 +190,29 @@ func _run() -> void:
 	view.camera_distance = camera_distance_before_sites
 	view.target_camera_distance = camera_distance_before_sites
 	view._update_camera(1.0)
-	check(bool(view.material_site_state[902].destroyed) and view.resource_sites.get_child_count() == 9 and view.extension.call("economy_get_resource_node_count") == 9, "commander can demolish an enemy material facility")
-	view._queue_commander_unit(0)
+	check(bool(view.material_site_state[902].destroyed) and view.resource_sites.get_child_count() == 7 and view.extension.call("economy_get_resource_node_count") == 9, "commander can demolish an enemy material facility")
+	# Forces are flown in, so with no airfield there is nowhere to land one.
+	var materials_before_order: Array = view.extension.call("economy_get_tactical_resources", commander_id)
+	view._order_commander_unit(0, Vector2.ZERO)
 	view.extension.call("update_simulation", 50.0)
 	view._update_hud()
-	var production_queue: Array = view.command_hud.snapshot.get("queue", [])
-	check(production_queue.size() == 1, "selected Command Walker queues a timed MBT build")
-	var active_build: Dictionary = production_queue[0] if not production_queue.is_empty() else {}
-	check(float(active_build.get("remaining_seconds", 0.0)) > 0.0 and float(active_build.get("reserved_material", 0.0)) > 0.0, "production queue exposes remaining time and authoritative reserved resources")
-	var build_catalog: Array = view.command_hud.snapshot.get("build_catalog", [])
-	var catalog_types: Array[int] = []
-	for entry in build_catalog:
-		if not bool(entry.get("is_structure", false)):
-			catalog_types.append(int(entry.get("type", -1)))
-	check(catalog_types.has(9) and catalog_types.has(10) and catalog_types.has(11) and view.construction_frames.get_child_count() == 1, "build menu exposes the added fighter, VTOL, and patrol boat alongside the active queue")
+	var refused_queue: Array = view.command_hud.snapshot.get("queue", [])
+	var materials_after_order: Array = view.extension.call("economy_get_tactical_resources", commander_id)
+	var order_delivery: Dictionary = view.extension.call("delivery_state", 0)
+	check(refused_queue.is_empty() and (order_delivery.get("inbound", []) as Array).is_empty() and not bool(order_delivery.get("has_site", true)), "a ground force cannot be ordered before there is an airfield to land it")
+	check(float(materials_after_order[0]) >= float(materials_before_order[0]), "the refused order cost nothing")
+	var gated_catalog: Array = view.command_hud.snapshot.get("build_catalog", [])
+	var gated_unit: Dictionary = {}
+	for entry in gated_catalog:
+		if int(entry.get("type", -1)) == 0:
+			gated_unit = entry
+	check(bool(gated_unit.get("delivered", false)) and not bool(gated_unit.get("available", true)) and String(gated_unit.get("reason", "")) == "AIRFIELD REQUIRED FOR REINFORCEMENTS", "the catalog says why: the airfield is required")
 	if OS.get_environment("RTS_CAPTURE_SCREENSHOT") == "1":
 		await RenderingServer.frame_post_draw
 		var production_image := view.get_viewport().get_texture().get_image()
 		check(production_image.save_png(OS.get_temp_dir().path_join("near-future-rts-presentation.png")) == OK, "GPU production HUD screenshot saved")
-	for _tick in range(310):
-		view.extension.call("update_simulation", 50.0)
-		view._sync_new_entities()
-	check(view.player_entity_ids.size() == 2, "completed Command Walker production adds a player unit")
-	check((view.demo_unit_views.has(view.player_entity_ids[1]) or view.prototype_visual_views.has(view.player_entity_ids[1])) and view.demo_unit_views.size() + view.prototype_visual_views.size() >= 3, "completed unit receives a visible 3D model")
-	var produced_position: PackedFloat32Array = view.extension.call("get_unit_position", view.player_entity_ids[1])
-	var commander_position: PackedFloat32Array = view.extension.call("get_unit_position", commander_id)
-	check(produced_position.size() == 2 and commander_position.size() == 2 and produced_position[0] != commander_position[0], "completed unit spawns at a visible factory rally point")
 	view._set_selected(engineer_id, true)
-	check(view._build_unit_type_at_index(0) == 0 and view._build_unit_type_at_index(1) == 1 and view._build_unit_type_at_index(2) == 2 and view._build_unit_type_at_index(3) == 11 and view._build_unit_type_at_index(4) == -1, "Field Engineer shortcuts resolve from the native catalog and exclude aircraft")
+	check(view._build_unit_catalog().is_empty() and view._build_unit_type_at_index(0) == -1, "the Field Engineer offers no units: forces are ordered from Strategic Command")
 	var fighter_queue_before_airfield: Array = view.extension.call("get_hud_state", 0, commander_id, -1, 0.0, 0.0, false).get("production_queue", [])
 	view._queue_commander_unit(9)
 	var fighter_queue_after_airfield: Array = view.extension.call("get_hud_state", 0, commander_id, -1, 0.0, 0.0, false).get("production_queue", [])
@@ -233,6 +228,10 @@ func _run() -> void:
 	view._order_commander_to_build(102, airfield_target)
 	var pending_airfield_order: Dictionary = view.pending_build_order
 	check(not pending_airfield_order.is_empty() and (pending_airfield_order.get("target", Vector2.INF) as Vector2).distance_to(airfield_target) <= 0.01, "Airfield input preserves the exact cursor target without distant snapping")
+	var airfield_site: Dictionary = view.extension.call("get_structure_site", 2, airfield_target.x, airfield_target.y)
+	var airfield_approach: Vector2 = pending_airfield_order.get("approach", airfield_target)
+	var approach_offset := (airfield_approach - airfield_target).abs()
+	check(approach_offset.x >= float(airfield_site.get("clearance_x", INF)) or approach_offset.y >= float(airfield_site.get("clearance_y", INF)), "the engineer stops on clear ground outside the airfield footprint (%s from the site)" % [approach_offset])
 	view.pending_build_order.clear()
 	check(view._queue_commander_structure(2, airfield_target), "Command Walker queues an airfield structure on land")
 	for _tick in range(750):
@@ -240,6 +239,29 @@ func _run() -> void:
 		view._sync_new_entities()
 	view._update_hud()
 	check(view.extension.call("territory_get_installation_info", airfield_target.x, airfield_target.y).size() >= 6, "completed airfield is registered as an active tactical installation")
+	var landing: Dictionary = view.extension.call("delivery_state", 0)
+	check(bool(landing.get("has_site", false)), "the completed airfield becomes the landing site for forces")
+	var funds_before_delivery: Array = view.extension.call("economy_get_tactical_resources", commander_id)
+	var delivery_ids_before: PackedInt32Array = view.extension.call("get_entity_ids")
+	view._order_commander_unit(0, Vector2.ZERO)
+	view.extension.call("update_simulation", 50.0)
+	view._update_hud()
+	var inbound_forces: Array = view.extension.call("delivery_state", 0).get("inbound", [])
+	var funds_after_delivery_order: Array = view.extension.call("economy_get_tactical_resources", commander_id)
+	check(inbound_forces.size() == 1 and int(inbound_forces[0].type) == 0 and float(funds_after_delivery_order[0]) < float(funds_before_delivery[0]), "with an airfield, ordering a ground force pays for it and sends it")
+	check(float(inbound_forces[0].remaining_ms) > 20000.0 and view.command_hud.snapshot.get("queue", []).is_empty(), "it spends its build time and a 20 second flight on the way, and is not built on the field")
+	var mbt_ticks := 0
+	while mbt_ticks < 2400 and (view.extension.call("delivery_state", 0).get("inbound", []) as Array).size() > 0:
+		view.extension.call("update_simulation", 50.0)
+		view._sync_new_entities()
+		mbt_ticks += 1
+	view.extension.call("update_simulation", 100.0)
+	view._sync_new_entities()
+	check(view.player_entity_ids.size() == 2, "the delivered force joins the player's units")
+	check((view.demo_unit_views.has(view.player_entity_ids[1]) or view.prototype_visual_views.has(view.player_entity_ids[1])) and view.demo_unit_views.size() + view.prototype_visual_views.size() >= 3, "the delivered unit receives a visible 3D model")
+	var produced_position: PackedFloat32Array = view.extension.call("get_unit_position", view.player_entity_ids[1])
+	var delivery_site := Vector2(float(landing.get("x", 0.0)), float(landing.get("y", 0.0)))
+	check(produced_position.size() == 2 and Vector2(produced_position[0], produced_position[1]).distance_to(delivery_site) < 120.0, "the delivered unit stands at the landing site beside the airfield")
 	var beacon_target := Vector2(-15000.0, -6500.0)
 	var beacon_catalog: Array = view.extension.call("get_build_catalog", 0)
 	var beacon_entry: Dictionary = beacon_catalog.filter(func(entry): return int(entry.get("type", -1)) == 103).front() if not beacon_catalog.filter(func(entry): return int(entry.get("type", -1)) == 103).is_empty() else {}
@@ -267,9 +289,18 @@ func _run() -> void:
 	view._queue_commander_unit(9)
 	view.extension.call("update_simulation", 50.0)
 	view._update_hud()
-	production_queue = view.command_hud.snapshot.get("queue", [])
-	active_build = production_queue[0] if not production_queue.is_empty() else {}
+	var production_queue: Array = view.command_hud.snapshot.get("queue", [])
+	var active_build: Dictionary = production_queue[0] if not production_queue.is_empty() else {}
 	check(int(active_build.get("type", -1)) == 9, "Command Walker queues the added fighter through the gameplay build path")
+	check(float(active_build.get("remaining_seconds", 0.0)) > 0.0 and float(active_build.get("reserved_material", 0.0)) > 0.0, "production queue exposes remaining time and authoritative reserved resources")
+	var build_catalog: Array = view.command_hud.snapshot.get("build_catalog", [])
+	var catalog_types: Array[int] = []
+	for entry in build_catalog:
+		if not bool(entry.get("is_structure", false)):
+			catalog_types.append(int(entry.get("type", -1)))
+	# Frames from earlier builds are freed at the end of the frame.
+	await process_frame
+	check(catalog_types.has(9) and catalog_types.has(10) and catalog_types.has(11) and view.construction_frames.get_child_count() == 1, "the native catalog lists the fighter, VTOL, and patrol boat alongside the active queue")
 	for _tick in range(410):
 		view.extension.call("update_simulation", 50.0)
 		view._sync_new_entities()
@@ -316,7 +347,11 @@ func _run() -> void:
 	var enemy_id: int = view.extension.call("create_unit_with_type", enemy_spawn.x, enemy_spawn.y, 3, 1)
 	check(enemy_id > 0, "enemy attack fixture is created")
 	view._register_presented_unit(enemy_id, 3, 1, enemy_spawn)
-	view.extension.call("update_simulation", 50.0)
+	check(not view._is_unit_shown(enemy_id), "an enemy stays hidden until vision refreshes around it")
+	for _tick in range(6):
+		view.extension.call("update_simulation", 50.0)
+	view._sync_vision()
+	check(view._is_unit_shown(enemy_id), "an enemy beside a friendly unit is shown")
 	view._clear_selection()
 	view._set_selected(attacker_id, true)
 	aim_camera_at(view, enemy_spawn)
@@ -410,6 +445,16 @@ func _run() -> void:
 	check(fuel_after_capture > fuel_before_capture, "captured stock reaches the fuel store")
 	check(is_equal_approx(fuel_after_capture - fuel_before_capture, 1500.0 - float(civilian_depot.stock)), "captured fuel equals the stock the depot lost")
 	check(view.resource_sites.get_node_or_null("FuelDepot_910") != null, "the captured depot is visible")
+	check(not bool(enemy_depot.discovered) and view.resource_sites.get_node_or_null("FuelDepot_920") == null, "an enemy depot stays off the map until it is found")
+	var recon_materials_before := float(view.extension.call("economy_get_tactical_resources", commander_id)[0])
+	view._begin_recon_targeting()
+	check(view.recon_targeting and view.fuel_supply_status.contains("RECON TARGET"), "plotting a recon flight waits for a map point")
+	view._cancel_tactical_modes()
+	check(not view.recon_targeting, "a recon flight can be called off before it is plotted")
+	view._begin_recon_targeting()
+	var unwatched_target := Vector2(-15000.0, 9000.0)
+	check(view._order_recon_flight(unwatched_target) and view.fuel_supply_status.contains("RECON FLIGHT INBOUND") and not view.recon_targeting, "a recon flight is plotted straight to a point on the map")
+	check(float(view.extension.call("economy_get_tactical_resources", commander_id)[0]) < recon_materials_before, "a recon plane is paid for in Materials")
 	var materials_before_shipment := float(view.extension.call("economy_get_tactical_resources", commander_id)[0])
 	var fuel_before_shipment := float(view.extension.call("economy_get_tactical_resources", commander_id)[2])
 	var shipment_supply: Dictionary = view.extension.call("fuel_supply_state", 0)

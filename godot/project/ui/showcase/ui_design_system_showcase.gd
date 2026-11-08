@@ -3,6 +3,7 @@ extends Control
 signal select_delivery_zone
 signal request_package
 signal request_fuel
+signal request_recon
 signal dismissed
 
 const ButtonComponent = preload("res://ui/components/mandate_button.gd")
@@ -34,6 +35,7 @@ func _ready() -> void:
 	_select_zone_button = ButtonComponent.new(); _select_zone_button.text = "SELECT AIRFIELD"; _select_zone_button.variant = "secondary"; _select_zone_button.pressed.connect(select_delivery_zone.emit); actions.add_child(_select_zone_button)
 	_request_button = ButtonComponent.new(); _request_button.text = "REQUEST PACKAGE"; _request_button.variant = "primary"; _request_button.pressed.connect(request_package.emit); actions.add_child(_request_button)
 	var fuel_button := ButtonComponent.new(); fuel_button.name = "RequestFuel"; fuel_button.text = "REQUEST FUEL SHIPMENT"; fuel_button.variant = "secondary"; fuel_button.pressed.connect(request_fuel.emit); actions.add_child(fuel_button)
+	var recon_button := ButtonComponent.new(); recon_button.name = "RequestRecon"; recon_button.text = "PLOT RECON FLIGHT"; recon_button.variant = "secondary"; recon_button.pressed.connect(request_recon.emit); actions.add_child(recon_button)
 	var cancel_button := ButtonComponent.new(); cancel_button.text = "CLOSE"; cancel_button.variant = "danger"; cancel_button.pressed.connect(dismissed.emit); actions.add_child(cancel_button)
 	var locked_button := ButtonComponent.new(); locked_button.text = "RESEARCH LOCKED"; locked_button.variant = "ghost"; locked_button.disabled = true; actions.add_child(locked_button)
 	_status_label = Label.new(); _status_label.name = "DeliveryStatus"; _status_label.theme_type_variation = "StatLabel"; root.add_child(_status_label)
