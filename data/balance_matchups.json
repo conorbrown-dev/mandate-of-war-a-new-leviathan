@@ -3,6 +3,7 @@
   "description": "Equal-budget ground armies used by rts_balance_benchmark. Score is the value left by the first faction minus the second, as a share of the budget.",
   "budget": 40000,
   "separation": 700,
+  "separations": [500, 600, 700, 800, 900],
   "maximum_ticks": 6000,
   "tolerance": 0.12,
   "armies": [

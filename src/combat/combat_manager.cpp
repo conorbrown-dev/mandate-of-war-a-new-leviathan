@@ -107,6 +107,7 @@ void CombatManager::start_attack(EntityId shooter_id, EntityId target_id, Compon
 }
 
 void CombatManager::reset() {
+    sight_check_ = nullptr;
     projectile_manager_.clear();
     damaged_entities_.clear();
     pending_fire_.clear();
@@ -132,7 +133,7 @@ FireSolution CombatManager::find_target(
             float dy = target_pos->y - shooter_y;
             float dist = std::sqrt(dx * dx + dy * dy);
             
-            if (dist <= view_range) {
+            if (dist <= view_range && (!sight_check_ || sight_check_(faction, explicit_target))) {
                 auto* target_vel = component_manager.get_component<Velocity>(explicit_target);
                 float target_vel_x = target_vel ? target_vel->x : 0.0f;
                 float target_vel_y = target_vel ? target_vel->y : 0.0f;
@@ -170,7 +171,8 @@ FireSolution CombatManager::find_target(
             const float dy = candidate.y - shooter_y;
             const float dist = std::sqrt(dx * dx + dy * dy);
             if (dist <= view_range && (!solution.valid || dist < solution.lead_bias ||
-                                       (dist == solution.lead_bias && candidate.id < solution.target_id))) {
+                                       (dist == solution.lead_bias && candidate.id < solution.target_id)) &&
+                (!sight_check_ || sight_check_(faction, candidate.id))) {
                 solution.target_id = candidate.id;
                 solution.aim_x = candidate.x;
                 solution.aim_y = candidate.y;

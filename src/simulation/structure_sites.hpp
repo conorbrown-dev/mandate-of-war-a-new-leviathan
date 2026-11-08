@@ -35,6 +35,34 @@ constexpr StructureSiteRules structure_site_rules(uint8_t structure_type) {
     }
 }
 
+// Sight from a finished structure, in metres. The Radar Mast is the long watch.
+constexpr float structure_view_range(uint8_t structure_type) {
+    switch (structure_type) {
+        case 0: return 400.0f;  // outpost
+        case 1: return 3000.0f; // radar
+        case 2: return 500.0f;  // airfield
+        case 3: return 300.0f;  // floodlight
+        default: return 0.0f;
+    }
+}
+
+inline constexpr float kCommandPostViewRange = 400.0f;
+
+// How far above the ground each kind of observer looks from, so a tall mast sees
+// over rises that hide a tank. Aircraft see over nearly everything.
+inline constexpr float kGroundEyeHeight = 4.0f;
+inline constexpr float kAircraftEyeHeight = 1500.0f;
+inline constexpr float kCommandPostEyeHeight = 15.0f;
+
+inline constexpr float structure_eye_height(uint8_t structure_type) {
+    switch (structure_type) {
+        case 1: return 40.0f; // radar mast
+        case 2: return 15.0f; // airfield tower
+        case 3: return 15.0f; // floodlight
+        default: return 20.0f; // forward outpost
+    }
+}
+
 inline constexpr float kEarthworksBaseMaterial = 40.0f;
 inline constexpr float kEarthworksBaseFuel = 30.0f;
 inline constexpr float kEarthworksBaseSeconds = 6.0f;

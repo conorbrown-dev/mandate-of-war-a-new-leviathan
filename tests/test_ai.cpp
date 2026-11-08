@@ -117,7 +117,9 @@ TEST(ai_c_api_uses_simulation_owned_manager) {
     simulation_start();
     ai_init();
     ai_set_faction_id(1);
-    require(simulation_create_unit_with_type(0, 0, 3, 1) >= 0, "AI typed unit spawns");
+    // An Assault Vehicle (type 4) survives the adjacent tank's first shot during the
+    // one-second tick check below; a 60 hp Swarm Tank does not.
+    require(simulation_create_unit_with_type(0, 0, 4, 1) >= 0, "AI typed unit spawns");
     require(simulation_create_unit_with_type(1, 0, 0, 0) >= 0, "Nearby enemy spawns");
     require(simulation_create_unit_with_type(300, 0, 0, 0) >= 0, "Hidden enemy spawns");
     ai_update(1000);

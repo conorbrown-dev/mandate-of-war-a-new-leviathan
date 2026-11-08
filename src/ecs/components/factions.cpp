@@ -170,6 +170,12 @@ static UnitPrototype parse_unit_prototype(const rts::data::JsonValue& obj) {
         prototype.max_airborne_time_seconds = max_airborne_time->as_number();
         prototype.energy_consumption_rate = energy_rate->as_number();
         prototype.material_consumption_rate = material_rate->as_number();
+        if (auto loiter = obj.get("recon_loiter_seconds"); loiter) {
+            if (loiter->type() != rts::data::JsonValue::Type::Number || !std::isfinite(loiter->as_number()) || loiter->as_number() <= 0.0) {
+                throw std::runtime_error("Invalid recon_loiter_seconds in unit prototype");
+            }
+            prototype.recon_loiter_seconds = static_cast<float>(loiter->as_number());
+        }
         if (prototype.payload <= 0.0f || prototype.operational_range <= 0.0f || prototype.operational_energy <= 0.0f ||
             prototype.operational_material <= 0.0f || prototype.max_airborne_time_seconds <= 0.0f ||
             prototype.energy_consumption_rate <= 0.0f || prototype.material_consumption_rate < 0.0f) {
@@ -389,6 +395,8 @@ const std::unordered_map<std::string, ResearchProject>& get_research_projects() 
     static std::unordered_map<std::string, ResearchProject> projects = load_research_projects_from_json();
     return projects;
 }
+
+std::string read_game_data(const char* filename) { return read_required_content(filename); }
 
 const std::unordered_map<FactionId, FactionStartData>& get_faction_start_data() {
     static const std::unordered_map<FactionId, FactionStartData> faction_data = load_faction_start_data();

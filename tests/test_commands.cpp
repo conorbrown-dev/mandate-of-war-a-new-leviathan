@@ -167,6 +167,78 @@ TEST(commands_formation_and_stop_behavior) {
     s.update(200);
     check(s.get_unit_x(a) == x, "stop cancels persistent movement");
 }
+TEST(commands_queued_waypoints_visit_in_order) {
+    Simulation s; s.start();
+    const auto id = s.create_unit(0, 0).id;
+    const std::pair<float, float> stops[3] = {{12, 0}, {12, 12}, {0, 12}};
+    // A plain order first, then two Shift-queued waypoints.
+    check(s.issue_move_commands({id}, FactionId::ELITE_PRECISION, stops[0].first, stops[0].second, 3) == 1,
+          "first waypoint accepted");
+    check(s.issue_move_commands({id}, FactionId::ELITE_PRECISION, stops[1].first, stops[1].second, 3, true) == 1,
+          "second waypoint queued");
+    check(s.issue_move_commands({id}, FactionId::ELITE_PRECISION, stops[2].first, stops[2].second, 3, true) == 1,
+          "third waypoint queued");
+    s.update(50);
+    const auto waypoints = s.get_unit_waypoints(id);
+    check(waypoints.size() == 3, "unit holds three waypoints");
+    for (std::size_t index = 0; index < 3; ++index)
+        check(std::abs(waypoints[index].first - stops[index].first) < 0.01f &&
+              std::abs(waypoints[index].second - stops[index].second) < 0.01f, "waypoints kept in issue order");
+    check(s.queued_waypoint_count(id) == 2, "two waypoints wait behind the current one");
+    std::vector<std::pair<float, float>> route;
+    check(s.get_unit_route(id, route) && route.size() >= 4, "route covers every queued leg");
+    check(std::abs(route.back().first - stops[2].first) < 0.01f &&
+          std::abs(route.back().second - stops[2].second) < 0.01f, "route ends at the last waypoint");
+
+    int visited[3] = {-1, -1, -1};
+    for (int tick = 0; tick < 600 && s.has_move_target(id); ++tick) {
+        s.update(50);
+        for (int index = 0; index < 3; ++index) {
+            const float dx = s.get_unit_x(id) - stops[index].first;
+            const float dy = s.get_unit_y(id) - stops[index].second;
+            if (visited[index] < 0 && std::sqrt(dx * dx + dy * dy) <= movement::kArrivalRadiusMeters + 0.05f)
+                visited[index] = tick;
+        }
+    }
+    check(!s.has_move_target(id) && s.queued_waypoint_count(id) == 0, "unit finishes the whole queue");
+    if (!(visited[0] >= 0 && visited[0] < visited[1] && visited[1] < visited[2]))
+        throw std::runtime_error("waypoint visit ticks out of order: " + std::to_string(visited[0]) + ", " +
+                                 std::to_string(visited[1]) + ", " + std::to_string(visited[2]));
+    check(s.get_unit_waypoints(id).empty(), "an idle unit has no waypoints");
+}
+TEST(commands_plain_move_replaces_queue_and_stop_clears_it) {
+    Simulation s; s.start();
+    const auto id = s.create_unit(0, 0).id;
+    check(s.issue_move_commands({id}, FactionId::ELITE_PRECISION, 30, 0, 3, true) == 1,
+          "queued order on an idle unit starts at once");
+    s.update(50);
+    check(s.has_move_target(id) && s.queued_waypoint_count(id) == 0, "idle unit drives its first queued waypoint");
+    check(s.issue_move_commands({id}, FactionId::ELITE_PRECISION, 30, 30, 3, true) == 1 &&
+          s.issue_move_commands({id}, FactionId::ELITE_PRECISION, 0, 30, 3, true) == 1, "two more waypoints queued");
+    s.update(50);
+    check(s.get_unit_waypoints(id).size() == 3, "three waypoints held");
+    check(s.issue_move_commands({id}, FactionId::ELITE_PRECISION, -20, 0, 3) == 1, "plain move accepted");
+    s.update(50);
+    const auto replaced = s.get_unit_waypoints(id);
+    check(replaced.size() == 1 && std::abs(replaced[0].first + 20) < 0.01f, "plain move replaces the whole queue");
+    check(s.issue_move_commands({id}, FactionId::ELITE_PRECISION, -20, 20, 3, true) == 1 &&
+          s.issue_move_commands({id}, FactionId::ELITE_PRECISION, 20, 20, 3, true) == 1, "queue rebuilt");
+    s.update(50);
+    check(s.get_unit_waypoints(id).size() == 3, "three waypoints before stop");
+    check(s.issue_stop_commands({id}, FactionId::ELITE_PRECISION) == 1, "stop accepted");
+    s.update(50);
+    check(!s.has_move_target(id) && s.queued_waypoint_count(id) == 0 && s.get_unit_waypoints(id).empty(),
+          "stop clears the current order and every queued waypoint");
+    const float x = s.get_unit_x(id), y = s.get_unit_y(id);
+    for (int tick = 0; tick < 100; ++tick) s.update(50);
+    check(s.get_unit_x(id) == x && s.get_unit_y(id) == y, "a stopped unit does not resume a cleared waypoint");
+    for (int index = 0; index < static_cast<int>(Simulation::MAX_MOVE_WAYPOINTS) + 4; ++index) {
+        s.issue_move_commands({id}, FactionId::ELITE_PRECISION, static_cast<float>(index % 2 ? 20 : -20),
+                              static_cast<float>(index % 3), 3, true);
+        s.update(1);
+    }
+    check(s.get_unit_waypoints(id).size() <= Simulation::MAX_MOVE_WAYPOINTS, "queue length is capped");
+}
 TEST(commands_typed_units_remain_idle_until_ordered) {
     Simulation s; s.start();
     const int id = s.create_unit_with_type(17, -9, UnitType::ELITE_MAIN_BATTLE_TANK,
@@ -227,10 +299,18 @@ TEST(commands_engineering_vehicle_converges_on_off_axis_and_retasked_orders) {
         return run_ground_maneuver(simulation, id, target_x, target_y, maximum_ticks, retask_tick, retask_x, retask_y);
     };
 
-    const auto radius_only = exercise(0.0f, 25.0f, 0.0f, -1, 0.0f, 0.0f, 300, 0.0f);
-    const auto perpendicular = exercise(0.0f, 25.0f, 0.0f);
+    // A destination 16 m square to the hull: without low-speed maneuver
+    // authority the engineer orbits it; with it, it arrives. (At the realistic
+    // 8 m/s chassis speed a 25 m target is reachable on the turning radius
+    // alone, so the control uses a tighter one.)
+    const auto radius_only = exercise(0.0f, 16.0f, 0.0f, -1, 0.0f, 0.0f, 300, 0.0f);
+    const auto tight_corrected = exercise(0.0f, 16.0f, 0.0f, -1, 0.0f, 0.0f, 300);
     check(!radius_only.arrived,
           "radius-only low-speed steering reproduces the engineer's non-convergent 90-degree maneuver");
+    check(tight_corrected.arrived,
+          ("maneuver authority lets the engineer reach the same tight 90-degree destination:" +
+           metrics_text(tight_corrected)).c_str());
+    const auto perpendicular = exercise(0.0f, 25.0f, 0.0f);
     check(perpendicular.arrived && perpendicular.arrival_tick < 340 &&
               perpendicular.negative_alignment_ticks < 120 && perpendicular.path_length < 45.0f,
           ("engineering vehicle promptly converges on a 90-degree move without a giant arc:" +
@@ -746,4 +826,105 @@ TEST(defend_command_moves_and_stops_unit) {
     float x = s.get_unit_x(unit_id);
     float y = s.get_unit_y(unit_id);
     check(x > 0 && x < 31 && y > 0 && y < 41, "unit moves toward defend position and stops");
+}
+TEST(unit_route_query_reports_the_corners_the_unit_drives_through) {
+    // A wall across the direct line forces the flow field around its top end.
+    const auto build = [](Simulation& s) {
+        s.start();
+        // It is thicker than the 16-cell escape reach, so a vehicle that clips
+        // a corner on its turning circle backs out instead of tunnelling.
+        s.pathfinding().block_world_rectangle(10.0f, -10.0f, 10.0f, 50.0f);
+        const auto tank = static_cast<EntityId>(s.create_unit_with_type(
+            -30.0f, 0.0f, UnitType::ELITE_MAIN_BATTLE_TANK, FactionId::ELITE_PRECISION));
+        check(tank != INVALID_ENTITY, "route test creates a ground vehicle");
+        check(s.issue_move_commands({tank}, FactionId::ELITE_PRECISION, 40.0f, 0.0f, 3) == 1,
+              "route test vehicle accepts the move order");
+        s.update(50.0f);
+        return tank;
+    };
+    Simulation s;
+    const auto tank = build(s);
+    std::vector<std::pair<float, float>> route;
+    check(s.get_unit_route(tank, route), "a moving unit reports a route");
+    check(route.size() >= 3, "a route blocked by a wall has at least one turn");
+    check(std::hypot(route.front().first - s.get_unit_x(tank), route.front().second - s.get_unit_y(tank)) < 0.001f,
+          "the route starts at the unit");
+    check(std::hypot(route.back().first - 40.0f, route.back().second) < movement::kArrivalRadiusMeters,
+          "the route ends at the ordered destination");
+    for (std::size_t index = 0; index + 1 < route.size(); ++index) {
+        check(s.pathfinding().has_line_of_sight(route[index].first, route[index].second,
+                                                route[index + 1].first, route[index + 1].second),
+              "no route leg crosses blocked ground");
+    }
+    bool bends = false;
+    bool rounds_wall = false;
+    for (std::size_t index = 1; index + 1 < route.size(); ++index) {
+        const float in = std::atan2(route[index].second - route[index - 1].second, route[index].first - route[index - 1].first);
+        const float out = std::atan2(route[index + 1].second - route[index].second, route[index + 1].first - route[index].first);
+        if (std::abs(std::remainder(out - in, 2.0f * std::numbers::pi_v<float>)) > 0.35f) bends = true;
+        rounds_wall = rounds_wall || route[index].second > 40.0f;
+    }
+    check(bends, "the route changes heading at its corners");
+    check(rounds_wall, "the route turns around the open end of the wall");
+    const auto drawn = route;
+    const auto distance_to_drawn = [&drawn](float x, float y) {
+        float best = std::numeric_limits<float>::infinity();
+        for (std::size_t index = 0; index + 1 < drawn.size(); ++index) {
+            const float ax = drawn[index].first, ay = drawn[index].second;
+            const float bx = drawn[index + 1].first - ax, by = drawn[index + 1].second - ay;
+            const float length_squared = bx * bx + by * by;
+            const float t = length_squared > 0.0f
+                ? std::clamp(((x - ax) * bx + (y - ay) * by) / length_squared, 0.0f, 1.0f) : 0.0f;
+            best = std::min(best, std::hypot(x - (ax + t * bx), y - (ay + t * by)));
+        }
+        return best;
+    };
+    float deviation = 0.0f;
+
+    const std::vector<std::pair<float, float>> corners(route.begin() + 1, route.end() - 1);
+    std::vector<float> closest(corners.size(), std::numeric_limits<float>::infinity());
+    bool rerouted_from_unit = false;
+    for (int tick = 0; tick < 1200 && s.has_move_target(tank); ++tick) {
+        s.update(50.0f);
+        const float x = s.get_unit_x(tank);
+        const float y = s.get_unit_y(tank);
+        for (std::size_t index = 0; index < corners.size(); ++index) {
+            closest[index] = std::min(closest[index], std::hypot(x - corners[index].first, y - corners[index].second));
+        }
+        deviation = std::max(deviation, distance_to_drawn(x, y));
+        if (tick == 40 && s.get_unit_route(tank, route)) {
+            rerouted_from_unit = std::hypot(route.front().first - x, route.front().second - y) < 0.001f &&
+                std::hypot(route.back().first - 40.0f, route.back().second) < movement::kArrivalRadiusMeters;
+        }
+    }
+    check(!s.has_move_target(tank), "the vehicle completes the routed order");
+    check(rerouted_from_unit, "the route follows the unit as it moves");
+    for (std::size_t index = 0; index < corners.size(); ++index) {
+        std::cout << "route corner " << index << " (" << corners[index].first << ", " << corners[index].second
+                  << ") closest approach " << closest[index] << " m\n";
+        check(closest[index] < 2.0f, "the vehicle passes within two navigation cells of every corner the route reported");
+    }
+    std::cout << "route largest deviation " << deviation << " m\n";
+    // The drawn route is the cell path; the hull swings wide of each turn by
+    // up to its turning radius.
+    const auto* steering = s.component_manager().get_component<GroundSteering>(tank);
+    const float turn_radius = steering ? steering->minimum_turn_radius : 0.0f;
+    check(steering != nullptr && deviation < 2.0f * s.pathfinding().cell_size() + turn_radius,
+          "the vehicle stays within two navigation cells plus its turning radius of the route it was shown");
+    check(!s.get_unit_route(tank, route) && route.empty(), "an arrived unit reports no route");
+
+    // Querying routes must not change the match: a twin match with no queries
+    // ends in exactly the same place.
+    Simulation queried;
+    Simulation untouched;
+    const auto queried_tank = build(queried);
+    const auto untouched_tank = build(untouched);
+    for (int tick = 0; tick < 200; ++tick) {
+        queried.get_unit_route(queried_tank, route);
+        queried.update(50.0f);
+        untouched.update(50.0f);
+    }
+    check(queried.get_unit_x(queried_tank) == untouched.get_unit_x(untouched_tank) &&
+          queried.get_unit_y(queried_tank) == untouched.get_unit_y(untouched_tank),
+          "route queries leave the simulation unchanged");
 }

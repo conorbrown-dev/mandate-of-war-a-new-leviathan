@@ -78,6 +78,8 @@ set(SIMULATION_SOURCES
      src/map/map_loader.cpp
       src/stats/stats_manager.cpp
       src/ai/ai_manager.cpp
+      src/ai/ai_doctrine.cpp
+      src/simulation/match_record.cpp
 )
 
 # === Include directories ===
@@ -129,15 +131,20 @@ add_custom_command(TARGET rts_gdextension POST_BUILD
 
 # === Benchmark ===
 
-# These two read Linux process memory and load the library by path.
+# The integration diagnostic reads Linux process memory and loads the library
+# by path, so it is Linux-only.
 if(NOT WIN32)
     add_executable(rts_benchmark benchmark/benchmark.cpp)
     target_link_libraries(rts_benchmark rts_simulation)
     target_include_directories(rts_benchmark PUBLIC ${CMAKE_SOURCE_DIR}/src)
+endif()
 
-    add_executable(rts_scale_benchmark benchmark/scale_benchmark.cpp)
-    target_link_libraries(rts_scale_benchmark rts_simulation)
-    target_include_directories(rts_scale_benchmark PUBLIC ${CMAKE_SOURCE_DIR}/src)
+# The accepted movement/formation harness (tools/validate.py simulation_scale_1000).
+add_executable(rts_scale_benchmark benchmark/scale_benchmark.cpp)
+target_link_libraries(rts_scale_benchmark rts_simulation)
+target_include_directories(rts_scale_benchmark PUBLIC ${CMAKE_SOURCE_DIR}/src)
+if(WIN32)
+    target_link_libraries(rts_scale_benchmark psapi)
 endif()
 
 add_executable(rts_balance_benchmark benchmark/balance_benchmark.cpp)
@@ -202,6 +209,8 @@ add_executable(rts_integration_tests
     tests/test_economy.cpp
     tests/test_terrain.cpp
     tests/test_fuel_supply.cpp
+    tests/test_match_flow.cpp
+    tests/test_ai_doctrine.cpp
     tests/test_territorial_control.cpp
     tests/test_stats.cpp
     tests/test_unit_cap.cpp

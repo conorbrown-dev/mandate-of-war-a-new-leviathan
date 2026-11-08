@@ -1,4 +1,5 @@
 #include <algorithm>
+#include <cstring>
 #include <cstdint>
 #include <chrono>
 #include <cmath>
@@ -14,6 +15,8 @@
 #include <godot_cpp/variant/packed_float32_array.hpp>
 #include <godot_cpp/variant/packed_int32_array.hpp>
 #include <godot_cpp/variant/packed_string_array.hpp>
+#include <godot_cpp/variant/packed_vector2_array.hpp>
+#include <godot_cpp/variant/vector2.hpp>
 #include <godot_cpp/variant/string.hpp>
 #include <godot_cpp/variant/dictionary.hpp>
 
@@ -45,7 +48,8 @@ int simulation_issue_move_commands(
     int player_id,
     float center_x,
     float center_y,
-    float spacing
+    float spacing,
+    int queued
 );
 int simulation_issue_stop_commands(
     const int32_t* entity_ids,
@@ -114,6 +118,8 @@ float simulation_last_tick_ms();
 float simulation_get_unit_x(int entity_id);
 float simulation_get_unit_y(int entity_id);
 int simulation_has_unit_move_target(int entity_id);
+int simulation_get_unit_route(int entity_id, int player_id, float* points_xy, int point_capacity);
+int simulation_get_unit_waypoints(int entity_id, int player_id, float* points_xy, int point_capacity);
 int simulation_get_unit_positions(
     const int32_t* entity_ids,
     int entity_count,
@@ -216,9 +222,12 @@ protected:
             D_METHOD("move_units_formation", "entity_ids", "center_x", "center_y", "spacing"),
             &RtsExtension::move_units_formation
         );
+        // queued=true appends a waypoint (Shift + right click) instead of
+        // replacing each unit's move order.
         ClassDB::bind_method(
-            D_METHOD("issue_move_commands", "entity_ids", "player_id", "center_x", "center_y", "spacing"),
-            &RtsExtension::issue_move_commands
+            D_METHOD("issue_move_commands", "entity_ids", "player_id", "center_x", "center_y", "spacing", "queued"),
+            &RtsExtension::issue_move_commands,
+            DEFVAL(false)
         );
         ClassDB::bind_method(
             D_METHOD("issue_stop_commands", "entity_ids", "player_id"),
@@ -243,6 +252,8 @@ protected:
         ClassDB::bind_method(D_METHOD("get_entity_count"), &RtsExtension::get_entity_count);
         ClassDB::bind_method(D_METHOD("get_unit_position", "entity_id"), &RtsExtension::get_unit_position);
         ClassDB::bind_method(D_METHOD("has_unit_move_target", "entity_id"), &RtsExtension::has_unit_move_target);
+        ClassDB::bind_method(D_METHOD("get_unit_routes", "entity_ids", "player_id"), &RtsExtension::get_unit_routes);
+        ClassDB::bind_method(D_METHOD("get_unit_waypoints", "entity_ids", "player_id"), &RtsExtension::get_unit_waypoints);
         ClassDB::bind_method(D_METHOD("get_unit_transforms", "entity_ids"), &RtsExtension::get_unit_transforms);
         ClassDB::bind_method(D_METHOD("get_unit_steering_state", "entity_id"), &RtsExtension::get_unit_steering_state);
         ClassDB::bind_method(D_METHOD("create_unit_with_type", "x", "y", "unit_type", "faction_id"), &RtsExtension::create_unit_with_type);
@@ -265,6 +276,24 @@ protected:
         ClassDB::bind_method(D_METHOD("reinforcement_delivery_request", "faction_id"), &RtsExtension::reinforcement_delivery_request);
         ClassDB::bind_method(D_METHOD("reinforcement_delivery_set_resources", "faction_id", "material", "energy"), &RtsExtension::reinforcement_delivery_set_resources);
         ClassDB::bind_method(D_METHOD("reinforcement_delivery_state"), &RtsExtension::reinforcement_delivery_state);
+        ClassDB::bind_method(D_METHOD("match_begin", "player_post", "enemy_post"), &RtsExtension::match_begin);
+        ClassDB::bind_method(D_METHOD("match_state"), &RtsExtension::match_state);
+        ClassDB::bind_method(D_METHOD("ai_configure_assault", "min_x", "min_y", "max_x", "max_y", "first_wave", "wave_growth", "max_wave"), &RtsExtension::ai_configure_assault);
+        ClassDB::bind_method(D_METHOD("ai_styles"), &RtsExtension::ai_styles);
+        ClassDB::bind_method(D_METHOD("ai_set_style", "doctrine", "difficulty"), &RtsExtension::ai_set_style);
+        ClassDB::bind_method(D_METHOD("ai_style"), &RtsExtension::ai_style);
+        ClassDB::bind_method(D_METHOD("match_record_set_info", "key", "value"), &RtsExtension::match_record_set_info);
+        ClassDB::bind_method(D_METHOD("match_record_state"), &RtsExtension::match_record_state);
+        ClassDB::bind_method(D_METHOD("match_record_json"), &RtsExtension::match_record_json);
+        ClassDB::bind_method(D_METHOD("vision_state", "faction_id"), &RtsExtension::vision_state);
+        ClassDB::bind_method(D_METHOD("vision_revision"), &RtsExtension::vision_revision);
+        ClassDB::bind_method(D_METHOD("can_see", "faction_id", "x", "y"), &RtsExtension::can_see);
+        ClassDB::bind_method(D_METHOD("get_removed_entities", "entity_ids"), &RtsExtension::get_removed_entities);
+        ClassDB::bind_method(D_METHOD("get_airborne_flags", "entity_ids"), &RtsExtension::get_airborne_flags);
+        ClassDB::bind_method(D_METHOD("forces_by_transport_set", "enabled"), &RtsExtension::forces_by_transport_set);
+        ClassDB::bind_method(D_METHOD("landing_zone_set", "faction_id", "x", "y"), &RtsExtension::landing_zone_set);
+        ClassDB::bind_method(D_METHOD("delivery_state", "faction_id"), &RtsExtension::delivery_state);
+        ClassDB::bind_method(D_METHOD("get_tick_clock"), &RtsExtension::get_tick_clock);
         ClassDB::bind_method(D_METHOD("fuel_shipment_request", "faction_id"), &RtsExtension::fuel_shipment_request);
         ClassDB::bind_method(D_METHOD("fuel_supply_state", "faction_id"), &RtsExtension::fuel_supply_state);
         ClassDB::bind_method(D_METHOD("economy_assign_fuel_depot", "depot_id", "faction_id"), &RtsExtension::economy_assign_fuel_depot);
@@ -359,28 +388,162 @@ protected:
 
     bool reinforcement_delivery_select_zone(int64_t faction_id, double x, double y) const {
         if (faction_id < 0 || faction_id > 2) return false;
+        record_action("reinforcement_delivery_select_zone", {static_cast<double>(faction_id), x, y});
         return rts::runtime_simulation()->select_reinforcement_delivery_zone(static_cast<rts::FactionId>(faction_id),
             static_cast<float>(x), static_cast<float>(y));
     }
 
     bool reinforcement_delivery_request(int64_t faction_id) const {
         if (faction_id < 0 || faction_id > 2) return false;
+        record_action("reinforcement_delivery_request", {static_cast<double>(faction_id)});
         return rts::runtime_simulation()->request_reinforcement_delivery(static_cast<rts::FactionId>(faction_id));
     }
 
     void reinforcement_delivery_set_resources(int64_t faction_id, double material, double energy) const {
         if (faction_id < 0 || faction_id > 2) return;
+        record_action("reinforcement_delivery_set_resources", {static_cast<double>(faction_id), material, energy});
         rts::runtime_simulation()->set_reinforcement_resources(static_cast<rts::FactionId>(faction_id),
             static_cast<float>(material), static_cast<float>(energy));
     }
 
+    void match_begin(int64_t player_post, int64_t enemy_post) const {
+        rts::runtime_simulation()->begin_match(static_cast<rts::EntityId>(player_post), static_cast<rts::EntityId>(enemy_post));
+    }
+
+    Dictionary match_state() const {
+        auto* simulation = rts::runtime_simulation();
+        Dictionary state;
+        state["result"] = simulation->match_result();
+        state["seconds"] = simulation->match_seconds();
+        state["waves"] = simulation->ai_manager().waves_launched();
+        return state;
+    }
+
+    void ai_configure_assault(double min_x, double min_y, double max_x, double max_y, int64_t first_wave, int64_t wave_growth, int64_t max_wave) const {
+        rts::runtime_simulation()->ai_manager().configure_assault(static_cast<float>(min_x), static_cast<float>(min_y),
+            static_cast<float>(max_x), static_cast<float>(max_y), static_cast<int>(first_wave), static_cast<int>(wave_growth), static_cast<int>(max_wave));
+    }
+
+    int64_t vision_revision() const { return rts::runtime_simulation()->vision_revision(); }
+
+    bool can_see(int64_t faction_id, double x, double y) const {
+        if (faction_id < 0 || faction_id > 2) return false;
+        return rts::runtime_simulation()->can_see(static_cast<rts::FactionId>(faction_id), static_cast<float>(x), static_cast<float>(y));
+    }
+
+    Dictionary vision_state(int64_t faction_id) const {
+        Dictionary state;
+        if (faction_id < 0 || faction_id > 2) return state;
+        const auto* simulation = rts::runtime_simulation();
+        const auto faction = static_cast<rts::FactionId>(faction_id);
+        const auto& map = simulation->vision_map();
+        const auto& cells = map.cells(faction);
+        PackedByteArray bytes;
+        bytes.resize(static_cast<int64_t>(cells.size()));
+        if (!cells.empty()) std::memcpy(bytes.ptrw(), cells.data(), cells.size());
+        PackedInt32Array seen;
+        for (const auto entity : simulation->seen_enemies(faction)) seen.append(static_cast<int32_t>(entity));
+        state["width"] = map.width();
+        state["height"] = map.height();
+        state["cells"] = bytes;
+        state["seen_enemies"] = seen;
+        // x, y, seconds since seen and unit type for each enemy now out of sight.
+        // Fixed structures are left out: found ones stay on the map anyway.
+        PackedFloat32Array last_known;
+        const auto tick = simulation->simulation_tick();
+        for (const auto& [id, sighting] : simulation->last_known(faction)) {
+            (void)id;
+            if (sighting.in_view || !sighting.mobile) continue;
+            last_known.append(sighting.x);
+            last_known.append(sighting.y);
+            last_known.append(static_cast<float>(tick - sighting.tick) / 20.0f);
+            last_known.append(static_cast<float>(sighting.unit_type));
+        }
+        state["last_known"] = last_known;
+        return state;
+    }
+
+    // Every style and difficulty in data/ai_doctrines.json, for menus.
+    Dictionary ai_styles() const {
+        const auto& catalog = rts::get_ai_doctrines();
+        Array doctrines, difficulties;
+        for (const auto& doctrine : catalog.doctrines) {
+            Dictionary entry;
+            entry["key"] = String(doctrine.key.c_str());
+            entry["name"] = String(doctrine.name.c_str());
+            doctrines.push_back(entry);
+        }
+        for (const auto& difficulty : catalog.difficulties) {
+            Dictionary entry;
+            entry["key"] = String(difficulty.key.c_str());
+            entry["name"] = String(difficulty.name.c_str());
+            difficulties.push_back(entry);
+        }
+        Dictionary result;
+        result["doctrines"] = doctrines;
+        result["difficulties"] = difficulties;
+        result["default_doctrine"] = String(catalog.default_doctrine.c_str());
+        result["default_difficulty"] = String(catalog.default_difficulty.c_str());
+        return result;
+    }
+
+    // Unknown keys change nothing and return false.
+    bool ai_set_style(const String& doctrine_key, const String& difficulty_key) const {
+        const auto* doctrine = rts::find_ai_doctrine(doctrine_key.utf8().get_data());
+        const auto* difficulty = rts::find_ai_difficulty(difficulty_key.utf8().get_data());
+        if (!doctrine || !difficulty) return false;
+        auto* simulation = rts::runtime_simulation();
+        simulation->ai_manager().set_doctrine(*doctrine);
+        simulation->ai_manager().set_difficulty(*difficulty);
+        simulation->match_record().set_info("ai_doctrine", doctrine->key);
+        simulation->match_record().set_info("ai_difficulty", difficulty->key);
+        return true;
+    }
+
+    Dictionary ai_style() const {
+        const auto& ai = rts::runtime_simulation()->ai_manager();
+        Dictionary state;
+        state["doctrine"] = String(ai.doctrine().key.c_str());
+        state["doctrine_name"] = String(ai.doctrine().name.c_str());
+        state["difficulty"] = String(ai.difficulty().key.c_str());
+        state["difficulty_name"] = String(ai.difficulty().name.c_str());
+        return state;
+    }
+
+    void match_record_set_info(const String& key, const String& value) const {
+        rts::runtime_simulation()->match_record().set_info(key.utf8().get_data(), value.utf8().get_data());
+    }
+
+    Dictionary match_record_state() const {
+        const auto& record = rts::runtime_simulation()->match_record();
+        Dictionary state;
+        state["started"] = record.started();
+        state["recording"] = record.recording();
+        state["finished"] = record.started() && !record.recording();
+        state["commands"] = static_cast<int64_t>(record.commands().size());
+        state["actions"] = static_cast<int64_t>(record.actions().size());
+        state["hashes"] = static_cast<int64_t>(record.hashes().size());
+        state["result"] = record.result();
+        return state;
+    }
+
+    String match_record_json() const {
+        return String::utf8(rts::runtime_simulation()->match_record().to_json().c_str());
+    }
+
+    static void record_action(const char* name, std::vector<double> args) {
+        rts::runtime_simulation()->record_external_action(name, std::move(args));
+    }
+
     bool fuel_shipment_request(int64_t faction_id) const {
         if (faction_id < 0 || faction_id > 2) return false;
+        record_action("fuel_shipment_request", {static_cast<double>(faction_id)});
         return rts::runtime_simulation()->request_fuel_shipment(static_cast<rts::FactionId>(faction_id));
     }
 
     bool economy_assign_fuel_depot(int64_t depot_id, int64_t faction_id) const {
         if (depot_id <= 0 || faction_id < 0 || faction_id > 2) return false;
+        record_action("economy_assign_fuel_depot", {static_cast<double>(depot_id), static_cast<double>(faction_id)});
         return rts::runtime_simulation()->assign_fuel_depot(
             static_cast<rts::EntityId>(depot_id), static_cast<rts::FactionId>(faction_id));
     }
@@ -715,9 +878,14 @@ public:
             entry["material"] = production.get_unit_metal_cost(faction, type);
             entry["build_seconds"] = prototype.build_time_seconds;
             entry["is_aircraft"] = prototype.is_aircraft;
-            const bool airfield_ready = !prototype.is_aircraft || !prototype.requires_runway ||
+            const bool airfield_ready = !prototype.is_aircraft || !prototype.requires_runway || prototype.recon_loiter_seconds > 0.0f ||
                 rts::runtime_simulation()->territorial_control_manager().has_active_installation(faction, rts::InstallationType::AIRFIELD);
-            entry["available"] = line != rts::INVALID_ENTITY && airfield_ready && production.can_queue_unit(line, faction, type);
+            const auto& simulation = *rts::runtime_simulation();
+            const bool delivered = simulation.needs_delivery(type);
+            const std::string refusal = delivered ? simulation.delivery_refusal(faction, type) : std::string();
+            entry["available"] = line != rts::INVALID_ENTITY && airfield_ready && production.can_queue_unit(line, faction, type) && refusal.empty();
+            entry["delivered"] = delivered;
+            entry["reason"] = String(refusal.c_str());
             entry["is_structure"] = false;
             entry["nato_symbol_id"] = String(prototype.nato_symbol.c_str());
             catalog.append(entry);
@@ -753,6 +921,13 @@ public:
         result["material"] = site.material;
         result["fuel"] = site.fuel;
         result["seconds"] = site.seconds;
+        // Half-extents of ground that stays walkable around the finished
+        // structure: its footprint, the navigation cells blocking rounds out
+        // to, and one clear cell for the builder to stand on.
+        const auto rules = rts::structure_site_rules(static_cast<uint8_t>(structure_type));
+        const float cell = rts::runtime_simulation()->pathfinding().cell_size();
+        result["clearance_x"] = rules.footprint_x * 0.5f + cell * 1.5f;
+        result["clearance_y"] = rules.footprint_y * 0.5f + cell * 1.5f;
         return result;
     }
 
@@ -769,6 +944,7 @@ public:
     }
 
     bool queue_faction_structure(int64_t faction_id, int64_t structure_type, double x, double y) const {
+        record_action("queue_faction_structure", {static_cast<double>(faction_id), static_cast<double>(structure_type), x, y});
         return queue_structure(get_faction_production_line(faction_id), faction_id, structure_type, x, y);
     }
 
@@ -776,8 +952,9 @@ public:
         auto line_id = get_faction_production_line(faction_id);
         if (line_id <= 0) return false;
         if (unit_type < 0 || unit_type > 255) return false;
-        return rts::runtime_simulation()->production_manager().queue_unit(
-            static_cast<rts::EntityId>(line_id), static_cast<rts::FactionId>(faction_id), static_cast<rts::UnitType>(unit_type), static_cast<float>(x), static_cast<float>(y));
+        record_action("queue_faction_unit", {static_cast<double>(faction_id), static_cast<double>(unit_type), x, y});
+        return rts::runtime_simulation()->order_unit(
+            static_cast<rts::FactionId>(faction_id), static_cast<rts::UnitType>(unit_type), static_cast<float>(x), static_cast<float>(y));
     }
 
     bool validate_structure_placement(int64_t structure_type, double x, double y) const {
@@ -800,6 +977,7 @@ public:
     bool queue_road(int64_t engineer_id, int64_t faction_id, double start_x, double start_y,
                     double end_x, double end_y) const {
         if (engineer_id <= 0 || faction_id < 0 || faction_id > 2) return false;
+        record_action("queue_road", {static_cast<double>(engineer_id), static_cast<double>(faction_id), start_x, start_y, end_x, end_y});
         return rts::runtime_simulation()->queue_road(
             static_cast<rts::EntityId>(engineer_id), static_cast<rts::FactionId>(faction_id),
             static_cast<float>(start_x), static_cast<float>(start_y),
@@ -869,6 +1047,7 @@ public:
 
     bool destroy_resource_site(int64_t entity_id, double x, double y) const {
         if (entity_id <= 0) return false;
+        record_action("destroy_resource_site", {static_cast<double>(entity_id), x, y});
         return rts::runtime_simulation()->destroy_resource_site(
             static_cast<rts::EntityId>(entity_id), static_cast<float>(x), static_cast<float>(y));
     }
@@ -879,6 +1058,90 @@ public:
         ids.resize(static_cast<int>(entities.size()));
         for (int index = 0; index < ids.size(); ++index) ids[index] = static_cast<int32_t>(entities[index]);
         return ids;
+    }
+
+    // [tick, fraction]: the last completed simulation tick and how far the
+    // clock has run toward the next one (0 to 1), for frame interpolation.
+    PackedFloat64Array get_tick_clock() const {
+        PackedFloat64Array clock;
+        clock.resize(2);
+        const auto* simulation = rts::runtime_simulation();
+        clock.set(0, simulation ? static_cast<double>(simulation->simulation_tick()) : 0.0);
+        clock.set(1, simulation ? std::clamp(static_cast<double>(simulation->tick_fraction()), 0.0, 1.0) : 0.0);
+        return clock;
+    }
+
+    void forces_by_transport_set(bool enabled) const {
+        record_action("forces_by_transport_set", {enabled ? 1.0 : 0.0});
+        rts::runtime_simulation()->set_forces_by_transport(enabled);
+    }
+
+    bool landing_zone_set(int64_t faction_id, double x, double y) const {
+        if (faction_id < 0 || faction_id >= 3) return false;
+        record_action("landing_zone_set", {static_cast<double>(faction_id), x, y});
+        return rts::runtime_simulation()->set_landing_zone(static_cast<rts::FactionId>(faction_id),
+            static_cast<float>(x), static_cast<float>(y));
+    }
+
+    // The transport rule for one faction: whether it is on, where forces land,
+    // and every force still on its way, soonest first.
+    Dictionary delivery_state(int64_t faction_id) const {
+        Dictionary state;
+        if (faction_id < 0 || faction_id >= 3) return state;
+        const auto faction = static_cast<rts::FactionId>(faction_id);
+        const auto& simulation = *rts::runtime_simulation();
+        state["enabled"] = simulation.forces_by_transport();
+        float x = 0.0f, y = 0.0f;
+        const bool site = simulation.landing_site(faction, x, y);
+        state["has_site"] = site;
+        if (site) {
+            state["x"] = x;
+            state["y"] = y;
+        }
+        Array inbound;
+        std::vector<rts::Simulation::InboundForce> own;
+        for (const auto& force : simulation.inbound_forces()) {
+            if (force.faction == faction) own.push_back(force);
+        }
+        std::sort(own.begin(), own.end(), [](const auto& a, const auto& b) { return a.arrive_tick < b.arrive_tick; });
+        for (const auto& force : own) {
+            Dictionary entry;
+            entry["type"] = static_cast<int>(force.type);
+            entry["remaining_ms"] = force.arrive_tick > simulation.simulation_tick()
+                ? static_cast<double>(force.arrive_tick - simulation.simulation_tick()) * 50.0 : 0.0;
+            inbound.append(entry);
+        }
+        state["inbound"] = inbound;
+        return state;
+    }
+
+    // One byte per entity: 1 while an aircraft is off the ground (taking off,
+    // flying or returning), else 0. The view flies those at cruise altitude.
+    PackedByteArray get_airborne_flags(const PackedInt32Array& entity_ids) const {
+        PackedByteArray flags;
+        flags.resize(entity_ids.size());
+        auto& simulation = *rts::runtime_simulation();
+        for (int index = 0; index < entity_ids.size(); ++index) {
+            const auto* aircraft = simulation.component_manager().get_component<rts::Aircraft>(
+                static_cast<rts::EntityId>(entity_ids[index]));
+            const bool airborne = aircraft && aircraft->status != rts::Aircraft::Status::ON_GROUND &&
+                aircraft->status != rts::Aircraft::Status::QUEUED_FOR_TAKEOFF &&
+                aircraft->status != rts::Aircraft::Status::CRASHED;
+            flags.set(index, airborne ? 1 : 0);
+        }
+        return flags;
+    }
+
+    // Presented units whose entity is gone, such as a recon plane that left the map.
+    PackedInt32Array get_removed_entities(const PackedInt32Array& entity_ids) const {
+        PackedInt32Array removed;
+        auto& simulation = *rts::runtime_simulation();
+        std::unordered_set<int32_t> live;
+        for (const auto entity_id : simulation.get_entity_list()) live.insert(static_cast<int32_t>(entity_id));
+        for (int index = 0; index < entity_ids.size(); ++index) {
+            if (!live.contains(entity_ids[index])) removed.append(entity_ids[index]);
+        }
+        return removed;
     }
 
     Array get_unpresented_entities(const PackedInt32Array& known_entity_ids) const {
@@ -898,6 +1161,8 @@ public:
             Dictionary entity;
             entity["id"] = id;
             entity["faction_id"] = static_cast<int>(faction_id);
+            const auto* data = simulation.component_manager().get_component<rts::UnitData>(entity_id);
+            entity["unit_type"] = data ? data->unit_type : -1;
             entity["x"] = simulation.get_unit_x(entity_id);
             entity["y"] = simulation.get_unit_y(entity_id);
             entities.append(entity);
@@ -914,6 +1179,9 @@ public:
         double center_x,
         double center_y,
         double spacing) const {
+        std::vector<double> args{center_x, center_y, spacing};
+        for (int64_t index = 0; index < entity_ids.size(); ++index) args.push_back(entity_ids[index]);
+        record_action("move_units_formation", std::move(args));
         simulation_move_units_formation(
             entity_ids.ptr(),
             entity_ids.size(),
@@ -928,7 +1196,8 @@ public:
         int64_t player_id,
         double center_x,
         double center_y,
-        double spacing) const {
+        double spacing,
+        bool queued) const {
         if (player_id < 0 || player_id > 2) return 0;
         return simulation_issue_move_commands(
             entity_ids.ptr(),
@@ -936,7 +1205,8 @@ public:
             static_cast<int>(player_id),
             static_cast<float>(center_x),
             static_cast<float>(center_y),
-            static_cast<float>(spacing)
+            static_cast<float>(spacing),
+            queued ? 1 : 0
         );
     }
 
@@ -1060,6 +1330,7 @@ public:
     }
 
     int64_t create_unit_with_type(double x, double y, int64_t unit_type, int64_t faction_id) {
+        record_action("create_unit_with_type", {x, y, static_cast<double>(unit_type), static_cast<double>(faction_id)});
         return simulation_create_unit_with_type(
             static_cast<float>(x),
             static_cast<float>(y),
@@ -1236,6 +1507,50 @@ public:
 
     bool has_unit_move_target(int64_t entity_id) const {
         return simulation_has_unit_move_target(static_cast<int>(entity_id)) != 0;
+    }
+
+    // Presentation-only: the remaining route of each of the player's own units
+    // as simulation (x, y) points, starting at the unit and ending at its
+    // arrival point. The result is parallel to entity_ids; an entry is empty
+    // when that unit has no move order or belongs to someone else.
+    Array get_unit_routes(const PackedInt32Array& entity_ids, int64_t player_id) const {
+        constexpr int ROUTE_CAPACITY = 128;
+        constexpr int64_t MAX_ROUTE_QUERIES = 512;
+        Array routes;
+        const int64_t count = std::min<int64_t>(entity_ids.size(), MAX_ROUTE_QUERIES);
+        for (int64_t entry = 0; entry < count; ++entry) {
+            float points[ROUTE_CAPACITY * 2];
+            const int point_count = simulation_get_unit_route(
+                entity_ids[entry], static_cast<int>(player_id), points, ROUTE_CAPACITY);
+            PackedVector2Array route;
+            route.resize(point_count);
+            for (int index = 0; index < point_count; ++index) {
+                route.set(index, Vector2(points[index * 2], points[index * 2 + 1]));
+            }
+            routes.append(route);
+        }
+        return routes;
+    }
+
+    // Per queried unit: its current destination, then each queued waypoint,
+    // in driving order. Empty for an idle unit or another player's unit.
+    Array get_unit_waypoints(const PackedInt32Array& entity_ids, int64_t player_id) const {
+        constexpr int WAYPOINT_CAPACITY = 32;
+        constexpr int64_t MAX_WAYPOINT_QUERIES = 512;
+        Array result;
+        const int64_t count = std::min<int64_t>(entity_ids.size(), MAX_WAYPOINT_QUERIES);
+        for (int64_t entry = 0; entry < count; ++entry) {
+            float points[WAYPOINT_CAPACITY * 2];
+            const int point_count = simulation_get_unit_waypoints(
+                entity_ids[entry], static_cast<int>(player_id), points, WAYPOINT_CAPACITY);
+            PackedVector2Array waypoints;
+            waypoints.resize(point_count);
+            for (int index = 0; index < point_count; ++index) {
+                waypoints.set(index, Vector2(points[index * 2], points[index * 2 + 1]));
+            }
+            result.append(waypoints);
+        }
+        return result;
     }
 
     PackedFloat32Array get_unit_off_road_state(int64_t entity_id) const {

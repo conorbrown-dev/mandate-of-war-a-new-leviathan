@@ -88,6 +88,10 @@ struct UnitPrototype {
     float operational_energy = 0.0f;
     float operational_material = 0.0f;
     float max_airborne_time_seconds = 0.0f;
+    // Above zero, this aircraft flies a flight plan: straight from off the map to
+    // a point set when ordered, on station this long, then off the map. It uses
+    // no airfield and takes no further orders.
+    float recon_loiter_seconds = 0.0f;
     float energy_consumption_rate = 0.0f;
     float material_consumption_rate = 0.0f;
     // Presentation-only stable reference. Gameplay never derives behavior
@@ -134,6 +138,8 @@ struct FactionStartData {
 
 // Faction data keyed by FactionId
 const std::unordered_map<FactionId, FactionStartData>& get_faction_start_data();
+// Reads a file from the game data folder (data/, or RTS_DATA_ROOT). Throws when missing.
+std::string read_game_data(const char* filename);
 
 // Parses the contents of a unit data file. Throws on invalid content.
 std::unordered_map<UnitType, UnitPrototype> parse_unit_catalog(const std::string& json);

@@ -33,6 +33,7 @@ struct Health {
 struct UnitData {
     float speed;
     float view_range;
+    int unit_type = -1;
 };
 
 // Lightweight deterministic ground-motion state; no rigid bodies required.

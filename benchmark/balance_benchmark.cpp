@@ -173,7 +173,15 @@ int main(int argc, char** argv) {
     try {
         const auto root = load_matchups(argc > 1 ? argv[1] : "data/balance_matchups.json");
         const auto budget = static_cast<float>(root.get("budget")->as_number());
-        const auto separation = static_cast<float>(root.get("separation")->as_number());
+        // One fight per pairing at one distance is close to winner-take-all at
+        // realistic speeds: a 1% stat change can flip it. Each pairing is fought
+        // at every listed starting distance and the scores are averaged.
+        std::vector<float> separations;
+        if (const auto listed = root.get("separations")) {
+            for (const auto& value : listed->as_array()) separations.push_back(static_cast<float>(value.as_number()));
+        } else {
+            separations.push_back(static_cast<float>(root.get("separation")->as_number()));
+        }
         const auto maximum_ticks = static_cast<int>(root.get("maximum_ticks")->as_number());
         const auto tolerance = root.get("tolerance")->as_number();
         const auto armies_value = *root.get("armies");
@@ -198,16 +206,22 @@ int main(int argc, char** argv) {
         std::cout << "budget=" << budget << " tolerance=" << tolerance << '\n';
         for (size_t a = 0; a < armies.size(); ++a) {
             for (size_t b = a + 1; b < armies.size(); ++b) {
-                const auto left = fight(armies[a], armies[b], budget, separation, maximum_ticks);
-                const auto right = fight(armies[b], armies[a], budget, separation, maximum_ticks);
-                const double score = ((left.first_value - left.second_value) + (right.second_value - right.first_value)) / (2.0 * budget);
+                double total = 0.0;
+                std::string detail;
+                for (const float separation : separations) {
+                    const auto left = fight(armies[a], armies[b], budget, separation, maximum_ticks);
+                    const auto right = fight(armies[b], armies[a], budget, separation, maximum_ticks);
+                    const double fought = ((left.first_value - left.second_value) + (right.second_value - right.first_value)) / (2.0 * budget);
+                    total += fought;
+                    detail += "  [" + std::to_string(static_cast<int>(separation)) + " m: " + std::to_string(fought).substr(0, 6) +
+                              ", units " + std::to_string(left.first_units) + "/" + std::to_string(left.second_units) +
+                              " and " + std::to_string(right.second_units) + "/" + std::to_string(right.first_units) + "]";
+                }
+                const double score = total / static_cast<double>(separations.size());
                 const bool within = std::abs(score) <= tolerance;
                 balanced = balanced && within;
                 std::cout << armies[a].name << " vs " << armies[b].name << ": score " << score
-                          << (within ? " OK" : " OUTSIDE") << "  [left " << left.first_units << "/" << left.second_units
-                          << " units, value " << left.first_value << "/" << left.second_value << ", " << left.ticks << " ticks]"
-                          << "  [right " << right.second_units << "/" << right.first_units
-                          << " units, value " << right.second_value << "/" << right.first_value << ", " << right.ticks << " ticks]\n";
+                          << (within ? " OK" : " OUTSIDE") << detail << '\n';
             }
         }
         if (!balanced) {
