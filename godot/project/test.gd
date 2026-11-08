@@ -44,8 +44,8 @@ func _init() -> void:
 		return
 	invalid_definition = scenario_definition.duplicate(true)
 	invalid_definition.ai.spawn = [-105, 0]
-	if SkirmishConfigLoader.validate_definition(invalid_definition) == "":
-		push_error("Goal 08 scenario validation accepted both sides on one landmass")
+	if SkirmishConfigLoader.validate_definition(invalid_definition) != "":
+		push_error("Scenario validation refused both sides on one landmass, which is how the demo battle is fought")
 		quit(1)
 		return
 	invalid_definition = scenario_definition.duplicate(true)
@@ -78,11 +78,15 @@ func _init() -> void:
 	var count: int = extension.call("get_entity_count")
 	var move_ids := PackedInt32Array([entity_id])
 	var accepted_moves: int = extension.call("issue_move_commands", move_ids, 0, 8.0, 3.0, 3.0)
-	for _tick in range(10):
+	for _tick in range(40):
 		extension.call("update_simulation", 50.0)
 	var transforms: PackedFloat32Array = extension.call("get_unit_transforms", move_ids)
 	var x: float = transforms[0] if transforms.size() == 3 else NAN
 	var y: float = transforms[1] if transforms.size() == 3 else NAN
+	for _tick in range(5):
+		extension.call("update_simulation", 50.0)
+	var settled_transforms: PackedFloat32Array = extension.call("get_unit_transforms", move_ids)
+	var settled_x: float = settled_transforms[0] if settled_transforms.size() == 3 else NAN
 	var second_move_count: int = extension.call("issue_move_commands", move_ids, 0, 30.0, 3.0, 3.0)
 	extension.call("update_simulation", 50.0)
 	var stop_count: int = extension.call("issue_stop_commands", move_ids, 0)
@@ -113,8 +117,13 @@ func _init() -> void:
 		push_error("stop_count check failed: %d" % stop_count)
 		quit(1)
 		return
-	if not is_equal_approx(x, 8.0):
+	# Units stop once inside movement::kArrivalRadiusMeters (0.75 m) of the order.
+	if absf(x - 8.0) > 0.75:
 		push_error("x check failed: %f" % x)
+		quit(1)
+		return
+	if not is_equal_approx(x, settled_x):
+		push_error("arrival rest check failed: %f vs %f" % [x, settled_x])
 		quit(1)
 		return
 	if not is_equal_approx(y, 3.0):

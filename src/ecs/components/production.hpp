@@ -17,8 +17,7 @@ struct ResourceNode {
     float max_amount;
     enum class Type : uint8_t {
         METAL,
-        ENERGY,
-        RESEARCH
+        ENERGY
     } type;
     bool depleted;
 };
@@ -36,10 +35,8 @@ struct Storage {
     float x, y;
     float metal_storage;
     float energy_storage;
-    float research_storage;
     float metal_capacity;
     float energy_capacity;
-    float research_capacity;
     // Phase-1 canonical state. Legacy fields above remain only as a narrow
     // compatibility bridge for old production/content consumers; Phase 2
     // moves those consumers to this state and deletes the bridge.
@@ -57,16 +54,17 @@ struct ConstructionQueueEntry {
     float build_progress;
     float total_cost_metal;
     float total_cost_energy;
-    float total_cost_research;
     float metal_per_tick;
     float energy_per_tick;
-    float research_per_tick;
     float build_time_seconds;
     bool completed;
     uint8_t structure_type = 0;
     std::string display_name;
     float target_x = 0.0f;
     float target_y = 0.0f;
+    uint8_t graded_structure = 0; // Valid for an earthworks job
+    float total_cost_fuel = 0.0f;
+    float fuel_per_tick = 0.0f;
 };
 
 struct ProductionLine {

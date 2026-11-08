@@ -3,6 +3,8 @@
 #include <algorithm>
 #include <cmath>
 #include "ecs/components/factions.hpp"
+#include "simulation/structure_sites.hpp"
+#include "simulation/fuel_supply.hpp"
 
 namespace rts {
 
@@ -96,8 +98,6 @@ void ProductionManager::extract_resource(EntityId extractor_id, float delta_ms) 
                 balance = &storage->second.tactical.fuel.current;
                 capacity = storage->second.tactical.fuel.capacity;
                 break;
-            case ResourceNode::Type::RESEARCH:
-                return; // strategic-only; tactical extractors do not collect it.
         }
         amount = std::min(amount, std::max(0.0f, capacity - *balance));
     }
@@ -105,6 +105,8 @@ void ProductionManager::extract_resource(EntityId extractor_id, float delta_ms) 
     if (balance) *balance += amount;
     if (storage != storages_.end() && node.type == ResourceNode::Type::METAL)
         storage->second.metal_storage = storage->second.tactical.materials.current;
+    if (storage != storages_.end() && node.type == ResourceNode::Type::ENERGY)
+        storage->second.energy_storage = storage->second.tactical.fuel.current;
     node.amount -= amount;
     node.depleted = node.amount <= 0;
     ++extraction_count_;
@@ -139,14 +141,13 @@ bool ProductionManager::set_tactical_power(EntityId storage_id, float generation
     return true;
 }
 
-void ProductionManager::update_storage(EntityId storage_id, float metal, float energy, float research) {
+void ProductionManager::update_storage(EntityId storage_id, float metal, float energy) {
     auto it = storages_.find(storage_id);
     if (it != storages_.end()) {
         it->second.tactical.materials.current = std::clamp(it->second.tactical.materials.current + metal, 0.0f, it->second.tactical.materials.max);
         it->second.tactical.fuel.current = std::clamp(it->second.tactical.fuel.current + energy, 0.0f, it->second.tactical.fuel.capacity);
         it->second.metal_storage = it->second.tactical.materials.current;
         it->second.energy_storage = it->second.tactical.fuel.current;
-        (void)research; // Research is not a tactical balance.
     }
 }
 
@@ -198,33 +199,29 @@ void ProductionManager::update_construction_queues(float delta_ms) {
         auto& entry = line.queue.front();
         auto storage = storages_.find(line.storage_id);
         if (storage == storages_.end() || entry.build_time_seconds <= 0) continue;
+        const bool is_unit = entry.type == ConstructionQueueEntry::Type::UNIT;
+        const auto slots = unit_slots_.find(entry.faction_id);
+        if (is_unit && slots != unit_slots_.end() && slots->second <= 0) continue;
         const float fraction = std::min(dt / entry.build_time_seconds, 1.0f - entry.build_progress);
         const float ticks = fraction * entry.build_time_seconds * 20.0f;
         float metal = entry.metal_per_tick * ticks;
         auto& funds = storage->second;
-        if (funds.tactical.materials.current < metal) continue;
+        const float fuel = entry.fuel_per_tick * ticks;
+        if (funds.tactical.materials.current < metal || funds.tactical.fuel.current < fuel) continue;
         funds.tactical.materials.current -= metal;
         funds.metal_storage = funds.tactical.materials.current;
+        if (fuel > 0.0f) {
+            funds.tactical.fuel.current -= fuel;
+            funds.energy_storage = funds.tactical.fuel.current;
+        }
         entry.build_progress += fraction;
         line.active_jobs = 1;
         if (entry.build_progress >= 1.0f - 0.0001f) {
             completed_constructions_.push_back({entry.entity_id, entry.unit_type, entry.faction_id, entry.target_x, entry.target_y,
-                entry.type == ConstructionQueueEntry::Type::BUILDING, entry.structure_type});
+                entry.type == ConstructionQueueEntry::Type::BUILDING, entry.structure_type, entry.graded_structure});
+            if (is_unit && slots != unit_slots_.end()) --slots->second;
             line.queue.pop(); // no reference to the popped entry may survive
             ++construction_count_;
-        }
-    }
-    for (int f = 0; f < 3; ++f) {
-        auto faction = static_cast<FactionId>(f);
-        auto state = faction_research_.find(faction);
-        if (state == faction_research_.end() || state->second.active_queue.empty()) continue;
-        const auto id = state->second.active_queue.front();
-        const auto& project = state->second.available_projects.at(id);
-        research_elapsed_[faction] += dt;
-        if (research_elapsed_[faction] >= project.build_time_seconds) {
-            state->second.completed_projects[id] = true;
-            state->second.active_queue.erase(state->second.active_queue.begin());
-            research_elapsed_[faction] = 0;
         }
     }
 }
@@ -277,12 +274,49 @@ bool ProductionManager::find_or_create_extractor(float x, float y, EntityId& ext
     constexpr float CLAIM_RADIUS = 8.0f;
     if (nearest_node == INVALID_ENTITY || best_dist_sq > CLAIM_RADIUS * CLAIM_RADIUS) return false;
     
-    auto new_id = static_cast<EntityId>(extractors_.size() + resource_nodes_.size() + 1000000);
+    const auto new_id = next_extractor_id_++;
     const auto& node = resource_nodes_.at(nearest_node);
     extractors_[new_id] = {node.x, node.y, nearest_node, 1.0f, 0.0f, true, INVALID_ENTITY};
     extractor_id = new_id;
     node_id = nearest_node;
     return true;
+}
+
+EntityId ProductionManager::fuel_depot_at(float x, float y) const {
+    constexpr float CLAIM_RADIUS = 8.0f;
+    EntityId nearest = INVALID_ENTITY;
+    float best_dist_sq = CLAIM_RADIUS * CLAIM_RADIUS;
+    for (const auto& [node_id, node] : resource_nodes_) {
+        if (node.type != ResourceNode::Type::ENERGY) continue;
+        const float dx = node.x - x;
+        const float dy = node.y - y;
+        const float distance_sq = dx * dx + dy * dy;
+        if (distance_sq < best_dist_sq || (distance_sq == best_dist_sq && node_id < nearest)) {
+            best_dist_sq = distance_sq;
+            nearest = node_id;
+        }
+    }
+    return nearest;
+}
+
+EntityId ProductionManager::fuel_depot_holder(EntityId depot_id) const {
+    for (const auto& [id, extractor] : extractors_) {
+        if (extractor.resource_node_id == depot_id) return extractor.storage_id;
+    }
+    return INVALID_ENTITY;
+}
+
+void ProductionManager::assign_fuel_depot(EntityId depot_id, EntityId storage_id, bool drawing) {
+    const auto depot = resource_nodes_.find(depot_id);
+    if (depot == resource_nodes_.end()) return;
+    for (auto& [id, extractor] : extractors_) {
+        if (extractor.resource_node_id != depot_id) continue;
+        extractor.storage_id = storage_id;
+        extractor.active = drawing;
+        return;
+    }
+    const auto new_id = next_extractor_id_++;
+    extractors_[new_id] = {depot->second.x, depot->second.y, depot_id, kFuelDepotDrawPerTick, 0.0f, drawing, storage_id};
 }
 
 bool ProductionManager::destroy_resource_site(float x, float y) {
@@ -307,11 +341,10 @@ bool ProductionManager::destroy_resource_site(float x, float y) {
     return true;
 }
 
-bool ProductionManager::verify_storage_capacity(EntityId storage_id, float expected_metal, float expected_energy, float expected_research) {
+bool ProductionManager::verify_storage_capacity(EntityId storage_id, float expected_metal, float expected_energy) {
     (void)storage_id;
     (void)expected_metal;
     (void)expected_energy;
-    (void)expected_research;
     return true;
 }
 
@@ -326,6 +359,7 @@ bool ProductionManager::verify_queue_length(EntityId production_line_id, int exp
 void ProductionManager::reset() {
     resource_nodes_.clear();
     extractors_.clear();
+    next_extractor_id_ = 1000000;
     storages_.clear();
     production_lines_.clear();
     transports_.clear();
@@ -333,14 +367,9 @@ void ProductionManager::reset() {
     construction_count_ = 0;
     transport_count_ = 0;
     faction_production_lines_.clear();
-    faction_research_.clear();
-    research_elapsed_.clear();
     completed_constructions_.clear();
 }
 
-void ProductionManager::set_faction_research(FactionId faction_id, const FactionResearch& research) {
-    faction_research_[faction_id] = research;
-}
 
 void ProductionManager::add_faction_production_line(FactionId faction_id, EntityId line_id) {
     faction_production_lines_[faction_id] = line_id;
@@ -406,11 +435,11 @@ EntityId ProductionManager::faction_line(FactionId faction) const {
     auto it = faction_production_lines_.find(faction);
     return it == faction_production_lines_.end() ? INVALID_ENTITY : it->second;
 }
-const FactionResearch& ProductionManager::research(FactionId faction) const {
-    static const FactionResearch empty{};
-    auto it = faction_research_.find(faction);
-    return it == faction_research_.end() ? empty : it->second;
+EntityId ProductionManager::faction_storage(FactionId faction) const {
+    const auto line = production_lines_.find(faction_line(faction));
+    return line == production_lines_.end() ? INVALID_ENTITY : line->second.storage_id;
 }
+
 bool ProductionManager::can_queue_unit(EntityId line_id, FactionId faction, UnitType type) const {
     auto line = production_lines_.find(line_id);
     auto proto = get_unit_prototypes().find(type);
@@ -431,7 +460,7 @@ bool ProductionManager::queue_unit(EntityId line_id, FactionId faction, UnitType
     const auto& p = get_unit_prototypes().at(type);
     auto& line = production_lines_.at(line_id);
     auto& funds = storages_.at(line.storage_id);
-    // Reserve full build costs once. Research is spent on projects, not units.
+    // Reserve full build costs once.
     const float ferry_material = p.is_aircraft && p.requires_runway ? p.operational_material : 0.0f;
     funds.tactical.materials.current -= p.material_cost + ferry_material;
     funds.metal_storage = funds.tactical.materials.current;
@@ -444,15 +473,37 @@ bool ProductionManager::queue_unit(EntityId line_id, FactionId faction, UnitType
     line.queue.push(entry);
     return true;
 }
-bool ProductionManager::can_queue_structure(EntityId line_id, FactionId faction, uint8_t structure_type) const {
+bool ProductionManager::can_queue_structure(EntityId line_id, FactionId faction, uint8_t structure_type,
+    float earthworks_material, float earthworks_fuel, int earthworks_jobs) const {
     if (structure_type > 3 || faction_line(faction) != line_id) return false;
     auto line = production_lines_.find(line_id);
-    if (line == production_lines_.end() || line->second.queue.size() >= static_cast<size_t>(line->second.max_jobs)) return false;
+    if (line == production_lines_.end() ||
+        line->second.queue.size() + static_cast<size_t>(earthworks_jobs) >= static_cast<size_t>(line->second.max_jobs)) return false;
     auto storage = storages_.find(line->second.storage_id);
     if (storage == storages_.end()) return false;
-    const float metal = structure_metal_cost(structure_type);
+    const float metal = structure_metal_cost(structure_type) + earthworks_material;
     const auto& funds = storage->second;
-    return funds.tactical.materials.current >= metal;
+    return funds.tactical.materials.current >= metal && funds.tactical.fuel.current >= earthworks_fuel;
+}
+void ProductionManager::queue_earthworks(EntityId line_id, FactionId faction, uint8_t graded_structure, float x, float y,
+    float material, float fuel, float seconds) {
+    auto& line = production_lines_.at(line_id);
+    ConstructionQueueEntry entry{};
+    entry.type = ConstructionQueueEntry::Type::BUILDING;
+    entry.unit_type = static_cast<UnitType>(0);
+    entry.faction_id = faction;
+    entry.structure_type = EARTHWORKS_JOB;
+    entry.graded_structure = graded_structure;
+    entry.display_name = "EARTHWORKS";
+    entry.total_cost_metal = material;
+    entry.total_cost_energy = 0.0f;
+    entry.build_time_seconds = seconds;
+    entry.metal_per_tick = material / (seconds * 20.0f);
+    entry.total_cost_fuel = fuel;
+    entry.fuel_per_tick = fuel / (seconds * 20.0f);
+    entry.energy_per_tick = 0.0f;
+    entry.target_x = x; entry.target_y = y;
+    line.queue.push(std::move(entry));
 }
 bool ProductionManager::queue_structure(EntityId line_id, FactionId faction, uint8_t structure_type, float x, float y) {
     if (!can_queue_structure(line_id, faction, structure_type)) return false;
@@ -509,42 +560,6 @@ bool ProductionManager::queue_requisition(EntityId line_id, FactionId faction, U
     entry.target_y = y;
     line.queue.push(entry);
     return true;
-}
-bool ProductionManager::can_research(FactionId faction, const std::string& id) const {
-    const auto& state = research(faction);
-    auto p = state.available_projects.find(id);
-    if (p == state.available_projects.end() || !state.active_queue.empty()) return false;
-    bool faction_project = false;
-    for (auto type : p->second.unlocks) {
-        auto prototype = get_unit_prototypes().find(type);
-        if (prototype != get_unit_prototypes().end() && prototype->second.faction == faction) faction_project = true;
-    }
-    if (!faction_project) return false;
-    auto completed = state.completed_projects.find(id);
-    if (completed != state.completed_projects.end() && completed->second) return false;
-    for (const auto& prerequisite : p->second.prerequisites) {
-        auto it = state.completed_projects.find(prerequisite);
-        if (it == state.completed_projects.end() || !it->second) return false;
-    }
-    auto line = production_lines_.find(faction_line(faction));
-    if (line == production_lines_.end()) return false;
-    auto storage = storages_.find(line->second.storage_id);
-    return storage != storages_.end() && storage->second.research_storage >= p->second.total_cost;
-}
-bool ProductionManager::begin_research(FactionId faction, const std::string& id) {
-    if (!can_research(faction, id)) return false;
-    auto& state = faction_research_.at(faction);
-    auto& funds = storages_.at(production_lines_.at(faction_line(faction)).storage_id);
-    funds.research_storage -= state.available_projects.at(id).total_cost;
-    state.active_queue.push_back(id);
-    research_elapsed_[faction] = 0;
-    return true;
-}
-float ProductionManager::research_progress(FactionId faction) const {
-    const auto& state = research(faction);
-    if (state.active_queue.empty()) return 0;
-    auto elapsed = research_elapsed_.find(faction);
-    return elapsed == research_elapsed_.end() ? 0 : elapsed->second / state.available_projects.at(state.active_queue.front()).build_time_seconds;
 }
 
 } // namespace rts

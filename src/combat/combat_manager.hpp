@@ -1,5 +1,7 @@
 #pragma once
 
+#include <cstdint>
+#include <functional>
 #include <vector>
 #include <unordered_map>
 
@@ -43,6 +45,9 @@ class CombatManager {
 public:
     CombatManager();
 
+    using SightCheck = std::function<bool(FactionId, EntityId)>;
+    // Set during a match so nothing fires at a target its side cannot see.
+    void set_sight_check(SightCheck check) { sight_check_ = std::move(check); }
     void update(float delta_ms);
     void update(float delta_ms, SpatialGrid& spatial_grid, ComponentManager& component_manager);
     
@@ -58,6 +63,22 @@ public:
     void reset();
     
 private:
+    SightCheck sight_check_;
+    // Live targets for one fire pass, laid out by cell so a volley does not pay
+    // a spatial-grid query plus component lookups for every nearby unit.
+    struct TargetCandidate {
+        EntityId id;
+        float x, y;
+        FactionId faction;
+    };
+    void build_target_index(const std::vector<EntityId>& entities, ComponentManager& component_manager);
+    std::vector<TargetCandidate> target_candidates_;
+    std::vector<TargetCandidate> target_sort_buffer_;
+    std::vector<uint32_t> target_cell_starts_;
+    std::vector<uint32_t> target_cell_cursor_;
+    float target_min_x_ = 0.0f, target_min_y_ = 0.0f, target_cell_size_ = 1.0f;
+    int target_columns_ = 0, target_rows_ = 0;
+
     ProjectileManager projectile_manager_;
     InterceptCalculator intercept_calculator_;
     std::vector<EntityId> damaged_entities_;
@@ -72,7 +93,7 @@ public:
     
     FireSolution find_target(
         float shooter_x, float shooter_y, float view_range, FactionId faction,
-        SpatialGrid& spatial_grid, ComponentManager& component_manager,
+        ComponentManager& component_manager,
         EntityId explicit_target = 0
     );
     

@@ -125,10 +125,10 @@ func export_native_bundle(directory: String) -> bool:
 	if not validate().is_empty(): return false
 	if DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(directory)) != OK: return false
 	var header := FileAccess.open(directory.path_join("map.yaml"), FileAccess.WRITE)
-	var terrain_file := FileAccess.open(directory.path_join("terrain.bin"), FileAccess.WRITE)
+	var terrain_file := FileAccess.open(directory.path_join("terrain.json"), FileAccess.WRITE)
 	if header == null or terrain_file == null: return false
 	header.store_string("map_version: \"1.0\"\nid: \"%s\"\nname: \"%s\"\ndimensions:\n  width: %d\n  height: %d\n  tile_size: %s\n  max_elevation: 512\n" % [map_id, map_id, width, height, tile_size])
-	for height_value in terrain: terrain_file.store_float(height_value)
+	terrain_file.store_string(JSON.stringify({"format": "heightfield", "version": 1, "width": width / int(tile_size), "height": height / int(tile_size), "heights": Array(terrain)}))
 	var spawns := FileAccess.open(directory.path_join("spawnpoints.yaml"), FileAccess.WRITE)
 	var deposits := FileAccess.open(directory.path_join("resources.yaml"), FileAccess.WRITE)
 	var map_entities := FileAccess.open(directory.path_join("entities.yaml"), FileAccess.WRITE)

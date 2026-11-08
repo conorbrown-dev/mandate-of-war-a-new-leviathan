@@ -39,7 +39,7 @@ typedef void (*combat_spawn_projectile_fn)(int, float, float);
 
 typedef void (*economy_add_resource_node_fn)(int, float, float, float, int);
 typedef void (*economy_add_extractor_fn)(int, float, float, int, float);
-typedef void (*economy_add_storage_fn)(int, float, float, float, float, float);
+typedef void (*economy_add_storage_fn)(int, float, float, float, float);
 typedef void (*economy_add_production_line_fn)(int, int, float, float, int);
 typedef void (*economy_enqueue_construction_fn)(int, int, int, float, float, float, float);
 typedef void (*economy_update_all_fn)(float);

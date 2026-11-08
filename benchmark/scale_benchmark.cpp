@@ -12,7 +12,15 @@
 #include <string>
 #include <vector>
 
+#ifdef _WIN32
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#include <windows.h>
+#include <psapi.h>
+#else
 #include <unistd.h>
+#endif
 
 namespace {
 
@@ -54,6 +62,13 @@ double elapsed_ms(Clock::time_point start, Clock::time_point end) {
 }
 
 std::size_t resident_bytes() {
+#ifdef _WIN32
+    PROCESS_MEMORY_COUNTERS counters{};
+    if (!::GetProcessMemoryInfo(::GetCurrentProcess(), &counters, sizeof(counters))) {
+        return 0;
+    }
+    return static_cast<std::size_t>(counters.WorkingSetSize);
+#else
     std::ifstream statm("/proc/self/statm");
     std::size_t total_pages = 0;
     std::size_t resident_pages = 0;
@@ -62,6 +77,7 @@ std::size_t resident_bytes() {
     }
     (void)total_pages;
     return resident_pages * static_cast<std::size_t>(::sysconf(_SC_PAGESIZE));
+#endif
 }
 
 std::uint64_t fnv_mix(std::uint64_t hash, std::uint32_t value) {

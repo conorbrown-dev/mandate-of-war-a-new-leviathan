@@ -1,5 +1,6 @@
 #include "portable_snapshot.hpp"
 
+#include <bit>
 #include <cstring>
 #include <algorithm>
 #include <vector>

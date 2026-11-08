@@ -32,6 +32,7 @@ public:
     
     void send_snapshot();
     bool receive_snapshot(Snapshot& snapshot);
+    uint64_t snapshot_entities_dropped() const { return snapshot_entities_dropped_; }
     bool receive_snapshot(uint8_t* buffer, size_t buffer_size, size_t& out_encoded_size);
     
     void send_delta_snapshot(uint32_t reference_tick);
@@ -85,6 +86,7 @@ private:
     
     InputBuffer input_buffer_;
     SnapshotBuffer snapshot_buffer_;
+    uint64_t snapshot_entities_dropped_ = 0;
     
     std::vector<float> remote_positions_x_;
     std::vector<float> remote_positions_y_;

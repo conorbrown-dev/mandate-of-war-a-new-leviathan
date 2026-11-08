@@ -1,0 +1,108 @@
+{
+  "version": 1,
+  "notes": "AI styles and difficulty levels. A style decides what the AI wants to do; a difficulty decides how well it does it. Neither grants extra resources or extra vision: every AI plays under the same fog, prices and command limits as a player.",
+  "default_doctrine": "balanced",
+  "default_difficulty": "normal",
+  "doctrines": [
+    {
+      "key": "balanced",
+      "name": "Balanced",
+      "description": "Scouts steadily, builds the cheapest fighting line and sends growing waves at the briefing's numbers.",
+      "first_wave": 0,
+      "wave_growth": 0,
+      "max_wave": 0,
+      "home_guard": 0,
+      "defence_radius": 1500,
+      "unit_preference": "cheapest",
+      "scouts_wanted": 2,
+      "first_recon_flight_seconds": 60,
+      "recon_flight_interval_seconds": 120,
+      "queue_depth": 2,
+      "save_for_recon_flight": true,
+      "attack_only_known_enemy": false
+    },
+    {
+      "key": "swarm",
+      "name": "Rush / Swarm",
+      "description": "Spends everything at once on the cheapest units, sends small waves early and often, and searches with extra scouts.",
+      "first_wave": 4,
+      "wave_growth": 2,
+      "max_wave": 14,
+      "home_guard": 0,
+      "defence_radius": 1200,
+      "unit_preference": "cheapest",
+      "scouts_wanted": 3,
+      "first_recon_flight_seconds": 90,
+      "recon_flight_interval_seconds": 180,
+      "queue_depth": 3,
+      "save_for_recon_flight": false,
+      "attack_only_known_enemy": false
+    },
+    {
+      "key": "turtle",
+      "name": "Turtle",
+      "description": "Keeps a standing home guard, defends a wide perimeter, and only commits large waves once it knows where the enemy is.",
+      "first_wave": 12,
+      "wave_growth": 6,
+      "max_wave": 30,
+      "home_guard": 8,
+      "defence_radius": 3000,
+      "unit_preference": "mixed",
+      "scouts_wanted": 2,
+      "first_recon_flight_seconds": 60,
+      "recon_flight_interval_seconds": 120,
+      "queue_depth": 2,
+      "save_for_recon_flight": true,
+      "attack_only_known_enemy": true
+    },
+    {
+      "key": "tech",
+      "name": "Tech",
+      "description": "Fields a smaller army of its most capable units, flies recon often, and saves up rather than spending on cheap units.",
+      "first_wave": 8,
+      "wave_growth": 4,
+      "max_wave": 20,
+      "home_guard": 2,
+      "defence_radius": 2000,
+      "unit_preference": "strongest",
+      "scouts_wanted": 2,
+      "first_recon_flight_seconds": 45,
+      "recon_flight_interval_seconds": 90,
+      "queue_depth": 2,
+      "save_for_recon_flight": true,
+      "attack_only_known_enemy": false
+    }
+  ],
+  "difficulties": [
+    {
+      "key": "easy",
+      "name": "Easy",
+      "description": "Thinks every three seconds, takes eight seconds to react to a new contact, gives few orders at once and never pulls damaged units back.",
+      "decision_seconds": 3.0,
+      "reaction_seconds": 8.0,
+      "orders_per_decision": 10,
+      "retreat_health": 0.0,
+      "scout_retask_seconds": 120
+    },
+    {
+      "key": "normal",
+      "name": "Normal",
+      "description": "Thinks every second and reacts at once.",
+      "decision_seconds": 1.0,
+      "reaction_seconds": 0.0,
+      "orders_per_decision": 0,
+      "retreat_health": 0.3,
+      "scout_retask_seconds": 60
+    },
+    {
+      "key": "hard",
+      "name": "Hard",
+      "description": "Thinks twice a second, pulls damaged units back earlier and keeps its scouts moving faster.",
+      "decision_seconds": 0.5,
+      "reaction_seconds": 0.0,
+      "orders_per_decision": 0,
+      "retreat_health": 0.4,
+      "scout_retask_seconds": 40
+    }
+  ]
+}

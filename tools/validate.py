@@ -31,16 +31,21 @@ GAMEPLAY_SCENARIOS = {
     "airfield_fighter_ferry",
     "road_construction",
     "ui_design_system_showcase",
+    "queued_waypoint_move",
 }
 PERFORMANCE_SCENARIOS = {"simulation_scale_1000", "combat_benchmark_2000"}
 CONTRACT_SCENARIOS = {
     "native_extension_smoke": ("test.gd", "RtsExtension smoke test passed"),
     "gdextension_boundary": ("test_gdextension_boundary.gd", "GDEXTENSION_BOUNDARY checks="),
     "hud_bridge": ("test_hud_bridge.gd", "HUD_BRIDGE checks="),
-    "build_catalog": ("test_build_catalog.gd", "BUILD_CATALOG checks=6 failures=0"),
+    "hotkey_sheet": ("test_hotkey_sheet.gd", "HOTKEY_SHEET checks="),
+    "build_catalog": ("test_build_catalog.gd", "BUILD_CATALOG checks=7 failures=0"),
     "skirmish_presentation": ("test_skirmish.gd", "GODOT_SKIRMISH_PRESENTATION"),
+    "match_flow": ("test_match_flow.gd", "GODOT_MATCH_FLOW"),
     "native_skirmish_match_to_result": ("test_native_skirmish.gd", "GODOT_NATIVE_SKIRMISH"),
     "terrain_contract": ("test_goal10_terrain.gd", "GODOT_GOAL10_TERRAIN"),
+    "tree_impostors": ("test_tree_impostors.gd", "TREE_IMPOSTORS checks="),
+    "unit_motion": ("test_unit_motion.gd", "UNIT_MOTION checks="),
     "visual_registry": ("test_visual_registry.gd", "VISUAL_REGISTRY"),
     "visual_spawn_bridge": ("test_visual_spawn_bridge.gd", "VISUAL_SPAWN_BRIDGE"),
     "visual_presentation_policy": ("test_visual_presentation_policy.gd", "VISUAL_PRESENTATION_POLICY"),
@@ -49,6 +54,7 @@ CONTRACT_SCENARIOS = {
     "native_visual_ids": ("test_native_visual_ids.gd", "NATIVE_VISUAL_IDS"),
     "engineer_movement_presentation": ("test_engineer_movement_presentation.gd", "ENGINEER_MOVEMENT_PRESENTATION"),
     "order_overlay_renderer": ("test_order_overlay_renderer.gd", "order_overlay_renderer: PASS"),
+    "unit_route_overlay": ("test_unit_route_overlay.gd", "UNIT_ROUTE_OVERLAY checks="),
     "unit_visual_root": ("test_unit_visual_root.gd", "UNIT_VISUAL_ROOT"),
     "reference_model_load": ("test_reference_model_load.gd", "REFERENCE_MODEL_LOAD checks="),
     "map_editor_model": ("test_map_editor_model.gd", "Map editor model assertions passed"),
@@ -81,6 +87,8 @@ def isolated_environment(artifact_dir: Path) -> dict[str, str]:
         env["XDG_DATA_HOME"] = str(artifact_dir / "user-data")
         env["XDG_CONFIG_HOME"] = str(artifact_dir / "user-config")
         env["XDG_CACHE_HOME"] = str(artifact_dir / "user-cache")
+    elif sys.platform == "win32":
+        env["APPDATA"] = str(artifact_dir / "user-data")
     return env
 
 
@@ -120,6 +128,7 @@ def godot_executable() -> Path:
     configured = os.environ.get("GODOT_BIN")
     candidates = [
         Path(configured) if configured else None,
+        Path.home() / "mow-tools/godot/Godot_v4.7.2-stable_win64_console.exe",
         ROOT / "Godot_v4.7.2-stable_linux.x86_64",
         Path(shutil.which("godot4") or "") if shutil.which("godot4") else None,
         Path(shutil.which("godot") or "") if shutil.which("godot") else None,
@@ -167,7 +176,7 @@ def run_gameplay(args: argparse.Namespace, artifact_dir: Path, started_at: str) 
         str(artifact_dir / "engine-godot.log"),
     ]
     rendered_run = args.rendered or args.record or args.require_screenshots or args.update_baseline
-    if rendered_run and not os.environ.get("DISPLAY") and not os.environ.get("WAYLAND_DISPLAY"):
+    if rendered_run and sys.platform.startswith("linux") and not os.environ.get("DISPLAY") and not os.environ.get("WAYLAND_DISPLAY"):
         report = failure_report(args, artifact_dir, started_at, "rendered evidence requested but no graphical display is available")
         write_report(artifact_dir / "report.json", report)
         return 2
@@ -361,10 +370,20 @@ def failure_report(args: argparse.Namespace, artifact_dir: Path, started_at: str
     }
 
 
+def native_executable(name: str) -> Path:
+    """A native build output: build/ on Linux, build/windows/*.exe on Windows."""
+    candidates = [ROOT / "build" / name, ROOT / "build" / f"{name}.exe",
+                  ROOT / "build" / "windows" / f"{name}.exe", ROOT / "build" / "windows" / name]
+    for candidate in candidates:
+        if candidate.is_file():
+            return candidate
+    return candidates[2] if os.name == "nt" else candidates[0]
+
+
 def run_performance(args: argparse.Namespace, artifact_dir: Path, started_at: str) -> int:
     if args.scenario == "combat_benchmark_2000":
         return run_combat_performance(args, artifact_dir, started_at)
-    executable = ROOT / "build" / "rts_scale_benchmark"
+    executable = native_executable("rts_scale_benchmark")
     if not executable.is_file():
         report = failure_report(args, artifact_dir, started_at, f"benchmark executable not found: {executable}; run the Release build first")
         write_report(artifact_dir / "report.json", report)
@@ -436,7 +455,7 @@ def run_performance(args: argparse.Namespace, artifact_dir: Path, started_at: st
 
 
 def run_combat_performance(args: argparse.Namespace, artifact_dir: Path, started_at: str) -> int:
-    executable = ROOT / "build" / "rts_combat_benchmark"
+    executable = native_executable("rts_combat_benchmark")
     if not executable.is_file():
         report = failure_report(args, artifact_dir, started_at, f"benchmark executable not found: {executable}; run the Release build first")
         write_report(artifact_dir / "report.json", report)
@@ -450,17 +469,17 @@ def run_combat_performance(args: argparse.Namespace, artifact_dir: Path, started
     sys.stdout.write(output)
     values = {
         key: int(match.group(1)) for key, match in {
-            "initialUnits": re.search(r"total initial units: (\\d+)", output),
-            "finalUnits": re.search(r"total final units: (\\d+)", output),
-            "unitsDestroyed": re.search(r"units destroyed: (\\d+)", output),
-            "projectilesFired": re.search(r"projectiles fired: (\\d+)", output),
+            "initialUnits": re.search(r"total initial units: (\d+)", output),
+            "finalUnits": re.search(r"total final units: (\d+)", output),
+            "unitsDestroyed": re.search(r"units destroyed: (\d+)", output),
+            "projectilesFired": re.search(r"projectiles fired: (\d+)", output),
         }.items() if match
     }
     latency = re.search(r"cache-hit tick avg/p50/p95/max: ([0-9.]+) / ([0-9.]+) / ([0-9.]+) / ([0-9.]+)", output)
     if latency:
         values.update(cacheHitAverageMs=float(latency.group(1)), cacheHitP50Ms=float(latency.group(2)),
                       cacheHitP95Ms=float(latency.group(3)), cacheHitMaxMs=float(latency.group(4)))
-    state = re.search(r"initial/final state hash: (\\d+) / (\\d+)", output)
+    state = re.search(r"initial/final state hash: (\d+) / (\d+)", output)
     if state:
         values.update(initialStateHash=state.group(1), finalStateHash=state.group(2))
     required = (values.get("initialUnits") == 4000 and values.get("unitsDestroyed", 0) > 0

@@ -1,4 +1,5 @@
 #include "simulation/road_network.hpp"
+#include "util/environment.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -13,8 +14,8 @@ namespace rts {
 const RoadSettings& get_road_settings() {
     static const RoadSettings settings = [] {
         RoadSettings result;
-        const char* configured_root = std::getenv("RTS_DATA_ROOT");
-        const std::string path = std::string(configured_root != nullptr && configured_root[0] != '\0' ? configured_root : "data") + "/road_network.json";
+        const std::string configured_root = read_environment("RTS_DATA_ROOT");
+        const std::string path = (configured_root.empty() ? std::string("data") : configured_root) + "/road_network.json";
         std::ifstream input(path);
         if (!input) return result;
         std::stringstream contents;

@@ -23,14 +23,14 @@ TEST(economy_storage_info) {
     Simulation sim;
     sim.start();
     
-    ::economy_add_storage(1, 100.0f, 100.0f, 5000.0f, 5000.0f, 1000.0f);
+    ::economy_add_storage(1, 100.0f, 100.0f, 5000.0f, 5000.0f);
     
-    float metal_storage, energy_storage, research_storage;
-    float metal_capacity, energy_capacity, research_capacity;
+    float metal_storage, energy_storage;
+    float metal_capacity, energy_capacity;
     
     bool result = ::economy_get_storage_info(1, 
-        &metal_storage, &energy_storage, &research_storage,
-        &metal_capacity, &energy_capacity, &research_capacity);
+        &metal_storage, &energy_storage,
+        &metal_capacity, &energy_capacity);
     
     if (!result) {
         throw std::runtime_error("economy_get_storage_info should return true");
@@ -41,9 +41,6 @@ TEST(economy_storage_info) {
     }
     if (energy_capacity != 5000.0f) {
         throw std::runtime_error("Energy capacity should be 5000");
-    }
-    if (research_capacity != 1000.0f) {
-        throw std::runtime_error("Research capacity should be 1000");
     }
     
     sim.stop();
@@ -70,7 +67,7 @@ TEST(economy_queue_size) {
     Simulation sim;
     sim.start();
     
-    ::economy_add_storage(1, 100.0f, 100.0f, 5000.0f, 5000.0f, 1000.0f);
+    ::economy_add_storage(1, 100.0f, 100.0f, 5000.0f, 5000.0f);
     ::economy_add_production_line(1, 1, 10.0f, 10.0f, 2);
     
     int queue_size = ::economy_get_queue_size(1);

@@ -1,7 +1,7 @@
 extends SceneTree
 
 func _initialize() -> void:
-	var heights := HeightMap.load_from_file("res://scenarios/terrain.bin")
+	var heights := HeightMap.load_from_file("res://scenarios/terrain.json")
 	assert(heights.size() == 320 * 320, "Goal 10 heightmap has the authored 320x320 grid")
 	assert(HeightMap.get_biome(-1.0) == HeightMap.BIOME_OCEAN)
 	assert(HeightMap.get_biome(2.0) == HeightMap.BIOME_COAST)

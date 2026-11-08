@@ -1,5 +1,8 @@
 #pragma once
 
+#include <array>
+#include <deque>
+#include <map>
 #include <unordered_map>
 #include <vector>
 
@@ -15,6 +18,7 @@
 #include "replay/replay_writer.hpp"
 #include "render/renderer.hpp"
 #include "terrain.hpp"
+#include "structure_sites.hpp"
 #include "road_network.hpp"
 #include "off_road.hpp"
 #include "../ecs/components/off_road.hpp"
@@ -24,7 +28,11 @@
 #include "command_manager.hpp"
 #include "control_point_battle.hpp"
 #include "reinforcement_delivery.hpp"
+#include "fuel_supply.hpp"
+#include "vision_map.hpp"
+#include "sighting_log.hpp"
 #include "ai/ai_manager.hpp"
+#include "simulation/match_record.hpp"
 #include "production/requisition_manager.hpp"
 
 namespace rts {
@@ -61,13 +69,28 @@ public:
 
     Entity create_unit(float x, float y);
     void move_unit(EntityId entity, float x, float y);
+    // Replaces the unit's move order and clears any queued waypoints.
     void move_unit_with_route(EntityId entity, float x, float y, float route_x, float route_y);
+    // Appends a waypoint after the unit's current move order and any waypoints
+    // already queued. With no current move order the unit starts on it now.
+    // Returns false when the target is not walkable or the queue is full.
+    bool queue_unit_move_with_route(EntityId entity, float x, float y, float route_x, float route_y);
     void move_units_formation(
         const std::vector<EntityId>& entities,
         float center_x,
         float center_y,
-        float spacing
+        float spacing,
+        bool queued = false
     );
+    // Most waypoints one unit may hold, counting its current destination.
+    static constexpr std::size_t MAX_MOVE_WAYPOINTS = 32;
+    // MOVE commands carry this bit in `extra` (beside the spacing) when the
+    // order appends a waypoint instead of replacing the move order.
+    static constexpr uint32_t MOVE_QUEUE_FLAG = 0x80000000u;
+    // The unit's current destination followed by its queued waypoints, in
+    // the order it will drive them. Empty when the unit has no move order.
+    std::vector<std::pair<float, float>> get_unit_waypoints(EntityId entity) const;
+    std::size_t queued_waypoint_count(EntityId entity) const;
     void stop_unit(EntityId entity);
     void attack_unit(EntityId entity, EntityId target_id);
     void destroy_unit(EntityId entity);
@@ -85,7 +108,8 @@ public:
         FactionId player_id,
         float center_x,
         float center_y,
-        float spacing
+        float spacing,
+        bool queued = false
     );
     size_t issue_stop_commands(
         const std::vector<EntityId>& entities,
@@ -151,6 +175,17 @@ public:
 
     bool get_unit_position(EntityId entity, float& x, float& y);
     bool has_move_target(EntityId entity) const;
+    // Presentation-only read of the route the movement system will follow
+    // from the unit's current position: the unit position, the turns it will
+    // take, then its arrival point, then each queued waypoint's leg (its turns
+    // and its arrival point) in order. It mirrors update_movement (straight while
+    // the arrival point is in line of sight, otherwise the flow field toward
+    // the strategic route) and keeps the cells where that walk changes
+    // direction. A very long staircase stops at MAX_ROUTE_POINTS without its
+    // arrival point. Returns false when the unit has no move order. Never
+    // changes simulation state.
+    static constexpr std::size_t MAX_ROUTE_POINTS = 128;
+    bool get_unit_route(EntityId entity, std::vector<std::pair<float, float>>& route) const;
     float get_unit_x(EntityId entity) const;
     float get_unit_y(EntityId entity) const;
     float get_unit_heading(EntityId entity) const;
@@ -195,7 +230,6 @@ public:
      size_t submit_commands(const std::vector<InputCommand>& commands);
      size_t issue_commands(const std::vector<EntityId>& entities, FactionId player,
                            CommandType type, float x = 0, float y = 0, uint32_t extra = 0);
-      static std::string research_id(uint32_t index);
     TerritorialControlManager& territorial_control_manager() { return territorial_control_; }
 
 
@@ -218,6 +252,9 @@ public:
     bool is_land_position(float x, float y) const;
     void block_civilian_area(float x, float y, float radius);
     bool validate_structure_placement(uint8_t structure_type, float x, float y) const;
+    StructureSite assess_structure_site(uint8_t structure_type, float x, float y) const;
+    // Queues the structure, with an earthworks job first when the ground needs it.
+    bool queue_structure(EntityId line, FactionId faction, uint8_t structure_type, float x, float y);
     bool validate_engineer_placement(float x, float y) const;
     bool validate_road_placement(float start_x, float start_y, float end_x, float end_y) const;
     bool queue_road(EntityId engineer, FactionId owner, float start_x, float start_y, float end_x, float end_y);
@@ -227,15 +264,35 @@ public:
     // Faction initialization
     EntityId create_faction_base(FactionId faction, float x, float y);
     void initialize_faction(FactionId faction_id, float x, float y);
+    // Returns -1 without creating anything when the faction is at its unit cap.
     int create_unit_with_type(float x, float y, UnitType unit_type, FactionId faction_id);
+    int unit_count(FactionId faction_id) const;
+    int unit_cap_per_player() const { return unit_cap_per_player_; }
+    // Benchmarks raise this to probe beyond the gameplay limit.
+    void set_unit_cap_per_player(int cap) { unit_cap_per_player_ = cap; }
+    bool at_unit_cap(FactionId faction_id) const { return unit_count(faction_id) >= unit_cap_per_player_; }
     void set_unit_faction(EntityId entity, FactionId faction_id);
 
-    // Faction research
-    const FactionResearch& get_faction_research(FactionId faction_id) const;
-    void set_faction_research(FactionId faction_id, const FactionResearch& research);
     
     uint32_t simulation_tick() const { return tick_; }
+    // How far the clock has run into the next 50 ms tick, from 0 to 1. The view
+    // blends the last two ticks by this so motion is smooth at any frame rate.
+    float tick_fraction() const { return elapsed_ms_ / 50.0f; }
     void enable_ai(bool enabled) { ai_enabled_ = enabled; }
+    bool ai_enabled() const { return ai_enabled_; }
+
+    // Match recording. begin_match starts a record; it closes when the match ends.
+    MatchRecord& match_record() { return match_record_; }
+    const MatchRecord& match_record() const { return match_record_; }
+    // A presentation-layer call that changed the match outside the command queue.
+    void record_external_action(std::string name, std::vector<double> args);
+    // A hash of everything that decides the match. Two runs that agree on every
+    // hash played out the same way.
+    uint64_t state_hash() const;
+    // Feeds recorded orders back in at the tick each one originally ran.
+    // Turn the AI off first: its orders are already in the recording.
+    void play_back_commands(std::vector<InputCommand> commands);
+    bool playing_back() const { return playback_cursor_ < playback_.size(); }
     const std::vector<InputCommand>& command_log() const { return command_log_; }
 
     bool begin_control_point_battle(const std::vector<ControlPointDefinition>& points,
@@ -248,7 +305,60 @@ public:
     void set_reinforcement_resources(FactionId faction, float material, float energy);
     const ReinforcementDelivery& reinforcement_delivery() const { return reinforcement_delivery_; }
 
+    // Forces arrive by transport. With this on, ground units are not built in
+    // the theatre: an order pays for the unit, waits out its build and flight
+    // time, then lands at the faction's airfield (or, for a side that has none
+    // yet, its landing zone). Aircraft and boats keep their own arrival.
+    struct InboundForce {
+        FactionId faction;
+        UnitType type;
+        uint32_t arrive_tick;
+    };
+    static constexpr float kTransitSeconds = 20.0f;
+    static constexpr int kMaxInboundForces = 24;
+    void set_forces_by_transport(bool enabled) { forces_by_transport_ = enabled; }
+    bool forces_by_transport() const { return forces_by_transport_; }
+    bool set_landing_zone(FactionId faction, float x, float y);
+    // Where a faction's ground forces land, if anywhere.
+    bool landing_site(FactionId faction, float& x, float& y) const;
+    bool needs_delivery(UnitType type) const;
+    // Empty when the faction can order this unit now, else why not.
+    std::string delivery_refusal(FactionId faction, UnitType type) const;
+    // Orders a unit the way a faction normally gets one: delivered when the
+    // transport rule is on for ground units, otherwise built by its line.
+    bool order_unit(FactionId faction, UnitType type, float x, float y);
+    bool order_delivery(FactionId faction, UnitType type);
+    int inbound_count(FactionId faction) const;
+    const std::vector<InboundForce>& inbound_forces() const { return inbound_forces_; }
+
+    // Arms the win condition: a side loses when its command post is destroyed.
+    void begin_match(EntityId player_post, EntityId enemy_post);
+    int match_result() const { return match_result_; } // -1 playing, 0 player won, 1 enemy won, 2 draw
+    float match_seconds() const { return (tick_ - match_start_tick_) * 0.05f; }
+
+    const VisionMap& vision_map() const { return vision_map_; }
+    uint32_t vision_revision() const { return vision_revision_; }
+    bool can_see(FactionId faction, float x, float y) const { return vision_map_.visible(faction, x, y); }
+    bool can_see_sky(FactionId faction, float x, float y) const { return vision_map_.visible_in_sky(faction, x, y); }
+    bool vision_active() const { return vision_active_; }
+    const SightingLog& last_known(FactionId faction) const { return sightings_[static_cast<size_t>(faction)]; }
+    int recon_flights_in_air(FactionId faction) const;
+    bool on_recon_flight(EntityId entity) const { return recon_flights_.contains(entity); }
+    std::vector<EntityId> seen_enemies(FactionId faction) const;
+
+    bool request_fuel_shipment(FactionId player);
+    const FuelShipment* fuel_shipment(FactionId faction) const;
+    const std::string& fuel_supply_reason(FactionId faction) const;
+    bool assign_fuel_depot(EntityId depot, FactionId holder);
+    std::vector<FuelDepotStatus> fuel_depots() const;
+
 private:
+    void refresh_unit_counts();
+    static constexpr size_t FACTION_COUNT = 3;
+    // Recounted every economy phase so deaths free slots; creation increments.
+    std::array<int, FACTION_COUNT> unit_counts_{};
+    int unit_cap_per_player_ = MAX_UNITS_PER_PLAYER;
+
     bool running_{false};
     bool ai_enabled_ = true;
     std::vector<InputCommand> command_log_;
@@ -273,14 +383,71 @@ private:
     ReplayWriter& replay_writer() { return replay_writer_; }
     ReplayWriter replay_writer_;
     std::unordered_map<EntityId, MoveTarget> move_targets_;
+    // Waypoints after the current move target, in driving order.
+    std::unordered_map<EntityId, std::deque<MoveTarget>> queued_moves_;
+    bool assign_move_target(EntityId entity, float x, float y, float route_x, float route_y);
+    bool trace_route_leg(EntityId entity, float from_x, float from_y, const MoveTarget& target,
+                         std::vector<std::pair<float, float>>& route) const;
     struct PatrolOrder { Position origin; Position destination; bool returning = false; };
     std::unordered_map<EntityId, PatrolOrder> patrol_orders_;
-    std::unordered_map<FactionId, FactionResearch> faction_research_;
     Terrain terrain_;
+    struct SiteClaim {
+        float x, y, half_x, half_y, pad_height;
+    };
+    bool site_claimed(float x, float y, float half_x, float half_y) const;
+    std::vector<SiteClaim> site_claims_;
+    void refresh_contact_grid();
+    bool near_enemy(float x, float y, FactionId faction) const;
+    std::array<uint8_t, 128 * 128> contact_grid_{};
+    void update_match_result();
+    void refresh_vision();
+    void update_sightings(FactionId faction);
+    bool is_airborne(EntityId entity) const;
+    bool is_watched(FactionId faction, EntityId entity, float x, float y) const;
+    bool has_unit_near(FactionId faction, float x, float y, float radius) const;
+    void update_recon_flights(float delta_ms);
+    struct VisionSource { FactionId faction; float x, y, radius, eye_height; };
+    struct ReconFlight {
+        float x = 0.0f;
+        float y = 0.0f;
+        float loiter_ms = 0.0f;
+        bool on_station = false;
+        bool leaving = false;
+        uint32_t next_leg_tick = 0;
+        int leg = 0;
+    };
+    std::map<EntityId, ReconFlight> recon_flights_;
+    FactionSightings sightings_{};
+    uint32_t vision_terrain_revision_ = 0;
+    std::vector<VisionSource> vision_sources_;
+    VisionMap vision_map_;
+    bool vision_active_ = false;
+    uint32_t vision_revision_ = 0;
+    float world_width_ = 0.0f;
+    float world_height_ = 0.0f;
+    MatchRecord match_record_;
+    std::vector<InputCommand> playback_;
+    size_t playback_cursor_ = 0;
+    void feed_playback();
+    void record_match_tick();
+    MatchSample sample_factions() const;
+    EntityId match_player_post_ = INVALID_ENTITY;
+    EntityId match_enemy_post_ = INVALID_ENTITY;
+    int match_result_ = -1;
+    uint32_t match_start_tick_ = 0;
+    void update_fuel_supply(float delta_ms);
+    std::vector<FuelCapture> fuel_captures_;
+    std::vector<FuelShipment> fuel_shipments_;
+    std::array<std::string, FACTION_COUNT> fuel_supply_reasons_{};
     RoadNetwork road_network_;
     TerritorialControlManager territorial_control_;
      ControlPointBattle control_point_battle_;
      ReinforcementDelivery reinforcement_delivery_;
+     bool forces_by_transport_ = false;
+     std::array<bool, FACTION_COUNT> has_landing_zone_{};
+     std::array<std::array<float, 2>, FACTION_COUNT> landing_zones_{};
+     std::vector<InboundForce> inbound_forces_;
+     void deliver_inbound_forces();
      RequisitionManager requisition_manager_;
     
     std::unique_ptr<AIManager> ai_manager_;
@@ -292,6 +459,9 @@ private:
     void economy_phase(float delta_ms);
     void update_harvesters(float delta_ms);
     void apply_completed_road(const RoadSegment& segment);
+    // Ground units caught inside a finished structure step out to the nearest
+    // walkable ground beyond its footprint, so a builder is never sealed in.
+    void evict_ground_units(float x, float y, float half_x, float half_y);
 };
 
 Simulation* runtime_simulation();

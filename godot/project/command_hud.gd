@@ -20,7 +20,6 @@ const CYAN := MandateTokens.ACCENT
 const AMBER := MandateTokens.WARNING
 const RED := MandateTokens.DANGER
 const GREEN := MandateTokens.SUCCESS
-const BUILD_UNIT_SHORTCUTS := ["1", "4", "5", "9", "0", "P"]
 const UiTypographyScript = preload("res://ui_typography.gd")
 const UiIconRegistry = preload("res://ui/icons/ui_icon_registry.gd")
 const ResponsiveUiScript = preload("res://ui/responsive_ui.gd")
@@ -65,17 +64,7 @@ func get_build_hover_context_at(pointer: Vector2) -> Dictionary:
 	if build_catalog.is_empty():
 		return {}
 	var build_origin := ResponsiveUiScript.centered_origin(size, ResponsiveUiScript.PANEL_MAX_WIDTH)
-	var units: Array = build_catalog.filter(func(item): return not bool(item.get("is_structure", false)) and not bool(item.get("is_aircraft", false)))
-	units.sort_custom(func(left, right): return int(left.get("type", -1)) < int(right.get("type", -1)))
 	var structures: Array = build_catalog.filter(func(item): return bool(item.get("is_structure", false)))
-	for index in range(mini(4, units.size())):
-		var context := _build_hover_context_for(Rect2(build_origin + Vector2(8 + index * 132, 34), Vector2(128, 36)), units[index], pointer)
-		if not context.is_empty():
-			return context
-	for index in range(4, mini(BUILD_UNIT_SHORTCUTS.size(), units.size())):
-		var context := _build_hover_context_for(Rect2(build_origin + Vector2(8 + (index - 4) * 132, 72), Vector2(128, 36)), units[index], pointer)
-		if not context.is_empty():
-			return context
 	for index in range(mini(4, structures.size())):
 		var context := _build_hover_context_for(Rect2(build_origin + Vector2(8 + index * 132, 124), Vector2(128, 28)), structures[index], pointer)
 		if not context.is_empty():
@@ -274,7 +263,7 @@ func _draw() -> void:
 		draw_rect(Rect2(fabrication.position + Vector2(10, 27), Vector2(520, 8)), PROGRESS_TRACK, true)
 		draw_rect(Rect2(fabrication.position + Vector2(10, 27), Vector2(520 * progress, 8)), GREEN, true)
 		_text(fabrication.position + Vector2(10, 55), "%s  %.0f%%  //  %.1f SEC REMAINING" % [String(active.get("name", "UNIT")).to_upper(), progress * 100.0, float(active.get("remaining_seconds", 0.0))], 10, INK, ui_scale)
-		_text(fabrication.position + Vector2(10, 73), "RESERVED MATERIALS: %.0f" % float(active.get("reserved_material", 0.0)), 9, AMBER, ui_scale)
+		_text(fabrication.position + Vector2(10, 73), "RESERVED MATERIALS: %.0f  FUEL: %.0f" % [float(active.get("reserved_material", 0.0)), float(active.get("reserved_fuel", 0.0))], 9, AMBER, ui_scale)
 
 	var fob_installation: Array = snapshot.get("fob_installation", [])
 	if fob_installation.size() >= 6:

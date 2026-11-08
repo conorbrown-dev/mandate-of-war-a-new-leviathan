@@ -58,11 +58,27 @@ void Simulation::start() {
     command_manager_.clear();
     command_log_.clear();
     ai_enabled_ = true;
-    faction_research_.clear();
+    ai_manager_->restore_default_doctrine();
+    match_record_.clear();
+    playback_.clear();
+    playback_cursor_ = 0;
     territorial_control_.reset();
     control_point_battle_.reset();
     reinforcement_delivery_.reset();
+    forces_by_transport_ = false;
+    has_landing_zone_.fill(false);
+    inbound_forces_.clear();
     road_network_.reset();
+    site_claims_.clear();
+    fuel_captures_.clear();
+    fuel_shipments_.clear();
+    fuel_supply_reasons_.fill({});
+    match_player_post_ = match_enemy_post_ = INVALID_ENTITY;
+    match_result_ = -1;
+    vision_sources_.clear();
+    vision_active_ = false;
+    recon_flights_.clear();
+    for (auto& log : sightings_) log.clear();
     pathfinding_.clear_traversal_costs();
     naval_pathfinding_.clear_traversal_costs();
 }
@@ -81,10 +97,26 @@ void Simulation::reset() {
 
 void Simulation::clear_entities() {
     move_targets_.clear();
+    queued_moves_.clear();
     patrol_orders_.clear();
     component_manager_.cleanup_all();
     spatial_grid_.clear();
     entity_manager_.clear();
+    unit_counts_.fill(0);
+}
+
+void Simulation::refresh_unit_counts() {
+    unit_counts_.fill(0);
+    for (const auto entity : component_manager_.entities_with<Faction, UnitData>(entity_manager_.get_entities())) {
+        const auto index = static_cast<size_t>(component_manager_.get_component<Faction>(entity)->faction_id);
+        const auto* health = component_manager_.get_component<Health>(entity);
+        if (index < FACTION_COUNT && (!health || !health->is_dead)) ++unit_counts_[index];
+    }
+}
+
+int Simulation::unit_count(FactionId faction_id) const {
+    const auto index = static_cast<size_t>(faction_id);
+    return index < FACTION_COUNT ? unit_counts_[index] : 0;
 }
 
 void Simulation::update(float delta_ms) {
@@ -98,6 +130,7 @@ void Simulation::update(float delta_ms) {
         const auto tick_start = std::chrono::steady_clock::now();
         tick_++;
         network_manager_.receive_packets();
+        feed_playback();
         process_network_commands();
         process_commands();
         prediction_phase(50.0f);
@@ -106,6 +139,7 @@ void Simulation::update(float delta_ms) {
         logistics_phase(50.0f);
         economy_phase(50.0f);
         if (ai_enabled_) ai_manager_->update(50.0f);
+        record_match_tick();
         network_manager_.update(50.0f);
         last_tick_ms_ = static_cast<float>(
             std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - tick_start).count()
@@ -285,6 +319,47 @@ void Simulation::move_unit(EntityId entity, float x, float y) {
 }
 
 void Simulation::move_unit_with_route(EntityId entity, float x, float y, float route_x, float route_y) {
+    queued_moves_.erase(entity);
+    assign_move_target(entity, x, y, route_x, route_y);
+}
+
+bool Simulation::queue_unit_move_with_route(EntityId entity, float x, float y, float route_x, float route_y) {
+    if (move_targets_.find(entity) == move_targets_.end()) {
+        queued_moves_.erase(entity);
+        return assign_move_target(entity, x, y, route_x, route_y);
+    }
+    const auto& navigation = navigation_for(entity);
+    const auto* position = component_manager_.get_component<Position>(entity);
+    auto& queue = queued_moves_[entity];
+    if (!position || !std::isfinite(x) || !std::isfinite(y) ||
+        !std::isfinite(route_x) || !std::isfinite(route_y) ||
+        queue.size() + 1 >= MAX_MOVE_WAYPOINTS ||
+        !navigation.is_walkable(navigation.to_grid_x(x), navigation.to_grid_y(y)) ||
+        !navigation.is_walkable(navigation.to_grid_x(route_x), navigation.to_grid_y(route_y))) {
+        if (queue.empty()) queued_moves_.erase(entity);
+        return false;
+    }
+    queue.push_back({{x, y, position->z}, {route_x, route_y, position->z}});
+    return true;
+}
+
+std::vector<std::pair<float, float>> Simulation::get_unit_waypoints(EntityId entity) const {
+    std::vector<std::pair<float, float>> waypoints;
+    const auto target = move_targets_.find(entity);
+    if (target == move_targets_.end()) return waypoints;
+    waypoints.emplace_back(target->second.arrival.x, target->second.arrival.y);
+    if (const auto queue = queued_moves_.find(entity); queue != queued_moves_.end()) {
+        for (const auto& waypoint : queue->second) waypoints.emplace_back(waypoint.arrival.x, waypoint.arrival.y);
+    }
+    return waypoints;
+}
+
+std::size_t Simulation::queued_waypoint_count(EntityId entity) const {
+    const auto queue = queued_moves_.find(entity);
+    return queue == queued_moves_.end() ? 0 : queue->second.size();
+}
+
+bool Simulation::assign_move_target(EntityId entity, float x, float y, float route_x, float route_y) {
     auto& navigation = navigation_for(entity);
     auto* position = component_manager_.get_component<Position>(entity);
     auto* velocity = component_manager_.get_component<Velocity>(entity);
@@ -292,7 +367,7 @@ void Simulation::move_unit_with_route(EntityId entity, float x, float y, float r
         !std::isfinite(route_x) || !std::isfinite(route_y) ||
         !navigation.is_walkable(navigation.to_grid_x(x), navigation.to_grid_y(y)) ||
         !navigation.is_walkable(navigation.to_grid_x(route_x), navigation.to_grid_y(route_y))) {
-        return;
+        return false;
     }
 
     if(auto* aircraft=component_manager_.get_component<Aircraft>(entity);
@@ -305,13 +380,15 @@ void Simulation::move_unit_with_route(EntityId entity, float x, float y, float r
         {x, y, position->z},
         {route_x, route_y, position->z}
     };
+    return true;
 }
 
 void Simulation::move_units_formation(
     const std::vector<EntityId>& entities,
     float center_x,
     float center_y,
-    float spacing) {
+    float spacing,
+    bool queued) {
     if (entities.empty() || !std::isfinite(center_x) || !std::isfinite(center_y) ||
         !std::isfinite(spacing) || spacing < movement::kMinimumFormationSpacingMeters) {
         return;
@@ -354,12 +431,14 @@ void Simulation::move_units_formation(
         const int column = static_cast<int>(index) % columns;
         const float arrival_x = route_x + static_cast<float>(column) * effective_spacing - half_width;
         const float arrival_y = route_y + static_cast<float>(row) * effective_spacing - half_height;
-        move_unit_with_route(entities[index], arrival_x, arrival_y, route_x, route_y);
+        if (queued) queue_unit_move_with_route(entities[index], arrival_x, arrival_y, route_x, route_y);
+        else move_unit_with_route(entities[index], arrival_x, arrival_y, route_x, route_y);
     }
 }
 
 void Simulation::stop_unit(EntityId entity) {
     patrol_orders_.erase(entity);
+    queued_moves_.erase(entity);
     combat_manager_.unregister_entity(entity);
     auto* vel = component_manager_.get_component<Velocity>(entity);
     if (vel) {
@@ -440,7 +519,143 @@ void Simulation::return_unit(EntityId entity) {
 
 void Simulation::build_structure(EntityId entity, float x, float y, UnitType unit_type) {
     auto* faction = component_manager_.get_component<Faction>(entity);
-    if (faction) production_manager_.queue_unit(entity, faction->faction_id, unit_type, x, y);
+    if (faction) order_unit(faction->faction_id, unit_type, x, y);
+}
+
+bool Simulation::order_unit(FactionId faction, UnitType type, float x, float y) {
+    if (needs_delivery(type)) return order_delivery(faction, type);
+    const EntityId line = production_manager_.faction_line(faction);
+    return line != INVALID_ENTITY && production_manager_.queue_unit(line, faction, type, x, y);
+}
+
+bool Simulation::needs_delivery(UnitType type) const {
+    if (!forces_by_transport_) return false;
+    const auto proto = get_unit_prototypes().find(type);
+    return proto != get_unit_prototypes().end() && !proto->second.is_aircraft && !proto->second.is_naval;
+}
+
+int Simulation::inbound_count(FactionId faction) const {
+    int count = 0;
+    for (const auto& force : inbound_forces_) count += force.faction == faction ? 1 : 0;
+    return count;
+}
+
+bool Simulation::set_landing_zone(FactionId faction, float x, float y) {
+    const auto index = static_cast<size_t>(faction);
+    if (index >= FACTION_COUNT || !std::isfinite(x) || !std::isfinite(y) ||
+        !pathfinding_.is_walkable(pathfinding_.to_grid_x(x), pathfinding_.to_grid_y(y)) || !is_land_position(x, y)) {
+        return false;
+    }
+    has_landing_zone_[index] = true;
+    landing_zones_[index] = {x, y};
+    return true;
+}
+
+bool Simulation::landing_site(FactionId faction, float& x, float& y) const {
+    float airfield_x = 0.0f;
+    float airfield_y = 0.0f;
+    if (territorial_control_.get_active_installation_position(faction, InstallationType::AIRFIELD, airfield_x, airfield_y)) {
+        // Land just clear of the airfield's runway: beyond either end of its
+        // 750 m site first, then beside it, taking the nearest ground that a
+        // unit can actually stand on.
+        const float distances[] = {460.0f, 520.0f, 600.0f, 700.0f, 850.0f, 1000.0f};
+        for (const float distance : distances) {
+            for (const float direction : {1.0f, -1.0f}) {
+                const float site_y = airfield_y + direction * distance;
+                if (pathfinding_.is_walkable(pathfinding_.to_grid_x(airfield_x), pathfinding_.to_grid_y(site_y)) &&
+                    is_land_position(airfield_x, site_y)) {
+                    x = airfield_x;
+                    y = site_y;
+                    return true;
+                }
+            }
+        }
+        for (const float distance : {210.0f, 300.0f, 420.0f}) {
+            for (const float direction : {1.0f, -1.0f}) {
+                const float site_x = airfield_x + direction * distance;
+                if (pathfinding_.is_walkable(pathfinding_.to_grid_x(site_x), pathfinding_.to_grid_y(airfield_y)) &&
+                    is_land_position(site_x, airfield_y)) {
+                    x = site_x;
+                    y = airfield_y;
+                    return true;
+                }
+            }
+        }
+        // An airfield with no open ground around it cannot receive forces.
+        return false;
+    }
+    const auto index = static_cast<size_t>(faction);
+    if (index < FACTION_COUNT && has_landing_zone_[index]) {
+        x = landing_zones_[index][0];
+        y = landing_zones_[index][1];
+        return true;
+    }
+    return false;
+}
+
+std::string Simulation::delivery_refusal(FactionId faction, UnitType type) const {
+    const auto proto = get_unit_prototypes().find(type);
+    if (proto == get_unit_prototypes().end() || proto->second.faction != faction) return "UNKNOWN UNIT";
+    float x = 0.0f;
+    float y = 0.0f;
+    if (!landing_site(faction, x, y)) return "AIRFIELD REQUIRED FOR REINFORCEMENTS";
+    if (inbound_count(faction) >= kMaxInboundForces) return "TRANSPORT QUEUE FULL";
+    if (unit_count(faction) + inbound_count(faction) >= unit_cap_per_player_) return "UNIT CAP REACHED";
+    const EntityId line = production_manager_.faction_line(faction);
+    const auto line_it = production_manager_.production_lines().find(line);
+    if (line_it == production_manager_.production_lines().end()) return "NO PRODUCTION LINE";
+    const auto storage = production_manager_.storages().find(line_it->second.storage_id);
+    const float cost = production_manager_.get_unit_metal_cost(faction, type);
+    if (storage == production_manager_.storages().end() || storage->second.tactical.materials.current < cost) {
+        return "INSUFFICIENT MATERIALS";
+    }
+    return {};
+}
+
+bool Simulation::order_delivery(FactionId faction, UnitType type) {
+    if (!delivery_refusal(faction, type).empty()) return false;
+    const auto& proto = get_unit_prototypes().at(type);
+    const float cost = production_manager_.get_unit_metal_cost(faction, type);
+    if (!production_manager_.deduct_faction_resources(faction, cost, 0.0f)) return false;
+    const float seconds = proto.build_time_seconds + kTransitSeconds;
+    inbound_forces_.push_back({faction, type, tick_ + static_cast<uint32_t>(std::ceil(seconds * 20.0f))});
+    return true;
+}
+
+void Simulation::deliver_inbound_forces() {
+    if (inbound_forces_.empty()) return;
+    std::array<int, FACTION_COUNT> landed{};
+    for (size_t index = 0; index < inbound_forces_.size();) {
+        const auto force = inbound_forces_[index];
+        float site_x = 0.0f;
+        float site_y = 0.0f;
+        // A force waits in the air if its landing site is gone or the cap is full.
+        if (force.arrive_tick > tick_ || !landing_site(force.faction, site_x, site_y) ||
+            unit_count(force.faction) >= unit_cap_per_player_) {
+            ++index;
+            continue;
+        }
+        const int slot = landed[static_cast<size_t>(force.faction)]++;
+        // Land in a loose block, spread so arrivals on one tick do not overlap.
+        const float spread_x = (static_cast<float>(slot % 6) - 2.5f) * 14.0f;
+        const float spread_y = static_cast<float>(slot / 6) * 14.0f;
+        // A force is only taken off the list once it is on the ground: if its
+        // spot is refused, it tries the site itself, then circles and retries.
+        const float attempts[][2] = {{spread_x, spread_y}, {0.0f, 0.0f}, {spread_x, -spread_y}, {-30.0f, 30.0f}};
+        bool landed_ok = false;
+        for (const auto& offset : attempts) {
+            if (create_unit_with_type(site_x + offset[0], site_y + offset[1], force.type, force.faction) >= 0) {
+                landed_ok = true;
+                break;
+            }
+        }
+        if (landed_ok) {
+            inbound_forces_.erase(inbound_forces_.begin() + static_cast<std::ptrdiff_t>(index));
+        } else {
+            --landed[static_cast<size_t>(force.faction)];
+            ++index;
+        }
+    }
 }
 
 void Simulation::install_fob(EntityId entity, float x, float y, InstallationType installation_type) {
@@ -470,6 +685,16 @@ void Simulation::requisition_unit(EntityId entity, float x, float y, UnitType un
 }
 
 void Simulation::harvest_resource(EntityId entity, float x, float y) {
+    if (const EntityId depot = production_manager_.fuel_depot_at(x, y); depot != INVALID_ENTITY) {
+        // A depot changes hands when a unit reaches it, not when one is ordered to.
+        std::erase_if(fuel_captures_, [entity](const FuelCapture& capture) { return capture.unit == entity; });
+        if (component_manager_.get_component<Faction>(entity)) {
+            const auto& node = production_manager_.resource_nodes().at(depot);
+            fuel_captures_.push_back({entity, depot});
+            move_unit(entity, node.x, node.y);
+        }
+        return;
+    }
     EntityId extractor_id, node_id;
     if (!production_manager_.find_or_create_extractor(x, y, extractor_id, node_id)) {
         return;
@@ -490,6 +715,13 @@ void Simulation::harvest_resource(EntityId entity, float x, float y) {
 
 bool Simulation::destroy_resource_site(EntityId entity, float x, float y) {
     if (!component_manager_.get_component<Faction>(entity)) return false;
+    if (const EntityId depot = production_manager_.fuel_depot_at(x, y); depot != INVALID_ENTITY) {
+        const auto* position = component_manager_.get_component<Position>(entity);
+        const auto& node = production_manager_.resource_nodes().at(depot);
+        if (!position || std::hypot(position->x - node.x, position->y - node.y) > kFuelDepotCaptureRadius) {
+            return false;
+        }
+    }
     return production_manager_.destroy_resource_site(x, y);
 }
 
@@ -515,17 +747,12 @@ void Simulation::defend_area(EntityId entity, float x, float y) {
     }
 }
 
-std::string Simulation::research_id(uint32_t index) {
-    std::vector<std::string> ids;
-    for (const auto& [id, project] : get_research_projects()) ids.push_back(id);
-    std::sort(ids.begin(), ids.end());
-    return index < ids.size() ? ids[index] : "";
-}
 
 bool Simulation::is_visible_to(FactionId faction, EntityId target) const {
     const auto* position = component_manager_.get_component<Position>(target);
     const auto* hp = component_manager_.get_component<Health>(target);
     if (!position || !hp || hp->is_dead || hp->current <= 0) return false;
+    if (vision_active_) return is_watched(faction, target, position->x, position->y);
     return is_position_visible_to(faction, position->x, position->y);
 }
 
@@ -544,7 +771,7 @@ EntityId Simulation::find_nearest_visible_enemy(FactionId faction, float x, floa
         
         float dx = position->x - x, dy = position->y - y;
         float dist_sq = dx*dx + dy*dy;
-        if (dist_sq < nearest_dist_sq) {
+        if (dist_sq < nearest_dist_sq && (!vision_active_ || is_watched(faction, enemy, position->x, position->y))) {
             nearest_dist_sq = dist_sq;
             nearest = enemy;
         }
@@ -554,6 +781,11 @@ EntityId Simulation::find_nearest_visible_enemy(FactionId faction, float x, floa
 
 bool Simulation::is_position_visible_to(FactionId faction, float x, float y) const {
     if (!std::isfinite(x) || !std::isfinite(y)) return false;
+    if (vision_active_) return vision_map_.visible(faction, x, y);
+    for (const auto& source : vision_sources_) {
+        const float dx = source.x - x, dy = source.y - y;
+        if (source.faction == faction && dx * dx + dy * dy <= source.radius * source.radius) return true;
+    }
     for (auto observer : entity_manager_.get_entities()) {
         const auto* owner = component_manager_.get_component<Faction>(observer);
         const auto* health = component_manager_.get_component<Health>(observer);
@@ -570,8 +802,11 @@ bool Simulation::is_position_visible_to(FactionId faction, float x, float y) con
 }
 
 bool Simulation::validate_command(const InputCommand& cmd, uint32_t execution_tick) const {
+    // A flight plan is set before the plane reaches the map.
+    if (recon_flights_.contains(static_cast<EntityId>(cmd.entity_id))) return false;
     if (cmd.tick_id != execution_tick || cmd.player_id > 2 ||
-        cmd.cmd_type > static_cast<uint8_t>(CommandType::INSTALL)) {
+        cmd.cmd_type > static_cast<uint8_t>(CommandType::INSTALL) ||
+        cmd.cmd_type == RETIRED_RESEARCH_COMMAND) {
         fprintf(stderr, "VALIDATE_FAIL: tick_id mismatch or invalid player_id/cmd_type (entity=%u player=%u tick=%u exec=%u type=%u)\n", cmd.entity_id, cmd.player_id, cmd.tick_id, execution_tick, cmd.cmd_type);
         return false;
     }
@@ -652,15 +887,10 @@ bool Simulation::validate_command(const InputCommand& cmd, uint32_t execution_ti
     if (type == CommandType::BUILD) {
         bool ok = cmd.extra <= 255 && production_manager_.can_queue_unit(cmd.entity_id, owner->faction_id, static_cast<UnitType>(cmd.extra));
         const auto prototype = get_unit_prototypes().find(static_cast<UnitType>(cmd.extra));
-        if (ok && prototype != get_unit_prototypes().end() && prototype->second.is_aircraft && prototype->second.requires_runway)
+        if (ok && prototype != get_unit_prototypes().end() && prototype->second.is_aircraft && prototype->second.requires_runway &&
+            prototype->second.recon_loiter_seconds <= 0.0f)
             ok = territorial_control_.has_active_installation(owner->faction_id, InstallationType::AIRFIELD);
         if (!ok) fprintf(stderr, "VALIDATE_FAIL: BUILD check failed (entity=%u extra=%u type=%u)\n", cmd.entity_id, cmd.extra, static_cast<unsigned>(cmd.extra));
-        return ok;
-    }
-    if (type == CommandType::RESEARCH) {
-        bool ok = production_manager_.faction_line(owner->faction_id) == cmd.entity_id &&
-                production_manager_.can_research(owner->faction_id, research_id(cmd.extra));
-        if (!ok) fprintf(stderr, "VALIDATE_FAIL: RESEARCH check failed (entity=%u extra=%u)\n", cmd.entity_id, cmd.extra);
         return ok;
     }
     if (type == CommandType::INSTALL) {
@@ -689,7 +919,16 @@ bool Simulation::validate_command(const InputCommand& cmd, uint32_t execution_ti
         }
     }
     if (type == CommandType::MOVE) {
-        if (cmd.extra > 10000) {
+        if ((cmd.extra & MOVE_QUEUE_FLAG) != 0) {
+            const auto queue = queued_moves_.find(cmd.entity_id);
+            const std::size_t held = (move_targets_.count(cmd.entity_id) ? 1u : 0u) +
+                (queue == queued_moves_.end() ? 0u : queue->second.size());
+            if (held >= MAX_MOVE_WAYPOINTS) {
+                fprintf(stderr, "VALIDATE_FAIL: MOVE queue full (entity=%u)\n", cmd.entity_id);
+                return false;
+            }
+        }
+        if ((cmd.extra & ~MOVE_QUEUE_FLAG) > 10000) {
             fprintf(stderr, "VALIDATE_FAIL: MOVE spacing > 10000 (entity=%u spacing=%u)\n", cmd.entity_id, cmd.extra);
             return false;
         }
@@ -746,11 +985,12 @@ size_t Simulation::issue_commands(const std::vector<EntityId>& entities, Faction
 }
 
 size_t Simulation::issue_move_commands(const std::vector<EntityId>& ids, FactionId player,
-                                      float x, float y, float spacing) {
+                                      float x, float y, float spacing, bool queued) {
     if (!std::isfinite(spacing) || spacing < movement::kMinimumFormationSpacingMeters ||
         spacing > movement::kMaximumFormationSpacingMeters) return 0;
     return issue_commands(ids, player, CommandType::MOVE, x, y,
-                          static_cast<uint32_t>(std::round(spacing * command_position_scale_)));
+                          static_cast<uint32_t>(std::round(spacing * command_position_scale_)) |
+                              (queued ? MOVE_QUEUE_FLAG : 0u));
 }
 size_t Simulation::issue_stop_commands(const std::vector<EntityId>& ids, FactionId player) {
     return issue_commands(ids, player, CommandType::STOP);
@@ -797,8 +1037,40 @@ void Simulation::render_update() {
     renderer_.end_frame();
 }
 
+namespace {
+constexpr uint32_t kVisionRefreshTicks = 5;
+}
+
+void Simulation::refresh_contact_grid() {
+    contact_grid_.fill(0);
+    for (const auto entity : component_manager_.entities_with<Position, Faction>(entity_manager_.get_entities())) {
+        const auto* position = component_manager_.get_component<Position>(entity);
+        const auto* faction = component_manager_.get_component<Faction>(entity);
+        const auto* health = component_manager_.get_component<Health>(entity);
+        if (health && health->is_dead) continue;
+        const int cell_x = static_cast<int>(std::floor(position->x / movement::kContactCellMeters)) & (movement::kContactGridCells - 1);
+        const int cell_y = static_cast<int>(std::floor(position->y / movement::kContactCellMeters)) & (movement::kContactGridCells - 1);
+        contact_grid_[cell_y * movement::kContactGridCells + cell_x] |= static_cast<uint8_t>(1u << static_cast<int>(faction->faction_id));
+    }
+}
+
+bool Simulation::near_enemy(float x, float y, FactionId faction) const {
+    const int cell_x = static_cast<int>(std::floor(x / movement::kContactCellMeters));
+    const int cell_y = static_cast<int>(std::floor(y / movement::kContactCellMeters));
+    const uint8_t own = static_cast<uint8_t>(1u << static_cast<int>(faction));
+    for (int row = cell_y - 2; row <= cell_y + 2; ++row) {
+        for (int column = cell_x - 2; column <= cell_x + 2; ++column) {
+            const int index = (row & (movement::kContactGridCells - 1)) * movement::kContactGridCells +
+                (column & (movement::kContactGridCells - 1));
+            if (contact_grid_[index] & ~own) return true;
+        }
+    }
+    return false;
+}
+
 void Simulation::prediction_phase(float delta_ms) {
     const float dt = delta_ms / 1000.0f;
+    if (tick_ % movement::kContactRefreshTicks == 1) refresh_contact_grid();
     const auto entities = component_manager_.entities_with<Position, Velocity>(entity_manager_.get_entities());
 
     for (auto entity_id : entities) {
@@ -816,6 +1088,7 @@ void Simulation::prediction_phase(float delta_ms) {
         }
 
         auto& navigation = navigation_for(entity_id);
+        bool road_marching = false;
         auto target = move_targets_.find(entity_id);
         if (target != move_targets_.end()) {
             const float dx = target->second.arrival.x - pos->x;
@@ -830,7 +1103,12 @@ void Simulation::prediction_phase(float delta_ms) {
                 ? std::min(get_off_road_settings().maximum_speed_penalty,
                     off_road->accumulated * get_off_road_settings().speed_penalty_per_wear)
                 : 0.0f;
-            const float move_speed = base_move_speed * road_multiplier * (1.0f - wear_speed_penalty);
+            const auto* unit_faction = component_manager_.get_component<Faction>(entity_id);
+            road_marching = !vessel && !aircraft && unit_faction &&
+                distance > movement::kRoadMarchMinimumDistanceMeters &&
+                !near_enemy(pos->x, pos->y, unit_faction->faction_id);
+            const float move_speed = base_move_speed * road_multiplier * (1.0f - wear_speed_penalty) *
+                (road_marching ? movement::kRoadMarchSpeedMultiplier : 1.0f);
             const float max_step = move_speed * dt;
 
             const auto steer_toward = [&](float desired_x, float desired_y) {
@@ -868,7 +1146,26 @@ void Simulation::prediction_phase(float delta_ms) {
                     // room. Cap it near the slot so it cannot create an
                     // endless low-speed orbit around the destination.
                     const float turn_crawl_speed = std::min(maneuver_speed, stopping_speed);
-                    const float desired_speed = direction * std::max(turn_crawl_speed, travel_speed);
+                    float chosen_speed = std::max(turn_crawl_speed, travel_speed);
+                    // A vehicle that cannot pivot reaches a point at distance d
+                    // and bearing error e only on a turn no wider than
+                    // d / (2 sin e). Drive slowly enough that the turn it can
+                    // make fits, or a fast chassis circles a nearby slot forever.
+                    const float bearing = std::abs(std::sin(remaining_error));
+                    if (!steering->can_pivot_turn && bearing > 0.05f) {
+                        const float fitting_radius = distance / (2.0f * bearing);
+                        float fitting_speed;
+                        if (fitting_radius >= steering->minimum_turn_radius) {
+                            fitting_speed = steering->turn_rate_at_speed * fitting_radius;
+                        } else {
+                            // Tighter than the chassis radius: only low-speed
+                            // maneuver authority, which fades with speed, can do it.
+                            const float authority = steering->maneuver_turn_rate * fitting_radius;
+                            fitting_speed = authority / (1.0f + authority / std::max(maximum_speed, 0.001f));
+                        }
+                        chosen_speed = std::min(chosen_speed, std::max(fitting_speed, 0.1f));
+                    }
+                    const float desired_speed = direction * chosen_speed;
                     const float rate = desired_speed > steering->current_speed ? steering->acceleration : steering->deceleration;
                     steering->current_speed += std::clamp(
                         desired_speed - steering->current_speed,
@@ -909,6 +1206,17 @@ void Simulation::prediction_phase(float delta_ms) {
                     steering->current_speed = 0.0f;
                 }
                 move_targets_.erase(target);
+                // Drive the next queued leg. A waypoint that is no longer
+                // walkable is skipped rather than ending the queue.
+                if (auto queue = queued_moves_.find(entity_id); queue != queued_moves_.end()) {
+                    while (!queue->second.empty()) {
+                        const MoveTarget next = queue->second.front();
+                        queue->second.pop_front();
+                        if (assign_move_target(entity_id, next.arrival.x, next.arrival.y,
+                                               next.strategic_route.x, next.strategic_route.y)) break;
+                    }
+                    if (queue->second.empty()) queued_moves_.erase(queue);
+                }
             } else {
                 if (navigation.has_line_of_sight(
                         pos->x,
@@ -953,7 +1261,8 @@ void Simulation::prediction_phase(float delta_ms) {
                 const float terrain_factor = on_road ? settings.road_wear_multiplier : 1.0f;
                 const float unit_factor = off_road_unit_factor(off_road->unit_type);
                 off_road->distance_traveled += distance_traveled;
-                off_road->accumulated += distance_traveled * settings.wear_per_meter * terrain_factor * unit_factor;
+                off_road->accumulated += distance_traveled * settings.wear_per_meter * terrain_factor *
+                    (road_marching ? 1.0f / movement::kRoadMarchSpeedMultiplier : 1.0f) * unit_factor;
                 if (auto* material = component_manager_.get_component<Material>(entity_id)) {
                     material->current = std::max(0.0f, material->current -
                         distance_traveled * settings.material_per_meter * terrain_factor * unit_factor);
@@ -1025,6 +1334,14 @@ void Simulation::logistics_phase(float delta_ms) {
 }
 
 void Simulation::economy_phase(float delta_ms) {
+     refresh_unit_counts();
+     for (size_t index = 0; index < FACTION_COUNT; ++index) {
+         const auto faction = static_cast<FactionId>(index);
+         // An inbound delivery was paid for, so production must leave it a slot.
+         const int reserved = (reinforcement_delivery_.state() == ReinforcementDeliveryState::INCOMING &&
+             reinforcement_delivery_.owner() == faction ? 1 : 0) + inbound_count(faction);
+         production_manager_.set_unit_slots(faction, unit_cap_per_player_ - unit_counts_[index] - reserved);
+     }
      production_manager_.update_all(delta_ms);
      requisition_manager_.update(delta_ms, production_manager_, *this);
      update_harvesters(delta_ms);
@@ -1033,19 +1350,24 @@ void Simulation::economy_phase(float delta_ms) {
     auto& completed = production_manager_.get_completed_constructions();
     for (size_t index = 0; index < completed.size(); ++index) {
         const auto& comp = completed[index];
+        if (comp.is_structure && comp.structure_type == EARTHWORKS_JOB) {
+            for (const auto& claim : site_claims_) {
+                if (claim.x == comp.x && claim.y == comp.y) {
+                    terrain_.flatten_rect(claim.x, claim.y, claim.half_x, claim.half_y, claim.pad_height);
+                    break;
+                }
+            }
+            continue;
+        }
         if (comp.is_structure) {
-			// Block the authored footprint, not just its center cell. Flow-field
-			// steering still provides an exit direction for an engineer already
-			// standing inside a newly completed footprint.
-			float half_width = 125.0f;
-			float half_height = 125.0f;
-			switch (comp.structure_type) {
-				case 1: half_width = 90.0f; half_height = 90.0f; break; // radar mast
-				case 2: half_width = 300.0f; half_height = 900.0f; break; // airfield
-				case 3: half_width = 90.0f; half_height = 90.0f; break; // floodlight
-				default: break; // forward outpost
-			}
+			// Block the same footprint placement claimed, then move out any ground
+			// unit standing on it: pathfinding cannot start from a blocked cell.
+			const StructureSiteRules rules = structure_site_rules(comp.structure_type);
+			const float half_width = rules.footprint_x > 0.0f ? rules.footprint_x * 0.5f : 30.0f;
+			const float half_height = rules.footprint_y > 0.0f ? rules.footprint_y * 0.5f : 30.0f;
 			pathfinding_.block_world_rectangle(comp.x, comp.y, half_width, half_height);
+			evict_ground_units(comp.x, comp.y, half_width, half_height);
+			vision_sources_.push_back({comp.faction_id, comp.x, comp.y, structure_view_range(comp.structure_type), structure_eye_height(comp.structure_type)});
             if (comp.structure_type == 2)
                 territorial_control_.add_installation(comp.x, comp.y, InstallationType::AIRFIELD, comp.faction_id);
             continue;
@@ -1080,11 +1402,26 @@ void Simulation::economy_phase(float delta_ms) {
             if (auto* aircraft = component_manager_.get_component<Aircraft>(static_cast<EntityId>(spawned_id))) {
                 aircraft->status = Aircraft::Status::AIRBORNE;
                 aircraft->mission = Aircraft::Mission::PATROL;
+                if (proto->second.recon_loiter_seconds > 0.0f) {
+                    // The flight plan covers the whole trip, so there is no base
+                    // to return to and no airborne limit to crash against.
+                    aircraft->mission = Aircraft::Mission::RECON;
+                    aircraft->max_airborne_time_ms = 0.0f;
+                    aircraft->fuel_consumption_rate = 0.0f;
+                    aircraft->material_consumption_rate = 0.0f;
+                }
             }
-            move_unit(static_cast<EntityId>(spawned_id), comp.x, comp.y);
+            const bool flight_plan = proto->second.recon_loiter_seconds > 0.0f;
+            const float destination_x = flight_plan ? std::clamp(comp.x, pathfinding_.min_world_x_center(), pathfinding_.max_world_x_center()) : comp.x;
+            const float destination_y = flight_plan ? std::clamp(comp.y, pathfinding_.min_world_y_center(), pathfinding_.max_world_y_center()) : comp.y;
+            if (flight_plan) {
+                recon_flights_[static_cast<EntityId>(spawned_id)] = {destination_x, destination_y, proto->second.recon_loiter_seconds * 1000.0f};
+            }
+            move_unit(static_cast<EntityId>(spawned_id), destination_x, destination_y);
         }
     }
     production_manager_.clear_completed_constructions();
+    deliver_inbound_forces();
 }
 
 void Simulation::update_harvesters(float delta_ms) {
@@ -1129,6 +1466,369 @@ void Simulation::environment_phase(float delta_ms) {
         }
         create_unit_with_type(deploy_x, deploy_y, package.unit_type, reinforcement_delivery_.owner());
     }
+    update_fuel_supply(delta_ms);
+    update_recon_flights(delta_ms);
+    update_match_result();
+    if (vision_active_ && tick_ % kVisionRefreshTicks == 0) refresh_vision();
+}
+
+void Simulation::begin_match(EntityId player_post, EntityId enemy_post) {
+    match_player_post_ = player_post;
+    match_enemy_post_ = enemy_post;
+    match_result_ = -1;
+    match_start_tick_ = tick_;
+    match_record_.begin(tick_, command_position_scale_);
+    match_record_.set_info("ai_doctrine", ai_manager_->doctrine().key);
+    match_record_.set_info("ai_difficulty", ai_manager_->difficulty().key);
+    match_record_.set_info("player_post", std::to_string(player_post));
+    match_record_.set_info("enemy_post", std::to_string(enemy_post));
+    for (const EntityId post : {player_post, enemy_post}) {
+        const auto* position = component_manager_.get_component<Position>(post);
+        const auto* faction = component_manager_.get_component<Faction>(post);
+        if (position && faction) vision_sources_.push_back({faction->faction_id, position->x, position->y, kCommandPostViewRange, kCommandPostEyeHeight});
+    }
+    vision_map_.configure(world_width_ > 0.0f ? world_width_ : 40000.0f, world_height_ > 0.0f ? world_height_ : 40000.0f);
+    vision_map_.sample_terrain([this](float x, float y) { return terrain_.height_at(x, y); });
+    vision_terrain_revision_ = terrain_.revision();
+    vision_active_ = true;
+    combat_manager_.set_sight_check([this](FactionId faction, EntityId target) { return is_visible_to(faction, target); });
+    refresh_vision();
+}
+
+bool Simulation::is_airborne(EntityId entity) const {
+    const auto* aircraft = component_manager_.get_component<Aircraft>(entity);
+    return aircraft && aircraft->status != Aircraft::Status::ON_GROUND && aircraft->status != Aircraft::Status::CRASHED;
+}
+
+bool Simulation::is_watched(FactionId faction, EntityId entity, float x, float y) const {
+    return is_airborne(entity) ? vision_map_.visible_in_sky(faction, x, y) : vision_map_.visible(faction, x, y);
+}
+
+bool Simulation::has_unit_near(FactionId faction, float x, float y, float radius) const {
+    for (const auto entity : spatial_grid().query_in_region(x, y, radius)) {
+        const auto* owner = component_manager_.get_component<Faction>(entity);
+        const auto* position = component_manager_.get_component<Position>(entity);
+        if (!owner || owner->faction_id != faction || !position || is_airborne(entity)) continue;
+        const float dx = position->x - x, dy = position->y - y;
+        if (dx * dx + dy * dy <= radius * radius) return true;
+    }
+    return false;
+}
+
+int Simulation::recon_flights_in_air(FactionId faction) const {
+    int flights = 0;
+    for (const auto& [plane, flight] : recon_flights_) {
+        (void)flight;
+        const auto* owner = component_manager_.get_component<Faction>(plane);
+        if (owner && owner->faction_id == faction) ++flights;
+    }
+    return flights;
+}
+
+void Simulation::update_recon_flights(float delta_ms) {
+    constexpr float kStationRadius = 500.0f;
+    constexpr uint32_t kLegTicks = 20 * 8;
+    const float map_edge = pathfinding_.min_world_x_center();
+    std::vector<EntityId> finished;
+    for (auto& [plane, flight] : recon_flights_) {
+        const auto* position = component_manager_.get_component<Position>(plane);
+        if (!position || get_unit_is_dead(plane)) {
+            finished.push_back(plane);
+            continue;
+        }
+        if (flight.leaving) {
+            if (position->x <= map_edge + pathfinding_.cell_size()) {
+                destroy_unit(plane);
+                finished.push_back(plane);
+            }
+            continue;
+        }
+        if (!flight.on_station) {
+            if (std::hypot(position->x - flight.x, position->y - flight.y) > kStationRadius) continue;
+            flight.on_station = true;
+            flight.next_leg_tick = tick_;
+        }
+        flight.loiter_ms -= delta_ms;
+        if (flight.loiter_ms <= 0.0f) {
+            flight.leaving = true;
+            move_unit(plane, map_edge, position->y);
+        } else if (tick_ >= flight.next_leg_tick) {
+            constexpr std::array<std::array<float, 2>, 4> kLegs{{{1.0f, 0.0f}, {0.0f, 1.0f}, {-1.0f, 0.0f}, {0.0f, -1.0f}}};
+            const auto& leg = kLegs[static_cast<size_t>(flight.leg++ % 4)];
+            move_unit(plane, flight.x + leg[0] * kStationRadius, flight.y + leg[1] * kStationRadius);
+            flight.next_leg_tick = tick_ + kLegTicks;
+        }
+    }
+    for (const auto plane : finished) recon_flights_.erase(plane);
+}
+
+void Simulation::update_sightings(FactionId faction) {
+    auto& log = sightings_[static_cast<size_t>(faction)];
+    for (auto& [id, sighting] : log) {
+        (void)id;
+        sighting.in_view = false;
+    }
+    for (const auto entity : seen_enemies(faction)) {
+        if (component_manager_.get_component<Aircraft>(entity)) continue;
+        const auto* position = component_manager_.get_component<Position>(entity);
+        const auto* data = component_manager_.get_component<UnitData>(entity);
+        // Command posts carry generic unit data, but a found one stays found.
+        const bool mobile = data && data->speed > 0.0f && entity != match_player_post_ && entity != match_enemy_post_;
+        log[entity] = {position->x, position->y, data ? data->unit_type : -1, tick_, mobile, true};
+    }
+    for (auto it = log.begin(); it != log.end();) {
+        const auto& sighting = it->second;
+        const bool seen_gone = !sighting.in_view && get_unit_is_dead(it->first) && vision_map_.visible(faction, sighting.x, sighting.y);
+        const bool checked = !sighting.in_view && vision_map_.visible(faction, sighting.x, sighting.y) &&
+                             has_unit_near(faction, sighting.x, sighting.y, kSightingCheckedMeters);
+        const bool stale = !sighting.in_view && sighting.mobile && tick_ - sighting.tick > kSightingMemoryTicks;
+        it = seen_gone || checked || stale ? log.erase(it) : std::next(it);
+    }
+}
+
+void Simulation::refresh_vision() {
+    if (vision_terrain_revision_ != terrain_.revision()) {
+        vision_map_.sample_terrain([this](float x, float y) { return terrain_.height_at(x, y); });
+        vision_terrain_revision_ = terrain_.revision();
+    }
+    vision_map_.clear();
+    for (const auto& source : vision_sources_) vision_map_.reveal(source.faction, source.x, source.y, source.radius, source.eye_height);
+    for (const auto entity : component_manager_.entities_with<Position, Faction>(entity_manager_.get_entities())) {
+        const auto* sensor = component_manager_.get_component<UnitData>(entity);
+        const auto* health = component_manager_.get_component<Health>(entity);
+        if (!sensor || sensor->view_range <= 0.0f || (health && (health->is_dead || health->current <= 0.0f))) continue;
+        const auto* position = component_manager_.get_component<Position>(entity);
+        vision_map_.reveal(component_manager_.get_component<Faction>(entity)->faction_id, position->x, position->y, sensor->view_range,
+                           is_airborne(entity) ? kAircraftEyeHeight : kGroundEyeHeight);
+    }
+    for (const EntityId post : {match_player_post_, match_enemy_post_}) {
+        const auto* faction = component_manager_.get_component<Faction>(post);
+        if (faction) update_sightings(faction->faction_id);
+    }
+    ++vision_revision_;
+}
+
+std::vector<EntityId> Simulation::seen_enemies(FactionId faction) const {
+    std::vector<EntityId> seen;
+    for (const auto entity : entity_manager_.get_entities()) {
+        const auto* owner = component_manager_.get_component<Faction>(entity);
+        const auto* position = component_manager_.get_component<Position>(entity);
+        const auto* health = component_manager_.get_component<Health>(entity);
+        if (!owner || !position || owner->faction_id == faction || (health && health->is_dead)) continue;
+        if (is_watched(faction, entity, position->x, position->y)) seen.push_back(entity);
+    }
+    std::sort(seen.begin(), seen.end());
+    return seen;
+}
+
+void Simulation::record_external_action(std::string name, std::vector<double> args) {
+    match_record_.add_action(tick_, std::move(name), std::move(args));
+}
+
+void Simulation::play_back_commands(std::vector<InputCommand> commands) {
+    std::stable_sort(commands.begin(), commands.end(), [](const InputCommand& a, const InputCommand& b) { return a.tick_id < b.tick_id; });
+    playback_ = std::move(commands);
+    playback_cursor_ = 0;
+}
+
+// Orders that ran at this tick go back into the queue in their original order,
+// so formations regroup exactly as they did.
+void Simulation::feed_playback() {
+    std::vector<InputCommand> due;
+    while (playback_cursor_ < playback_.size() && playback_[playback_cursor_].tick_id <= tick_) {
+        if (playback_[playback_cursor_].tick_id == tick_) due.push_back(playback_[playback_cursor_]);
+        ++playback_cursor_;
+    }
+    if (!due.empty()) command_manager_.inject_local_commands(due);
+}
+
+uint64_t Simulation::state_hash() const {
+    uint64_t hash = 1469598103934665603ull;
+    const auto mix = [&hash](const void* data, size_t size) {
+        const auto* bytes = static_cast<const unsigned char*>(data);
+        for (size_t index = 0; index < size; ++index) {
+            hash ^= bytes[index];
+            hash *= 1099511628211ull;
+        }
+    };
+    mix(&tick_, sizeof(tick_));
+    auto entities = entity_manager_.get_entities();
+    std::sort(entities.begin(), entities.end());
+    for (const EntityId entity : entities) {
+        mix(&entity, sizeof(entity));
+        if (const auto* faction = component_manager_.get_component<Faction>(entity)) mix(&faction->faction_id, sizeof(faction->faction_id));
+        if (const auto* position = component_manager_.get_component<Position>(entity)) {
+            mix(&position->x, sizeof(position->x));
+            mix(&position->y, sizeof(position->y));
+        }
+        if (const auto* health = component_manager_.get_component<Health>(entity)) {
+            mix(&health->current, sizeof(health->current));
+            mix(&health->is_dead, sizeof(health->is_dead));
+        }
+    }
+    for (const FactionId faction : {FactionId::ELITE_PRECISION, FactionId::MASS_WARFARE, FactionId::INDUSTRIAL_EXPERIMENTAL}) {
+        if (const auto* resources = production_manager_.tactical_resources(production_manager_.faction_storage(faction))) {
+            mix(&resources->materials.current, sizeof(resources->materials.current));
+            mix(&resources->fuel.current, sizeof(resources->fuel.current));
+        }
+    }
+    mix(&match_result_, sizeof(match_result_));
+    return hash;
+}
+
+MatchSample Simulation::sample_factions() const {
+    MatchSample sample;
+    sample.tick = tick_;
+    for (const EntityId entity : entity_manager_.get_entities()) {
+        const auto* faction = component_manager_.get_component<Faction>(entity);
+        const auto* data = component_manager_.get_component<UnitData>(entity);
+        const auto* health = component_manager_.get_component<Health>(entity);
+        const auto* position = component_manager_.get_component<Position>(entity);
+        const auto index = faction ? static_cast<size_t>(faction->faction_id) : sample.factions.size();
+        if (index >= sample.factions.size() || !data || !position || (health && health->is_dead)) continue;
+        auto& summary = sample.factions[index];
+        ++summary.units;
+        if (data->speed > 0.0f && component_manager_.get_component<Weapon>(entity) &&
+            entity != match_player_post_ && entity != match_enemy_post_) {
+            ++summary.fighters;
+            summary.army_x += position->x;
+            summary.army_y += position->y;
+        }
+    }
+    for (size_t index = 0; index < sample.factions.size(); ++index) {
+        auto& summary = sample.factions[index];
+        if (summary.fighters > 0) {
+            summary.army_x /= static_cast<float>(summary.fighters);
+            summary.army_y /= static_cast<float>(summary.fighters);
+        }
+        if (const auto* resources = production_manager_.tactical_resources(production_manager_.faction_storage(static_cast<FactionId>(index)))) {
+            summary.materials = resources->materials.current;
+        }
+    }
+    return sample;
+}
+
+void Simulation::record_match_tick() {
+    if (!match_record_.recording()) return;
+    for (size_t faction = 0; faction < sightings_.size(); ++faction) {
+        if (!sightings_[faction].empty()) match_record_.note_first_contact(faction, tick_);
+    }
+    if (tick_ % MatchRecord::kHashEveryTicks == 0) match_record_.add_hash(tick_, state_hash());
+    if (tick_ % MatchRecord::kSampleEveryTicks == 0) match_record_.add_sample(sample_factions());
+    if (match_result_ != -1) {
+        match_record_.add_hash(tick_, state_hash());
+        match_record_.add_sample(sample_factions());
+        match_record_.finish(tick_, match_result_, match_seconds());
+    }
+}
+
+void Simulation::update_match_result() {
+    if (match_result_ != -1 || match_player_post_ == INVALID_ENTITY) return;
+    const bool player_lost = get_unit_is_dead(match_player_post_);
+    const bool enemy_lost = get_unit_is_dead(match_enemy_post_);
+    if (player_lost || enemy_lost) match_result_ = player_lost == enemy_lost ? 2 : player_lost ? 1 : 0;
+}
+
+void Simulation::update_fuel_supply(float delta_ms) {
+    std::erase_if(fuel_captures_, [this](const FuelCapture& capture) {
+        const auto depot = production_manager_.resource_nodes().find(capture.depot);
+        const auto* position = component_manager_.get_component<Position>(capture.unit);
+        const auto* faction = component_manager_.get_component<Faction>(capture.unit);
+        const auto* health = component_manager_.get_component<Health>(capture.unit);
+        if (depot == production_manager_.resource_nodes().end() || !position || !faction ||
+            (health && health->is_dead)) return true;
+        const float depot_x = depot->second.x;
+        const float depot_y = depot->second.y;
+        if (std::hypot(position->x - depot_x, position->y - depot_y) <= kFuelDepotCaptureRadius) {
+            production_manager_.assign_fuel_depot(capture.depot, production_manager_.faction_storage(faction->faction_id), true);
+            return true;
+        }
+        const auto target = move_targets_.find(capture.unit);
+        return target == move_targets_.end() ||
+            std::hypot(target->second.arrival.x - depot_x, target->second.arrival.y - depot_y) > kFuelDepotCaptureRadius;
+    });
+
+    std::erase_if(fuel_shipments_, [this, delta_ms](FuelShipment& shipment) {
+        shipment.remaining_ms -= delta_ms;
+        if (shipment.remaining_ms > 0.0f) return false;
+        auto& reason = fuel_supply_reasons_[static_cast<size_t>(shipment.faction)];
+        if (territorial_control_.active_installation_count(shipment.faction, InstallationType::AIRFIELD) == 0) {
+            reason = "FUEL SHIPMENT LOST // NO AIRFIELD";
+            return true;
+        }
+        production_manager_.update_storage(production_manager_.faction_storage(shipment.faction), 0.0f, kFuelShipmentLoad);
+        reason = "FUEL SHIPMENT DELIVERED";
+        return true;
+    });
+}
+
+bool Simulation::request_fuel_shipment(FactionId player) {
+    auto& reason = fuel_supply_reasons_[static_cast<size_t>(player)];
+    if (fuel_shipment(player)) {
+        reason = "FUEL SHIPMENT ALREADY INBOUND";
+        return false;
+    }
+    float x = 0.0f;
+    float y = 0.0f;
+    if (!territorial_control_.get_active_installation_position(player, InstallationType::AIRFIELD, x, y)) {
+        reason = "AIRFIELD REQUIRED FOR FUEL SHIPMENTS";
+        return false;
+    }
+    const auto storage = production_manager_.storages().find(production_manager_.faction_storage(player));
+    if (storage == production_manager_.storages().end()) return false;
+    const auto& funds = storage->second.tactical;
+    if (funds.fuel.capacity - funds.fuel.current < kFuelShipmentLoad) {
+        reason = "FUEL STORAGE FULL";
+        return false;
+    }
+    if (funds.materials.current < kFuelShipmentMaterialCost ||
+        !production_manager_.deduct_faction_resources(player, kFuelShipmentMaterialCost, 0.0f)) {
+        reason = "INSUFFICIENT MATERIALS";
+        return false;
+    }
+    fuel_shipments_.push_back({player, x, y, kFuelShipmentDurationMs});
+    reason = "FUEL SHIPMENT INBOUND";
+    return true;
+}
+
+const FuelShipment* Simulation::fuel_shipment(FactionId faction) const {
+    for (const auto& shipment : fuel_shipments_) {
+        if (shipment.faction == faction) return &shipment;
+    }
+    return nullptr;
+}
+
+const std::string& Simulation::fuel_supply_reason(FactionId faction) const {
+    return fuel_supply_reasons_[static_cast<size_t>(faction)];
+}
+
+bool Simulation::assign_fuel_depot(EntityId depot, FactionId holder) {
+    const auto node = production_manager_.resource_nodes().find(depot);
+    const EntityId storage = production_manager_.faction_storage(holder);
+    if (node == production_manager_.resource_nodes().end() || storage == INVALID_ENTITY ||
+        node->second.type != ResourceNode::Type::ENERGY) return false;
+    production_manager_.assign_fuel_depot(depot, storage, false);
+    return true;
+}
+
+std::vector<FuelDepotStatus> Simulation::fuel_depots() const {
+    std::vector<FuelDepotStatus> depots;
+    for (const auto& [id, node] : production_manager_.resource_nodes()) {
+        if (node.type != ResourceNode::Type::ENERGY) continue;
+        FuelDepotStatus status{id, node.x, node.y, node.amount, node.max_amount};
+        const EntityId holder = production_manager_.fuel_depot_holder(id);
+        for (size_t faction = 0; faction < FACTION_COUNT && holder != INVALID_ENTITY; ++faction) {
+            if (production_manager_.faction_storage(static_cast<FactionId>(faction)) == holder) {
+                status.owner = static_cast<int>(faction);
+            }
+        }
+        status.capturing = std::any_of(fuel_captures_.begin(), fuel_captures_.end(),
+            [id](const FuelCapture& capture) { return capture.depot == id; });
+        depots.push_back(status);
+    }
+    std::sort(depots.begin(), depots.end(),
+        [](const FuelDepotStatus& a, const FuelDepotStatus& b) { return a.id < b.id; });
+    return depots;
 }
 
 bool Simulation::begin_control_point_battle(const std::vector<ControlPointDefinition>& points,
@@ -1169,7 +1869,7 @@ bool Simulation::request_reinforcement_delivery(FactionId player) {
     const auto storage = production_manager_.storages().find(line);
     const bool funded = storage != production_manager_.storages().end() &&
         storage->second.tactical.materials.current >= package.material_cost;
-    if (!reinforcement_delivery_.request(funded)) return false;
+    if (!reinforcement_delivery_.request(funded, !at_unit_cap(player))) return false;
     return production_manager_.deduct_faction_resources(player, package.material_cost, 0.0f);
 }
 
@@ -1196,6 +1896,66 @@ float Simulation::get_unit_y(EntityId entity) const {
 
 bool Simulation::has_move_target(EntityId entity) const {
     return move_targets_.find(entity) != move_targets_.end();
+}
+
+bool Simulation::get_unit_route(EntityId entity, std::vector<std::pair<float, float>>& route) const {
+    route.clear();
+    const auto target = move_targets_.find(entity);
+    const auto* position = component_manager_.get_component<Position>(entity);
+    if (target == move_targets_.end() || !position) return false;
+    route.emplace_back(position->x, position->y);
+    if (!trace_route_leg(entity, position->x, position->y, target->second, route)) return true;
+    // Each queued leg starts where the previous one arrives.
+    if (const auto queue = queued_moves_.find(entity); queue != queued_moves_.end()) {
+        for (const auto& waypoint : queue->second) {
+            const auto [from_x, from_y] = route.back();
+            if (!trace_route_leg(entity, from_x, from_y, waypoint, route)) break;
+        }
+    }
+    return true;
+}
+
+// Appends one leg's turns and arrival point after (from_x, from_y), which the
+// caller has already placed in `route`. Returns false when the leg stopped
+// short (the point cap or a dead end), so later legs cannot follow it.
+bool Simulation::trace_route_leg(EntityId entity, float from_x, float from_y, const MoveTarget& target,
+                                 std::vector<std::pair<float, float>>& route) const {
+    const auto& navigation = navigation_for(entity);
+    const float arrival_x = target.arrival.x;
+    const float arrival_y = target.arrival.y;
+    const float route_x = target.strategic_route.x;
+    const float route_y = target.strategic_route.y;
+
+    // Walk the same flow field update_movement steers by. The unit drives in
+    // its cell's flow direction from wherever it stands in that cell, so step
+    // whole cells from the unit's own position rather than snapping to cell
+    // centres. A corner is a cell where that direction changes. Once the
+    // arrival point is in line of sight the movement system drives straight
+    // at it, so the walk ends there.
+    constexpr int MAX_TRACE_CELLS = 4096;
+    const float cell = navigation.cell_size();
+    float x = from_x;
+    float y = from_y;
+    std::pair<float, float> heading{0.0f, 0.0f};
+    bool reaches_arrival = navigation.has_line_of_sight(x, y, arrival_x, arrival_y);
+    for (int step = 0; !reaches_arrival && step < MAX_TRACE_CELLS &&
+            route.size() + 2 < MAX_ROUTE_POINTS; ++step) {
+        const auto direction = navigation.flow_direction(x, y, route_x, route_y);
+        if (direction.first == 0.0f && direction.second == 0.0f) break;
+        if (step > 0 && direction != heading) route.emplace_back(x, y);
+        heading = direction;
+        x += direction.first * cell;
+        y += direction.second * cell;
+        reaches_arrival = navigation.has_line_of_sight(x, y, arrival_x, arrival_y);
+    }
+    if (route.back() != std::pair<float, float>{x, y}) {
+        // Where the walk ends is a turn unless the last leg already points
+        // at the arrival point.
+        const float cross = heading.first * (arrival_y - y) - heading.second * (arrival_x - x);
+        if (!reaches_arrival || std::abs(cross) > 0.01f * cell) route.emplace_back(x, y);
+    }
+    if (reaches_arrival) route.emplace_back(arrival_x, arrival_y);
+    return reaches_arrival && route.size() + 2 < MAX_ROUTE_POINTS;
 }
 
 float Simulation::get_unit_heading(EntityId entity) const {
@@ -1268,6 +2028,7 @@ void Simulation::destroy_unit(EntityId entity) {
         if (extractor.storage_id == entity) extractor.active = false;
     combat_manager_.unregister_entity(entity);
     move_targets_.erase(entity);
+    queued_moves_.erase(entity);
     patrol_orders_.erase(entity);
     logistics_manager_.archive_intelligence(entity);
     logistics_manager_.remove_aircraft(entity);
@@ -1347,6 +2108,37 @@ extern "C" {
 
     int simulation_has_unit_move_target(int entity_id) {
         return get_simulation()->has_move_target(static_cast<EntityId>(entity_id)) ? 1 : 0;
+    }
+
+    int simulation_get_unit_route(int entity_id, int player_id, float* points_xy, int point_capacity) {
+        if (!points_xy || entity_id <= 0 || point_capacity <= 0 || player_id < 0 || player_id > 2) return 0;
+        rts::Simulation* sim = get_simulation();
+        const auto entity = static_cast<EntityId>(entity_id);
+        const auto* faction = sim->component_manager().get_component<Faction>(entity);
+        if (!faction || faction->faction_id != static_cast<rts::FactionId>(player_id)) return 0;
+        std::vector<std::pair<float, float>> route;
+        if (!sim->get_unit_route(entity, route)) return 0;
+        const int count = std::min(static_cast<int>(route.size()), point_capacity);
+        for (int index = 0; index < count; ++index) {
+            points_xy[index * 2] = route[static_cast<std::size_t>(index)].first;
+            points_xy[index * 2 + 1] = route[static_cast<std::size_t>(index)].second;
+        }
+        return count;
+    }
+
+    int simulation_get_unit_waypoints(int entity_id, int player_id, float* points_xy, int point_capacity) {
+        if (!points_xy || entity_id <= 0 || point_capacity <= 0 || player_id < 0 || player_id > 2) return 0;
+        rts::Simulation* sim = get_simulation();
+        const auto entity = static_cast<EntityId>(entity_id);
+        const auto* faction = sim->component_manager().get_component<Faction>(entity);
+        if (!faction || faction->faction_id != static_cast<rts::FactionId>(player_id)) return 0;
+        const auto waypoints = sim->get_unit_waypoints(entity);
+        const int count = std::min(static_cast<int>(waypoints.size()), point_capacity);
+        for (int index = 0; index < count; ++index) {
+            points_xy[index * 2] = waypoints[static_cast<std::size_t>(index)].first;
+            points_xy[index * 2 + 1] = waypoints[static_cast<std::size_t>(index)].second;
+        }
+        return count;
     }
 
     int simulation_get_unit_headings(const int32_t* entity_ids, int entity_count, float* headings, int heading_capacity) {
@@ -1528,7 +2320,6 @@ extern "C" {
         switch (type) {
             case 0: node.type = rts::ResourceNode::Type::METAL; break;
             case 1: node.type = rts::ResourceNode::Type::ENERGY; break;
-            case 2: node.type = rts::ResourceNode::Type::RESEARCH; break;
             default: return;
         }
         
@@ -1547,16 +2338,14 @@ extern "C" {
         get_simulation()->production_manager().extractors()[static_cast<EntityId>(extractor_id)] = extractor;
     }
 
-    void economy_add_storage(int storage_id, float x, float y, float metal_capacity, float energy_capacity, float research_capacity) {
+    void economy_add_storage(int storage_id, float x, float y, float metal_capacity, float energy_capacity) {
         rts::Storage storage{};
         storage.x = x;
         storage.y = y;
         storage.metal_capacity = metal_capacity;
         storage.energy_capacity = energy_capacity;
-        storage.research_capacity = research_capacity;
         storage.metal_storage = 0.0f;
         storage.energy_storage = 0.0f;
-        storage.research_storage = 0.0f;
         
         get_simulation()->production_manager().add_storage(static_cast<EntityId>(storage_id), storage);
     }
@@ -1739,7 +2528,7 @@ extern "C" {
         return sim->create_unit_with_type(x, y, static_cast<rts::UnitType>(unit_type), static_cast<rts::FactionId>(faction_id));
     }
     
-    int simulation_issue_move_commands(const int32_t* entity_ids, int entity_count, int player_id, float center_x, float center_y, float spacing) {
+    int simulation_issue_move_commands(const int32_t* entity_ids, int entity_count, int player_id, float center_x, float center_y, float spacing, int queued) {
         rts::Simulation* sim = get_simulation();
         if (!entity_ids || entity_count <= 0 || entity_count > static_cast<int>(MAX_COMMANDS_PER_TICK) || player_id < 0 || player_id > 2) {
             return 0;
@@ -1750,7 +2539,7 @@ extern "C" {
             if (entity_ids[index] <= 0) return 0;
             entities.push_back(rts::EntityId{static_cast<uint32_t>(entity_ids[index])});
         }
-        size_t result = sim->issue_move_commands(entities, static_cast<rts::FactionId>(player_id), center_x, center_y, spacing);
+        size_t result = sim->issue_move_commands(entities, static_cast<rts::FactionId>(player_id), center_x, center_y, spacing, queued != 0);
         return static_cast<int>(result);
     }
     
@@ -1896,6 +2685,8 @@ void Simulation::configure_world_size(float width, float height) {
     if (!std::isfinite(width) || !std::isfinite(height) || width < 1.0f || height < 1.0f) {
         return;
     }
+    world_width_ = width;
+    world_height_ = height;
 
     command_position_scale_ = std::max(width, height) > 327.0f ? 1.0f : INPUT_COMMAND_POSITION_SCALE;
 
@@ -1942,35 +2733,30 @@ void Simulation::block_civilian_area(float x, float y, float radius) {
     pathfinding_.block_world_area(x, y, radius);
 }
 
-bool Simulation::validate_structure_placement(uint8_t structure_type, float x, float y) const {
-    struct PlacementProfile {
-        float footprint_x;
-        float footprint_y;
-        float maximum_slope;
-        float maximum_height_variation;
-    };
-    const PlacementProfile profile = [&]() {
-        switch (structure_type) {
-            // Keep buildable ground visibly level at the tactical scale. The
-            // old limits allowed structures to perch on relief that was
-            // technically navigable but visually swallowed nearby units.
-            case 0: return PlacementProfile{125.0f, 125.0f, 0.32f, 55.0f}; // outpost
-            case 1: return PlacementProfile{125.0f, 125.0f, 0.32f, 55.0f}; // radar
-            // Reserve an operational runway corridor without treating the
-            // compact tactical model as a full 1.8 km civil runway. This spans
-            // several navigation cells but remains buildable on broad slopes.
-            case 2: return PlacementProfile{250.0f, 750.0f, 0.28f, 180.0f}; // airfield
-            case 3: return PlacementProfile{125.0f, 125.0f, 0.36f, 65.0f}; // beacon
-            default: return PlacementProfile{0.0f, 0.0f, 0.0f, 0.0f};
+bool Simulation::site_claimed(float x, float y, float half_x, float half_y) const {
+    // Levelling moves whole height cells, so keep one cell of clearance from
+    // ground another structure already stands on.
+    const float margin = pathfinding_.cell_size();
+    for (const auto& claim : site_claims_) {
+        if (std::abs(claim.x - x) < claim.half_x + half_x + margin &&
+            std::abs(claim.y - y) < claim.half_y + half_y + margin) {
+            return true;
         }
-    }();
-    if (profile.footprint_x <= 0.0f || !std::isfinite(x) || !std::isfinite(y)) return false;
+    }
+    return false;
+}
 
-    const float half_x = profile.footprint_x * 0.5f;
-    const float half_y = profile.footprint_y * 0.5f;
-    const float sample_x = profile.footprint_x / 4.0f;
-    const float sample_y = profile.footprint_y / 4.0f;
+StructureSite Simulation::assess_structure_site(uint8_t structure_type, float x, float y) const {
+    StructureSite site{};
+    const StructureSiteRules rules = structure_site_rules(structure_type);
+    if (rules.footprint_x <= 0.0f || !std::isfinite(x) || !std::isfinite(y)) return site;
+
+    const float half_x = rules.footprint_x * 0.5f;
+    const float half_y = rules.footprint_y * 0.5f;
+    const float sample_x = rules.footprint_x / 4.0f;
+    const float sample_y = rules.footprint_y / 4.0f;
     float heights[5][5]{};
+    float total_height = 0.0f;
     for (int row = 0; row < 5; ++row) {
         for (int column = 0; column < 5; ++column) {
             const float sample_world_x = x - half_x + sample_x * static_cast<float>(column);
@@ -1979,9 +2765,10 @@ bool Simulation::validate_structure_placement(uint8_t structure_type, float x, f
                 sample_world_x <= pathfinding_.max_world_x_center() + pathfinding_.cell_size() * 0.5f &&
                 sample_world_y >= pathfinding_.min_world_y_center() - pathfinding_.cell_size() * 0.5f &&
                 sample_world_y <= pathfinding_.max_world_y_center() + pathfinding_.cell_size() * 0.5f;
-            if (!inside_world) return false;
-            if (!is_land_position(sample_world_x, sample_world_y)) return false;
+            if (!inside_world) return site;
+            if (!is_land_position(sample_world_x, sample_world_y)) return site;
             heights[row][column] = terrain_.height_at(sample_world_x, sample_world_y);
+            total_height += heights[row][column];
         }
     }
 
@@ -2002,8 +2789,48 @@ bool Simulation::validate_structure_placement(uint8_t structure_type, float x, f
             }
         }
     }
-    return maximum_slope <= profile.maximum_slope &&
-        maximum_height - minimum_height <= profile.maximum_height_variation;
+    const float height_variation = maximum_height - minimum_height;
+    site.pad_height = total_height / 25.0f;
+    if (maximum_slope <= rules.direct_slope && height_variation <= rules.direct_height_variation) {
+        site.buildable = true;
+        return site;
+    }
+    if (maximum_slope > rules.earthworks_slope || height_variation > rules.earthworks_height_variation ||
+        site_claimed(x, y, half_x, half_y)) {
+        return site;
+    }
+    float total_depth = 0.0f;
+    for (int row = 0; row < 5; ++row) {
+        for (int column = 0; column < 5; ++column) {
+            total_depth += std::abs(heights[row][column] - site.pad_height);
+        }
+    }
+    const float mean_depth = total_depth / 25.0f;
+    site.buildable = true;
+    site.earthworks = true;
+    site.material = kEarthworksBaseMaterial + mean_depth * rules.earthworks_material_per_meter;
+    site.fuel = kEarthworksBaseFuel + mean_depth * rules.earthworks_fuel_per_meter;
+    site.seconds = earthworks_seconds(mean_depth);
+    return site;
+}
+
+bool Simulation::validate_structure_placement(uint8_t structure_type, float x, float y) const {
+    return assess_structure_site(structure_type, x, y).buildable;
+}
+
+bool Simulation::queue_structure(EntityId line, FactionId faction, uint8_t structure_type, float x, float y) {
+    const StructureSite site = assess_structure_site(structure_type, x, y);
+    if (!site.buildable) return false;
+    if (!production_manager_.can_queue_structure(line, faction, structure_type, site.material, site.fuel, site.earthworks ? 1 : 0)) {
+        return false;
+    }
+    if (site.earthworks) {
+        production_manager_.queue_earthworks(line, faction, structure_type, x, y, site.material, site.fuel, site.seconds);
+    }
+    production_manager_.queue_structure(line, faction, structure_type, x, y);
+    const StructureSiteRules rules = structure_site_rules(structure_type);
+    site_claims_.push_back({x, y, rules.footprint_x * 0.5f, rules.footprint_y * 0.5f, site.pad_height});
+    return true;
 }
 
 bool Simulation::validate_engineer_placement(float x, float y) const {
@@ -2015,7 +2842,8 @@ bool Simulation::validate_engineer_placement(float x, float y) const {
     // A construction unit needs one usable local building footprint. Requiring
     // valid road probes in both axes rejected otherwise healthy slopes and
     // made engineer spawning much stricter than normal play.
-    return validate_structure_placement(0, x, y);
+    const StructureSite site = assess_structure_site(0, x, y);
+    return site.buildable && !site.earthworks;
 }
 
 bool Simulation::validate_road_placement(float start_x, float start_y, float end_x, float end_y) const {
@@ -2055,6 +2883,45 @@ bool Simulation::queue_road(EntityId engineer, FactionId owner, float start_x, f
         road_settings.construction_time_base_seconds + length * road_settings.construction_time_per_meter);
 }
 
+void Simulation::evict_ground_units(float x, float y, float half_x, float half_y) {
+    // block_world_rectangle also takes half a cell beyond the footprint.
+    const float cell = pathfinding_.cell_size();
+    const float reach_x = half_x + cell;
+    const float reach_y = half_y + cell;
+    const auto entities = component_manager_.entities_with<Position, GroundSteering>(entity_manager_.get_entities());
+    for (const auto entity : entities) {
+        if (component_manager_.get_component<Aircraft>(entity) || component_manager_.get_component<NavalVessel>(entity)) continue;
+        auto* position = component_manager_.get_component<Position>(entity);
+        if (!position || std::abs(position->x - x) > reach_x || std::abs(position->y - y) > reach_y) continue;
+        if (pathfinding_.is_walkable(pathfinding_.to_grid_x(position->x), pathfinding_.to_grid_y(position->y))) continue;
+        // Try the closest side first, then the others, stepping a little further
+        // out each ring in case the edge itself is water or another building.
+        struct Exit { float distance; float exit_x; float exit_y; };
+        Exit exits[4] = {
+            {x + reach_x - position->x, x + reach_x + cell, position->y},
+            {position->x - (x - reach_x), x - reach_x - cell, position->y},
+            {y + reach_y - position->y, position->x, y + reach_y + cell},
+            {position->y - (y - reach_y), position->x, y - reach_y - cell},
+        };
+        std::sort(std::begin(exits), std::end(exits), [](const Exit& a, const Exit& b) { return a.distance < b.distance; });
+        bool moved = false;
+        for (int ring = 0; ring < 8 && !moved; ++ring) {
+            for (const auto& exit : exits) {
+                const float push = cell * static_cast<float>(ring);
+                const float out_x = exit.exit_x + (exit.exit_x > x + reach_x ? push : exit.exit_x < x - reach_x ? -push : 0.0f);
+                const float out_y = exit.exit_y + (exit.exit_y > y + reach_y ? push : exit.exit_y < y - reach_y ? -push : 0.0f);
+                if (!pathfinding_.is_walkable(pathfinding_.to_grid_x(out_x), pathfinding_.to_grid_y(out_y))) continue;
+                position->x = out_x;
+                position->y = out_y;
+                spatial_grid_.update(entity, out_x, out_y);
+                if (auto* steering = component_manager_.get_component<GroundSteering>(entity)) steering->current_speed = 0.0f;
+                moved = true;
+                break;
+            }
+        }
+    }
+}
+
 void Simulation::apply_completed_road(const RoadSegment& segment) {
     const float dx = segment.end_x - segment.start_x;
     const float dy = segment.end_y - segment.start_y;
@@ -2089,12 +2956,10 @@ EntityId Simulation::create_faction_base(FactionId faction, float x, float y) {
     component_manager_.add_component(id, Health{1500, 1500});
     const auto& start = data->second;
     production_manager_.add_storage(id, Storage{x, y, start.start_material, start.start_energy,
-        start.start_research, 10000, 10000, 2000});
+        10000, 10000});
     ProductionLine line{}; line.storage_id = id; line.max_jobs = 5;
     production_manager_.add_production_line(id, line);
     production_manager_.add_faction_production_line(faction, id);
-    FactionResearch research{}; research.available_projects = get_research_projects();
-    production_manager_.set_faction_research(faction, research);
     // Starting commanders do not generate resources. Economy comes from
     // territory sites claimed with harvest/extraction commands.
     return id;
@@ -2118,10 +2983,8 @@ void Simulation::initialize_faction(FactionId faction_id, float x, float y) {
     storage.y = y;
     storage.metal_storage = start_data.start_material;
     storage.energy_storage = start_data.start_energy;
-    storage.research_storage = start_data.start_research;
     storage.metal_capacity = 10000.0f;
     storage.energy_capacity = 10000.0f;
-    storage.research_capacity = 2000.0f;
     
     production_manager_.add_storage(static_cast<EntityId>(storage_id), storage);
     
@@ -2137,12 +3000,6 @@ void Simulation::initialize_faction(FactionId faction_id, float x, float y) {
     production_manager_.add_production_line(static_cast<EntityId>(line_id), line);
     production_manager_.add_faction_production_line(faction_id, static_cast<EntityId>(line_id));
     
-    // Initialize faction research state
-    FactionResearch faction_research{};
-    faction_research.available_projects = get_research_projects();
-    faction_research.completed_projects = {};
-    faction_research.active_queue = {};
-    production_manager_.set_faction_research(faction_id, faction_research);
     
     // Spawn starting units
     for (size_t i = 0; i < start_data.start_units.size(); ++i) {
@@ -2153,7 +3010,7 @@ void Simulation::initialize_faction(FactionId faction_id, float x, float y) {
 }
 
 int rts::Simulation::create_unit_with_type(float x, float y, rts::UnitType unit_type, rts::FactionId faction_id) {
-    if (!std::isfinite(x) || !std::isfinite(y)) {
+    if (!std::isfinite(x) || !std::isfinite(y) || at_unit_cap(faction_id)) {
         return -1;
     }
 
@@ -2166,7 +3023,7 @@ int rts::Simulation::create_unit_with_type(float x, float y, rts::UnitType unit_
     }
 
     const auto& proto = proto_it->second;
-    if (unit_type == UnitType::INDUSTRIAL_ENGINEERING && !validate_engineer_placement(x, y)) {
+    if (proto.construction_unit && !validate_engineer_placement(x, y)) {
         return -1;
     }
     const auto& navigation = proto.is_naval ? naval_pathfinding_ : pathfinding_;
@@ -2181,6 +3038,7 @@ int rts::Simulation::create_unit_with_type(float x, float y, rts::UnitType unit_
         !navigation.is_walkable(navigation.to_grid_x(x), navigation.to_grid_y(y))) return -1;
 
     Entity entity = entity_manager_.create_entity();
+    if (static_cast<size_t>(faction_id) < FACTION_COUNT) ++unit_counts_[static_cast<size_t>(faction_id)];
     
     float terrain_height = terrain_.height_at(x, y);
     Position pos = {x, y, terrain_height};
@@ -2193,8 +3051,12 @@ int rts::Simulation::create_unit_with_type(float x, float y, rts::UnitType unit_
     
     Faction faction = {faction_id};
     
-    // Weapon stats - simplified based on unit type
-    Weapon wep = {proto.range / 2.0f, 200.0f, 1.0f, 0.0f, proto.range, 0.5f, 5.0f, 1.0f};
+    const auto& weapon = proto.weapon;
+    // A deterministic per-unit offset keeps an army from firing as one volley,
+    // which would put every target search on the same tick.
+    const float first_shot_delay = weapon.fire_rate * (0.25f + 0.75f * static_cast<float>(entity.id % 97u) / 96.0f);
+    Weapon wep = {weapon.damage, weapon.range, weapon.fire_rate, 0.0f,
+                  weapon.projectile_speed, weapon.lead_bias, weapon.aoe_radius, first_shot_delay};
     
     component_manager_.add_component(entity.id, pos);
     component_manager_.add_component(entity.id, vel);
@@ -2202,7 +3064,7 @@ int rts::Simulation::create_unit_with_type(float x, float y, rts::UnitType unit_
     component_manager_.add_component(entity.id, mat);
     component_manager_.add_component(entity.id, faction);
     component_manager_.add_component(entity.id, wep);
-    component_manager_.add_component(entity.id, UnitData{proto.speed, proto.view_range});
+    component_manager_.add_component(entity.id, UnitData{proto.speed, proto.view_range, static_cast<int>(unit_type)});
     if (!proto.is_aircraft && !proto.is_naval) {
         component_manager_.add_component(entity.id, GroundSteering{
             0.0f, 0.0f, 0.0f,
@@ -2223,16 +3085,6 @@ int rts::Simulation::create_unit_with_type(float x, float y, rts::UnitType unit_
         for (const auto capability : proto.capabilities) {
             territorial_control_.assign_capability(entity, capability);
         }
-    } else if (unit_type == UnitType::INDUSTRIAL_ENGINEERING &&
-               faction_id == FactionId::INDUSTRIAL_EXPERIMENTAL) {
-        territorial_control_.assign_capability(entity, SeizureCapability::RECON);
-        territorial_control_.assign_capability(entity, SeizureCapability::SEIZURE);
-        territorial_control_.assign_capability(entity, SeizureCapability::SECURE);
-        territorial_control_.assign_capability(entity, SeizureCapability::CONSTRUCT_FOB);
-        territorial_control_.assign_capability(entity, SeizureCapability::CONSTRUCT_LOGISTICS);
-        territorial_control_.assign_capability(entity, SeizureCapability::ESTABLISH_BASE);
-        territorial_control_.assign_capability(entity, SeizureCapability::DEFEND);
-        territorial_control_.assign_capability(entity, SeizureCapability::HARVEST_SECURED);
     } else {
         territorial_control_.assign_capability(entity, SeizureCapability::SEIZURE);
         territorial_control_.assign_capability(entity, SeizureCapability::SECURE);
@@ -2284,18 +3136,7 @@ void rts::Simulation::set_unit_faction(EntityId entity, FactionId faction_id) {
     }
 }
 
-const rts::FactionResearch& rts::Simulation::get_faction_research(FactionId faction_id) const {
-    static const FactionResearch empty_research{};
-    auto it = faction_research_.find(faction_id);
-    if (it == faction_research_.end()) {
-        return empty_research;
-    }
-    return it->second;
-}
 
-void rts::Simulation::set_faction_research(FactionId faction_id, const FactionResearch& research) {
-    faction_research_[faction_id] = research;
-}
 
 void rts::Simulation::process_commands() {
     const auto local_commands = command_manager_.get_local_commands();
@@ -2305,6 +3146,7 @@ void rts::Simulation::process_commands() {
         if (!validate_command(cmd, tick_)) continue;
         if (network_manager_.is_connected()) network_manager_.send_command(cmd);
         command_log_.push_back(cmd);
+        match_record_.add_command(cmd);
         if (cmd.cmd_type == static_cast<uint8_t>(CommandType::MOVE) && cmd.extra > 0) {
             std::vector<EntityId> formation{cmd.entity_id};
             while (i < local_commands.size()) {
@@ -2316,10 +3158,13 @@ void rts::Simulation::process_commands() {
                     if (network_manager_.is_connected()) network_manager_.send_command(next);
                     formation.push_back(next.entity_id);
                     command_log_.push_back(next);
+                    match_record_.add_command(next);
                 }
             }
             move_units_formation(formation, static_cast<float>(cmd.target_x) / command_position_scale_,
-                                 static_cast<float>(cmd.target_y) / command_position_scale_, cmd.extra / command_position_scale_);
+                                 static_cast<float>(cmd.target_y) / command_position_scale_,
+                                 (cmd.extra & ~MOVE_QUEUE_FLAG) / command_position_scale_,
+                                 (cmd.extra & MOVE_QUEUE_FLAG) != 0);
         } else {
             process_command_internal(cmd);
         }
@@ -2331,6 +3176,7 @@ void rts::Simulation::process_network_commands() {
     while (network_manager_.receive_command(cmd)) {
         if (!validate_command(cmd, tick_)) continue;
         command_log_.push_back(cmd);
+        match_record_.add_command(cmd);
         process_command_internal(cmd);
     }
 }
@@ -2349,7 +3195,9 @@ void rts::Simulation::process_command_internal(const InputCommand& cmd) {
             const float target_x = static_cast<float>(cmd.target_x) / command_position_scale_;
             const float target_y = static_cast<float>(cmd.target_y) / command_position_scale_;
             
-            if (cmd.extra != 0) {
+            if ((cmd.extra & MOVE_QUEUE_FLAG) != 0) {
+                queue_unit_move_with_route(static_cast<EntityId>(cmd.entity_id), target_x, target_y, target_x, target_y);
+            } else if (cmd.extra != 0) {
                 const float spacing = static_cast<float>(cmd.extra) / command_position_scale_;
                 const float route_x = target_x + spacing;
                 const float route_y = target_y + spacing;
@@ -2374,10 +3222,6 @@ void rts::Simulation::process_command_internal(const InputCommand& cmd) {
             const float build_y = static_cast<float>(cmd.target_y) / command_position_scale_;
             const UnitType unit_type = static_cast<UnitType>(cmd.extra);
             build_structure(static_cast<EntityId>(cmd.entity_id), build_x, build_y, unit_type);
-            break;
-        }
-        case static_cast<uint8_t>(CommandType::RESEARCH): {
-            production_manager_.begin_research(static_cast<FactionId>(cmd.player_id), research_id(cmd.extra));
             break;
         }
         case static_cast<uint8_t>(CommandType::INSTALL): {
@@ -2459,18 +3303,16 @@ extern "C" {
         return true;
     }
     
-    bool economy_get_storage_info(int storage_id, float* out_metal_storage, float* out_energy_storage, float* out_research_storage, 
-                                  float* out_metal_capacity, float* out_energy_capacity, float* out_research_capacity) {
+    bool economy_get_storage_info(int storage_id, float* out_metal_storage, float* out_energy_storage,
+                                  float* out_metal_capacity, float* out_energy_capacity) {
         auto it = get_simulation()->production_manager().storages().find(static_cast<EntityId>(storage_id));
         if (it == get_simulation()->production_manager().storages().end()) {
             return false;
         }
         *out_metal_storage = it->second.metal_storage;
         *out_energy_storage = it->second.energy_storage;
-        *out_research_storage = it->second.research_storage;
         *out_metal_capacity = it->second.metal_capacity;
         *out_energy_capacity = it->second.energy_capacity;
-        *out_research_capacity = it->second.research_capacity;
         return true;
     }
 

@@ -121,7 +121,7 @@ TEST(tactical_power_reserve_reports_surplus_and_deficit) {
         throw std::runtime_error("Power deficit is incorrect");
 }
 
-TEST(tactical_extraction_routes_legacy_energy_to_fuel_and_ignores_research) {
+TEST(tactical_extraction_routes_legacy_energy_to_fuel) {
     using namespace rts;
     ProductionManager production;
     Storage storage{};
@@ -133,9 +133,4 @@ TEST(tactical_extraction_routes_legacy_energy_to_fuel_and_ignores_research) {
     production.extract_resource(3, 50.0f);
     if (production.tactical_resources(1)->fuel.current != 10.0f)
         throw std::runtime_error("Tactical energy-node migration did not fill Fuel");
-    production.add_resource_node(4, ResourceNode{0, 0, 50, 50, ResourceNode::Type::RESEARCH, false});
-    production.extractors()[5] = Extractor{0, 0, 4, 10.0f, 0.0f, true, 1};
-    production.extract_resource(5, 50.0f);
-    if (production.resource_nodes().at(4).amount != 50.0f)
-        throw std::runtime_error("Tactical research node must not create a spendable balance");
 }

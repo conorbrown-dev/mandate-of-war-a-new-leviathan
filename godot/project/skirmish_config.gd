@@ -4,22 +4,9 @@ extends RefCounted
 const SUPPORTED_VERSION := 1
 const MAX_STARTING_UNITS := 1000
 const MAX_FACTION_ID := 2
-const MAX_UNIT_TYPE_ID := 10
 const DEFAULT_TERRAIN_WIDTH := 320
 const DEFAULT_TERRAIN_HEIGHT := 320
-const UNIT_TYPE_FACTIONS := {
-	0: 0,
-	1: 0,
-	2: 0,
-	3: 1,
-	4: 1,
-	5: 1,
-	6: 2,
-	7: 2,
-	8: 2,
-	9: 0,
-	10: 0,
-}
+const UnitCatalog := preload("res://unit_catalog.gd")
 
 
 static func load_definition(path: String) -> Dictionary:
@@ -51,15 +38,9 @@ static func load_terrain_file(terrain_data_path: String) -> Dictionary:
 	if not FileAccess.file_exists(terrain_data_path):
 		return {"ok": false, "error": "Terrain file not found: %s" % terrain_data_path}
 	
-	var file := FileAccess.open(terrain_data_path, FileAccess.READ)
-	if file == null:
-		return {"ok": false, "error": "Could not open terrain file: %s" % terrain_data_path}
-	
-	var size := file.get_length()
-	var expected_size := 320 * 320 * 4
-	if size != expected_size:
-		return {"ok": false, "error": "Terrain file must be exactly %d bytes (320x320 float32), got %d" % [expected_size, size]}
-	
+	if HeightMap.load_from_file(terrain_data_path).is_empty():
+		return {"ok": false, "error": "Terrain file must be a 320x320 heightfield: %s" % terrain_data_path}
+
 	return {"ok": true, "data": terrain_data_path, "width": 320, "height": 320}
 
 
@@ -99,15 +80,12 @@ static func validate_definition(definition: Dictionary, terrain_path: String = "
 			return "Scenario landmass ids must be unique"
 		landmass_ids[landmass_id] = true
 
-	var side_landmass_indices: Dictionary = {}
 	for side_name in ["player", "ai"]:
 		var side_error := _validate_side(side_name, definition[side_name])
 		if side_error != "":
 			return side_error
-		var landmass_index := _landmass_index_for_point(definition[side_name].spawn, theater.landmasses)
-		if landmass_index < 0:
+		if _landmass_index_for_point(definition[side_name].spawn, theater.landmasses) < 0:
 			return "Scenario %s spawn must be on a defined landmass" % side_name
-		side_landmass_indices[side_name] = landmass_index
 
 	if terrain_path != "":
 		var terrain_result := load_terrain_file(terrain_path)
@@ -116,8 +94,10 @@ static func validate_definition(definition: Dictionary, terrain_path: String = "
 
 	if int(definition.player.faction_id) == int(definition.ai.faction_id):
 		return "Player and AI factions must be different"
-	if side_landmass_indices.player == side_landmass_indices.ai:
-		return "Player and AI spawns must use different landmasses"
+	# The keys are checked against data/ai_doctrines.json when the match starts.
+	for style_key in ["doctrine", "difficulty"]:
+		if definition.ai.has(style_key) and not _is_nonempty_string(definition.ai[style_key]):
+			return "Scenario ai.%s must be a non-empty string" % style_key
 
 	if typeof(definition.victory) != TYPE_DICTIONARY:
 		return "Scenario victory must be an object"
@@ -191,9 +171,9 @@ static func _validate_side(side_name: String, value: Variant) -> String:
 		var unit: Dictionary = unit_value
 		if not _is_integer_number(unit.get("unit_type", null)):
 			return "Scenario %s unit_type must be an integer" % side_name
-		if int(unit.unit_type) < 0 or int(unit.unit_type) > MAX_UNIT_TYPE_ID:
+		if not UnitCatalog.has_unit(int(unit.unit_type)):
 			return "Scenario %s unit_type %d is unsupported" % [side_name, int(unit.unit_type)]
-		if UNIT_TYPE_FACTIONS.get(int(unit.unit_type), -1) != int(side.faction_id):
+		if UnitCatalog.faction_index(int(unit.unit_type)) != int(side.faction_id):
 			return "Scenario %s unit_type %d does not belong to faction %d" % [
 				side_name,
 				int(unit.unit_type),

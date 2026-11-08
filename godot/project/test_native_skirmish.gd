@@ -41,22 +41,8 @@ func _run() -> void:
 	if first_enemy == 0:
 		var all_ids: PackedInt32Array = view.extension.call("get_entity_ids")
 		first_enemy = int(all_ids[all_ids.size() - 1]) if not all_ids.is_empty() else 2
-	# Seed one authoritative last-known contact, then prove it ages into a
-	# stale record without exposing a hidden live position.
-	view.extension.call("skirmish_update_intelligence", first_enemy, 105.0, 0.0, int(view.state.get("tick", 0)))
-	var intel_now: Dictionary = {}
-	for record in view.extension.call("skirmish_state").get("intelligence", []):
-		if int(record.get("id", 0)) == first_enemy:
-			intel_now = record
-	check(not intel_now.is_empty() and int(intel_now.get("age", 9999)) == 0 and not bool(intel_now.get("stale", true)), "native route exposes a current last-known intelligence contact")
-	view.extension.call("skirmish_archive_intelligence", first_enemy)
-	for _tick in range(130):
-		view.extension.call("skirmish_update", 50.0)
-	var intel_later: Dictionary = {}
-	for record in view.extension.call("skirmish_state").get("intelligence", []):
-		if int(record.get("id", 0)) == first_enemy:
-			intel_later = record
-	check(bool(intel_later.get("stale", false)) and int(intel_later.get("age", 0)) >= 120, "native route marks aged intelligence stale while retaining last-known coordinates")
+	# The logistics checks below need the vessel afloat, so the AI army holds until they finish.
+	view.extension.call("skirmish_set_ai_enabled", false)
 	view.selected_ids = PackedInt32Array([first_elite])
 	var accepted_move := int(view.extension.call("skirmish_command", 0, view.selected_ids, -80.0, 0.0, 0))
 	var rejected_empty := int(view.extension.call("skirmish_command", 0, PackedInt32Array(), -80.0, 0.0, 0))
@@ -85,6 +71,23 @@ func _run() -> void:
 			vessel_state = unit
 	check(not bool(vessel_state.get("stranded", true)) and float(vessel_state.get("fuel", 0.0)) > 90.0, "native route restores naval endurance from its existing vessel fuel system")
 	check(float(view.extension.call("skirmish_state").get("materials", material_before_resupply)) < material_before_resupply, "native route deducts finite material stock for naval resupply")
+	view.extension.call("skirmish_set_ai_enabled", true)
+	# Seed one authoritative last-known contact, then prove it ages into a
+	# stale record without exposing a hidden live position.
+	view.extension.call("skirmish_update_intelligence", first_enemy, 105.0, 0.0, int(view.extension.call("skirmish_state").get("tick", 0)))
+	var intel_now: Dictionary = {}
+	for record in view.extension.call("skirmish_state").get("intelligence", []):
+		if int(record.get("id", 0)) == first_enemy:
+			intel_now = record
+	check(not intel_now.is_empty() and int(intel_now.get("age", 9999)) == 0 and not bool(intel_now.get("stale", true)), "native route exposes a current last-known intelligence contact")
+	view.extension.call("skirmish_archive_intelligence", first_enemy)
+	for _tick in range(130):
+		view.extension.call("skirmish_update", 50.0)
+	var intel_later: Dictionary = {}
+	for record in view.extension.call("skirmish_state").get("intelligence", []):
+		if int(record.get("id", 0)) == first_enemy:
+			intel_later = record
+	check(bool(intel_later.get("stale", false)) and int(intel_later.get("age", 0)) >= 120, "native route marks aged intelligence stale while retaining last-known coordinates")
 	for _tick in range(20000):
 		if int(view.state.get("result", -1)) >= 0:
 			break

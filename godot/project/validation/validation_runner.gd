@@ -11,7 +11,8 @@ const SCENARIO_DESCRIPTIONS := {
 	"oak_grove_showcase": "Frame the imported oak forest at tactical and strategic distances while proving variant, cluster, and terrain-grounding contracts.",
 	"airfield_fighter_ferry": "Construct an airfield, request a runway fighter, and verify its paid off-map airborne ingress.",
 	"road_construction": "Place a road through the engineer input path, reject water, pay costs and complete a visible persistent segment.",
-	"ui_design_system_showcase": "Render the reusable Strategic Command UI at the requested desktop resolution."
+	"ui_design_system_showcase": "Render the reusable Strategic Command UI at the requested desktop resolution.",
+	"queued_waypoint_move": "Right-click one destination, Shift + right-click two more, check held Shift draws all three legs, watch the vehicle visit them in order, then queue again and clear it with X."
 }
 
 var _scenario := ""
@@ -73,6 +74,8 @@ func _run() -> void:
 			await _scenario_road_construction()
 		"ui_design_system_showcase":
 			await _scenario_ui_design_system_showcase()
+		"queued_waypoint_move":
+			await _scenario_queued_waypoint_move()
 		_:
 			_check(false, "scenario.known", "Unknown validation scenario", {"scenario": _scenario})
 	_check(_has_check("scenario.completed"), "framework.scenario_returned", "The scenario reached its explicit completion sentinel")
@@ -409,6 +412,7 @@ func _scenario_reinforcement_delivery_smoke() -> void:
 		if bool(entry.get("is_aircraft", false)):
 			engineer_offers_aircraft = true
 	_check(not engineer_offers_aircraft, "reinforcement.engineer_catalog_excludes_aircraft", "The Field Engineer build menu excludes airfield-only aircraft")
+	_check(engineer_catalog.is_empty(), "reinforcement.engineer_builds_no_units", "The Field Engineer builds structures and earthworks only; forces are ordered from Strategic Command")
 	extension.call("reinforcement_delivery_set_resources", 0, 600.0, 400.0)
 	view.call("_activate_reinforcement_delivery_from_airfield")
 	view.set_process(false)
@@ -443,35 +447,66 @@ func _scenario_reinforcement_delivery_smoke() -> void:
 	var strategic_command: Control = view.get_node_or_null("HUD/UIRoot/StrategicCommand") as Control
 	_check(strategic_command != null and strategic_command.visible, "reinforcement.strategic_command_open", "G opens the playable Strategic Command delivery panel")
 	await _capture_checkpoint(view, "strategic_command_open")
-	if strategic_command != null:
-		strategic_command.emit_signal("request_package")
-	delivery = extension.call("reinforcement_delivery_state")
-	_check(int(delivery.get("state", 0)) == 3, "reinforcement.request", "Strategic Command requests the funded native package")
-	view.call("_update_reinforcement_presentation")
+	# Forces are ordered from a card, priced and listed by the native unit data.
+	extension.call("reinforcement_delivery_set_resources", 0, 5000.0, 400.0)
+	view.call("_sync_strategic_command")
+	var offers: Array = strategic_command.call("tab_entries") if strategic_command != null else []
+	var offer: Dictionary = {}
+	for entry in offers:
+		if bool(entry.get("available", false)):
+			offer = entry
+			break
+	_check(not offers.is_empty() and not offer.is_empty(), "reinforcement.cards_from_unit_data", "Strategic Command lists ground forces from the native unit data, and one is available", {"cards": offers.size()})
+	_check(offers.all(func(entry): return bool(entry.get("delivered", false))), "reinforcement.cards_are_flown_in", "Every ground card is a delivered force, not one built on the field")
+	var order_cost := float(offer.get("material", 0.0))
+	funds_before = extension.call("economy_get_tactical_resources", line)
+	var ids_before: PackedInt32Array = extension.call("get_entity_ids")
+	var engineer_position := _entity_position(view, int(view.call("_player_engineer_id")))
+	if strategic_command != null and not offer.is_empty():
+		strategic_command.emit_signal("order_unit", int(offer.type))
+	var inbound: Array = extension.call("delivery_state", 0).get("inbound", [])
+	_check(inbound.size() == 1 and int(inbound[0].type) == int(offer.get("type", -2)), "reinforcement.request", "Ordering a card sends exactly that unit", {"inbound": inbound.size()})
+	var funds_after_request: Array = extension.call("economy_get_tactical_resources", line)
+	_check(funds_after_request.size() >= 4 and funds_before.size() >= 4 and float(funds_after_request[0]) == float(funds_before[0]) - order_cost and float(funds_after_request[2]) == float(funds_before[2]), "reinforcement.cost_once", "Materials are deducted exactly once, at the catalog price; Fuel is not a construction wallet", {"price": order_cost})
+	view.call("_close_strategic_command")
+	var landing: Dictionary = extension.call("delivery_state", 0)
+	var landing_site := Vector2(float(landing.get("x", 0.0)), float(landing.get("y", 0.0)))
+	_check(bool(landing.get("has_site", false)) and absf(landing_site.x - airfield_position.x) <= 1.0 and landing_site.distance_to(airfield_position) > 100.0, "reinforcement.lands_beside_airfield", "Forces land clear of the airfield, not on the engineer or the runway", {"site": _vec2(landing_site)})
 	var delivery_presentation: Node = view.get("reinforcement_presentation")
 	var inbound_f15: Node3D = delivery_presentation.get("transport") if delivery_presentation != null else null
 	_check(inbound_f15 != null and inbound_f15.scene_file_path.ends_with("industrial_fighter_f15c.glb"), "reinforcement.inbound_uses_f15c", "The delivery fly-in uses the registered F-15C scene", {"scene_file_path": inbound_f15.scene_file_path if inbound_f15 != null else ""})
-	var funds_after_request: Array = extension.call("economy_get_tactical_resources", line)
-	_check(funds_after_request.size() >= 4 and funds_before.size() >= 4 and float(funds_after_request[0]) == float(funds_before[0]) - 260.0 and float(funds_after_request[2]) == float(funds_before[2]), "reinforcement.cost_once", "Materials are deducted exactly once; Fuel is not a construction wallet")
-	view.call("_close_strategic_command")
-	extension.call("update_simulation", 1000.0)
-	view.call("_sync_new_entities")
+	# Fly in: run until the unit is in the last stretch of its flight.
+	var waited := 0
+	while waited < 2400 and (extension.call("delivery_state", 0).get("inbound", []) as Array).size() == 1 and float((extension.call("delivery_state", 0).get("inbound", []) as Array)[0].remaining_ms) > 15000.0:
+		extension.call("update_simulation", 50.0)
+		view.call("_sync_new_entities")
+		waited += 1
 	view.call("_sync_unit_transforms")
 	view.call("_update_reinforcement_presentation")
-	view.call("_update_hud")
-	_focus_camera_on_position(view, zone + Vector2(-160.0, 0.0), 60.0)
+	_check(inbound_f15 != null and inbound_f15.visible, "reinforcement.f15c_flies_in", "The F-15C is in the air for the last stretch of the flight")
+	_focus_camera_on_position(view, landing_site, 180.0)
 	await _capture_checkpoint(view, "transport_inbound")
-	var count_before := int(extension.call("get_entity_count"))
-	for tick in range(80):
+	var landed_in := 0
+	while landed_in < 2400 and (extension.call("delivery_state", 0).get("inbound", []) as Array).size() > 0:
 		extension.call("update_simulation", 50.0)
 		view.call("_sync_new_entities")
 		view.call("_sync_unit_transforms")
 		view.call("_update_reinforcement_presentation")
+		landed_in += 1
+	extension.call("update_simulation", 100.0)
+	view.call("_sync_new_entities")
+	view.call("_sync_unit_transforms")
+	view.call("_update_reinforcement_presentation")
+	# The AI keeps producing on its own line, so only the player's arrivals count.
+	var arrived: Array = (extension.call("get_unpresented_entities", ids_before) as Array).filter(func(entity): return int(entity.faction_id) == 0)
+	_check(arrived.size() == 1, "reinforcement.completed", "The ordered force lands as exactly one active unit", {"player_arrivals": arrived.size(), "ticks": waited + landed_in})
+	if arrived.size() == 1:
+		var landed := Vector2(float(arrived[0].x), float(arrived[0].y))
+		_check(landed.distance_to(landing_site) <= 120.0 and landed.distance_to(engineer_position) > 100.0, "reinforcement.lands_at_site", "The unit stands at the landing site, away from where it was ordered", {"landed": _vec2(landed), "site": _vec2(landing_site)})
 	delivery = extension.call("reinforcement_delivery_state")
-	_check(int(delivery.get("state", 0)) == 4 and int(extension.call("get_entity_count")) == count_before + 1, "reinforcement.completed", "Native delivery completion creates exactly one active unit")
-	_check(Vector2(float(delivery.get("delivery_x", 0.0)), float(delivery.get("delivery_y", 0.0))).distance_to(airfield_position) <= 0.01, "reinforcement.delivery_uses_selected_airfield", "Native delivery retains the auto-selected airfield anchor")
+	_check(Vector2(float(delivery.get("delivery_x", 0.0)), float(delivery.get("delivery_y", 0.0))).distance_to(airfield_position) <= 0.01, "reinforcement.delivery_uses_selected_airfield", "Delivery retains the auto-selected airfield anchor")
 	var parked_f15: Node3D = delivery_presentation.get("transport") if delivery_presentation != null else null
-	_check(parked_f15 != null and parked_f15.visible and parked_f15.position.distance_to(Vector3(airfield_position.x, float(view.call("_terrain_height_at", airfield_position.x, airfield_position.y)) + 0.15, airfield_position.y)) <= 0.01 and is_equal_approx(absf(parked_f15.rotation_degrees.y), 45.0), "reinforcement.f15c_parks_on_airfield", "The F-15C remains parked and aligned to one diagonal runway after delivery")
+	_check(parked_f15 != null and parked_f15.visible and parked_f15.position.distance_to(Vector3(airfield_position.x, float(view.call("_terrain_height_at", airfield_position.x, airfield_position.y)) + 0.15, airfield_position.y)) <= 0.01 and is_equal_approx(absf(parked_f15.rotation_degrees.y), 90.0), "reinforcement.f15c_parks_on_airfield", "The F-15C remains parked on the airfield, along its north-south runway, after delivery")
 	var delivered_id := -1
 	for entity_id_value in view.get("player_entity_ids"):
 		var entity_id := int(entity_id_value)
@@ -701,6 +736,16 @@ func _scenario_airfield_fighter_ferry() -> void:
 				await process_frame
 		_check(inside_position.x >= -20000.0, "air.fighter_flies_onto_map", "The fighter crosses onto the tactical battlefield", {"position": _vec2(inside_position), "ticks": ingress_ticks})
 		_metrics["fighter_ingress_ticks"] = ingress_ticks
+		# The fighter is in flight, so it must be drawn well above the land or
+		# sea beneath it, never at ground height or under the water.
+		var flags: PackedByteArray = extension.call("get_airborne_flags", PackedInt32Array([fighter_id]))
+		var flying_view := view.get("prototype_visual_views").get(fighter_id) as Node3D
+		var surface := maxf(float(view.call("_terrain_height_at", inside_position.x, inside_position.y)), 0.0)
+		var drawn_height := flying_view.global_position.y if flying_view != null else -INF
+		_check(flags.size() == 1 and flags[0] == 1, "air.fighter_reports_airborne", "The native view reports the ferried fighter as airborne", {"flags": Array(flags)})
+		_check(drawn_height >= surface + 100.0, "air.fighter_drawn_at_altitude", "The flying fighter is drawn at altitude above the land or sea", {"drawn_height_m": drawn_height, "surface_m": surface})
+		var engineer_flags: PackedByteArray = extension.call("get_airborne_flags", PackedInt32Array([int(view.call("_player_engineer_id"))]))
+		_check(engineer_flags.size() == 1 and engineer_flags[0] == 0, "air.ground_unit_not_airborne", "A ground unit is never reported airborne", {"flags": Array(engineer_flags)})
 		_focus_camera_on(view, fighter_id, 800.0)
 		await _capture_checkpoint(view, "fighter_ingress")
 	_metrics["airfield_completion_ticks"] = airfield_ticks
@@ -748,7 +793,7 @@ func _scenario_road_construction() -> void:
 	view.call("_update_road_preview", finish)
 	_check(preview.albedo_color.b > preview.albedo_color.r, "road.valid_preview", "Valid road preview uses the normal placement color")
 	await _capture_checkpoint(view, "road_preview")
-	var storage_id := int(extension.call("get_faction_production_line", 0))
+	var storage_id := int(view.get("commander_ids").get(0, -1))
 	var stores_before: Array = extension.call("economy_get_tactical_resources", storage_id)
 	var finish_world := Vector3(finish.x, float(view.call("_terrain_height_at", finish.x, finish.y)), finish.y)
 	_send_mouse_button(view, MOUSE_BUTTON_LEFT, view.get_viewport().get_camera_3d().unproject_position(finish_world))
@@ -783,6 +828,117 @@ func _scenario_road_construction() -> void:
 	_check(true, "scenario.completed", "Road construction scenario completed")
 
 
+func _scenario_queued_waypoint_move() -> void:
+	var view := await _create_skirmish()
+	var extension: Object = view.get("extension")
+	var origin := _entity_position(view, int(view.call("_player_engineer_id"))) + Vector2(60.0, -60.0)
+	# A wheeled vehicle (type 6) is quick enough to drive three legs promptly.
+	var vehicle := int(extension.call("create_unit_with_type", origin.x, origin.y, 6, 0))
+	_check(vehicle > 0, "queue.vehicle_spawns", "A friendly wheeled vehicle spawns", {"entity_id": vehicle})
+	if vehicle <= 0:
+		await _destroy_skirmish(view)
+		return
+	view.call("_sync_new_entities")
+	var start := _entity_position(view, vehicle)
+	# Three corners of a square, each a land position.
+	var stops: Array[Vector2] = []
+	for offset in [Vector2(40.0, 0.0), Vector2(40.0, 40.0), Vector2(0.0, 40.0)]:
+		stops.append(start + offset)
+	var all_land := true
+	for stop in stops:
+		all_land = all_land and bool(extension.call("is_land_position", stop.x, stop.y))
+	_check(all_land, "queue.stops_on_land", "All three waypoints are on land", {"stops": stops.map(func(p): return _vec2(p))})
+	_focus_camera_on_position(view, start + Vector2(20.0, 20.0), 140.0)
+	await process_frame
+	view.call("_clear_selection")
+	view.call("_set_selected", vehicle, true)
+	var camera := view.get_viewport().get_camera_3d()
+	var screens: Array[Vector2] = []
+	for stop in stops:
+		screens.append(camera.unproject_position(Vector3(stop.x, float(view.call("_terrain_height_at", stop.x, stop.y)), stop.y)))
+
+	# Plain right-click, then Shift + right-click twice, through main.gd input.
+	_send_mouse_button(view, MOUSE_BUTTON_RIGHT, screens[0])
+	_send_mouse_button(view, MOUSE_BUTTON_RIGHT, screens[1], true)
+	_send_mouse_button(view, MOUSE_BUTTON_RIGHT, screens[2], true)
+	var selected: PackedInt32Array = view.get("selected_ids")
+	_check(selected.size() == 1 and selected[0] == vehicle, "queue.selection_unchanged", "Shift + right-click keeps the selection as it was", {"selected_ids": selected})
+	extension.call("update_simulation", 50.0)
+	var waypoints: PackedVector2Array = (extension.call("get_unit_waypoints", PackedInt32Array([vehicle]), 0) as Array)[0]
+	var matched := waypoints.size() == 3
+	if matched:
+		for index in range(3):
+			matched = matched and waypoints[index].distance_to(stops[index]) < 2.0
+	_check(matched, "queue.three_waypoints_in_order", "The vehicle holds the three clicked spots as waypoints in click order",
+		{"waypoints": Array(waypoints).map(func(p): return _vec2(p)), "stops": stops.map(func(p): return _vec2(p))})
+
+	# Holding Shift draws every queued leg with a marker at each waypoint.
+	_set_shift(true)
+	view.call("_update_unit_routes", 1.0)
+	var renderer: Node3D = view.get("unit_route_renderer")
+	var leg_count := int(renderer.call("leg_count")) if renderer != null else 0
+	_metrics["overlay_leg_count"] = leg_count
+	_check(renderer != null and renderer.visible, "queue.overlay_visible", "Held Shift shows the selected vehicle's route")
+	_check(leg_count == 3, "queue.overlay_three_legs", "The overlay draws three legs", {"leg_count": leg_count})
+	if renderer != null:
+		var drawn: Array = renderer.get("drawn_routes")
+		var route: PackedVector2Array = drawn[0] if drawn.size() == 1 else PackedVector2Array()
+		_check(route.size() >= 4 and route[route.size() - 1].distance_to(waypoints[2] if waypoints.size() == 3 else Vector2.INF) < 0.01,
+			"queue.overlay_route_reaches_last_waypoint", "The drawn route runs through to the last waypoint", {"points": route.size()})
+		var drawn_waypoints: Array = renderer.get("drawn_waypoints")
+		_check(drawn_waypoints.size() == 1 and drawn_waypoints[0] == waypoints, "queue.overlay_marks_waypoints", "The overlay marks the native waypoints")
+	await _capture_checkpoint(view, "queued_route_shown")
+	_set_shift(false)
+	view.call("_update_unit_routes", 1.0)
+	_check(renderer == null or not renderer.visible, "queue.overlay_hides", "Releasing Shift hides the route")
+
+	# The vehicle drives each leg in order.
+	var visited := [-1, -1, -1]
+	var ticks := 0
+	while ticks < 2400 and bool(extension.call("has_unit_move_target", vehicle)):
+		extension.call("update_simulation", 50.0)
+		ticks += 1
+		var here := _entity_position(view, vehicle)
+		for index in range(3):
+			if visited[index] < 0 and waypoints.size() == 3 and here.distance_to(waypoints[index]) <= 1.0:
+				visited[index] = ticks
+		if _record and ticks % 5 == 0:
+			view.call("_sync_unit_transforms")
+			await process_frame
+	view.call("_sync_unit_transforms")
+	_metrics["arrival_ticks"] = visited
+	_check(visited[0] >= 0 and visited[0] < visited[1] and visited[1] < visited[2], "queue.visits_in_order",
+		"The vehicle reaches waypoint 1, then 2, then 3", {"arrival_ticks": visited, "ticks": ticks})
+	_check(not bool(extension.call("has_unit_move_target", vehicle)), "queue.finishes", "The vehicle is idle after the last waypoint")
+	await _capture_checkpoint(view, "queue_finished")
+
+	# Queue two more legs, then X clears the whole queue.
+	_send_mouse_button(view, MOUSE_BUTTON_RIGHT, screens[0], true)
+	_send_mouse_button(view, MOUSE_BUTTON_RIGHT, screens[1], true)
+	extension.call("update_simulation", 50.0)
+	var requeued: Array = extension.call("get_unit_waypoints", PackedInt32Array([vehicle]), 0)
+	_check((requeued[0] as PackedVector2Array).size() == 2, "queue.requeued", "An idle vehicle accepts a fresh two-leg queue")
+	var stop_key := InputEventKey.new()
+	stop_key.keycode = KEY_X
+	stop_key.pressed = true
+	view.call("_unhandled_input", stop_key)
+	extension.call("update_simulation", 50.0)
+	var cleared: Array = extension.call("get_unit_waypoints", PackedInt32Array([vehicle]), 0)
+	_check((cleared[0] as PackedVector2Array).is_empty() and not bool(extension.call("has_unit_move_target", vehicle)),
+		"queue.stop_clears", "X clears the current order and every queued waypoint")
+	await _destroy_skirmish(view)
+	_check(true, "scenario.completed", "Queued waypoint scenario completed")
+
+
+func _set_shift(pressed: bool) -> void:
+	var event := InputEventKey.new()
+	event.keycode = KEY_SHIFT
+	event.physical_keycode = KEY_SHIFT
+	event.pressed = pressed
+	Input.parse_input_event(event)
+	Input.flush_buffered_events()
+
+
 func _focus_camera_on(view: Node, entity_id: int, distance: float) -> void:
 	var position := _entity_position(view, entity_id)
 	_focus_camera_on_position(view, position, distance)
@@ -802,11 +958,12 @@ func _advance_camera(view: Node, frames: int) -> void:
 			await process_frame
 
 
-func _send_mouse_button(view: Node, button: MouseButton, position: Vector2) -> void:
+func _send_mouse_button(view: Node, button: MouseButton, position: Vector2, shift := false) -> void:
 	var pressed := InputEventMouseButton.new()
 	pressed.button_index = button
 	pressed.position = position
 	pressed.global_position = position
+	pressed.shift_pressed = shift
 	pressed.pressed = true
 	view.call("_unhandled_input", pressed)
 	var released := InputEventMouseButton.new()
