@@ -1,6 +1,6 @@
 # AGENTS.md
 
-> **Authority override:** Read `docs/STATUS.md` first. Goal 0B — Thin the Godot/GDExtension boundary is complete and no successor work package is assigned. Older Goal 03–11 and worktree-reconciliation claims below are historical, not current milestone authority.
+> **Authority override:** Read `docs/HANDOFF.md`, then `docs/STATUS.md`. Goal 0B — Thin the Godot/GDExtension boundary is complete. The user-approved plan since then is the fun-to-play slices in `docs/HANDOFF.md`, which says what is done and what comes next. Older Goal 03–11 and worktree-reconciliation claims below are historical, not current milestone authority.
 
 # Mandate of War — Agent Instructions
 
@@ -10,15 +10,15 @@ You are an implementation agent for a large-scale near-future RTS inspired by Su
 
 ## Authoritative Current Status
 
-**Current work package:** None assigned; Goal 0B — Thin the Godot/GDExtension boundary is complete.
+**Current work package:** the fun-to-play slices in `docs/HANDOFF.md` (Slices 1 and most of 2 are done). Goal 0B — Thin the Godot/GDExtension boundary is complete.
 
 **Beginning baseline:** `main` at `d7e6f45cec045921813c3e9a7074ff09964e800d`. Do not rely on prior baseline claims without current evidence.
 
 **Actual checkout:** inspect `git status --short` before editing. Preserve any user-owned changes; do not reuse older worktree descriptions as current evidence.
 
-**Start here:** `docs/STATUS.md`, then `docs/DEVELOPMENT_WORKFLOW.md` and `docs/ARCHITECTURE.md`.
+**Start here:** `docs/HANDOFF.md`, then `docs/STATUS.md`. `docs/DEVELOPMENT_WORKFLOW.md`, `docs/ARCHITECTURE.md`, `docs/REPOSITORY_INVENTORY.md`, `docs/OPENCODE_HANDOFF.md`, `docs/EXECUTION_LEDGER.md` and `docs/base/` are named below but do not exist in this checkout.
 
-Do not use older Goal 03–11 claims to select work. Goal 0B narrowed the presentation API and did not authorize a gameplay milestone or engine rewrite. Do not begin a successor milestone without an assigned work package.
+Do not use older Goal 03–11 claims to select work. Goal 0B narrowed the presentation API and did not authorize a gameplay milestone or engine rewrite. Take work from the slice plan in `docs/HANDOFF.md`, and do not begin a different milestone without an assigned work package.
 
 ## Working Directory
 
@@ -28,12 +28,10 @@ The repository root is the working directory for this project.
 
 Before making changes, read:
 
-1. `docs/STATUS.md`
-2. `docs/DEVELOPMENT_WORKFLOW.md`
-3. `docs/REPOSITORY_INVENTORY.md`
-4. `docs/ARCHITECTURE.md`
-5. `git status --short`, plus staged and unstaged diffs for files in scope
-6. only when needed for historical context: `docs/OPENCODE_HANDOFF.md`, `docs/EXECUTION_LEDGER.md`, `docs/base/`, and relevant ADRs
+1. `docs/HANDOFF.md`
+2. `docs/STATUS.md`
+3. `git status --short`, plus staged and unstaged diffs for files in scope
+4. only if they exist in your checkout, for historical context: `docs/DEVELOPMENT_WORKFLOW.md`, `docs/ARCHITECTURE.md`, `docs/REPOSITORY_INVENTORY.md`, `docs/OPENCODE_HANDOFF.md`, `docs/EXECUTION_LEDGER.md`, `docs/base/`, and relevant ADRs
 
 ## Development Rules
 
