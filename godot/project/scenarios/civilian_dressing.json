@@ -1,8 +1,10 @@
 {
   "building_types": [
-    {"id": "house", "size": [70, 32, 56], "color": "#8a7560"},
-    {"id": "warehouse", "size": [150, 42, 92], "color": "#58636a"},
-    {"id": "utility", "size": [52, 38, 46], "color": "#6c7772"}
+    {"id": "residential", "size": [55, 45, 35], "scene": "res://assets/source_3d/civilian/poly_pizza/residential_block.glb", "weight": 7},
+    {"id": "warehouse", "size": [70, 50, 110], "scene": "res://assets/source_3d/civilian/poly_pizza/warehouse.glb", "weight": 3},
+    {"id": "utility", "size": [52, 38, 46], "color": "#6c7772", "weight": 3},
+    {"id": "office_tower", "size": [55, 170, 55], "scene": "res://assets/source_3d/civilian/poly_pizza/office_tower.glb", "weight": 2},
+    {"id": "water_tower", "size": [30, 70, 30], "scene": "res://assets/source_3d/civilian/poly_pizza/water_tower.glb", "weight": 1}
   ],
   "clusters": [
     {"center": [-14500, -11200], "spread": [1300, 700], "count": 18, "seed": 401},

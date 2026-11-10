@@ -1,9 +1,8 @@
 class_name MandateCommandButton
 extends MandateButton
 
-## A compact, reusable command control for future node-based HUD surfaces.
-## The current tactical HUD stays custom-drawn; this component keeps semantic
-## icon sizing and hotkey presentation out of future command-panel call sites.
+## A compact command control with a semantic icon and an optional hotkey. The
+## hotkey shows in the tooltip; callers can also show it as a MandateKeycap.
 
 @export var hotkey_text := "":
 	set(value):
@@ -15,5 +14,5 @@ func _ready() -> void:
 	super._ready()
 	custom_minimum_size = Vector2(96.0, 44.0)
 	variant = "ghost" if variant == "primary" else variant
-	if not hotkey_text.is_empty():
+	if not hotkey_text.is_empty() and tooltip_text.is_empty():
 		tooltip_text = "%s  [%s]" % [text, hotkey_text]

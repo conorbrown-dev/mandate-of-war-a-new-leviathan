@@ -18,6 +18,7 @@ const FACTION_UNIT_VISUAL_OVERRIDES := {
 }
 const CAMERA_MIN_DISTANCE := 24.0
 const CAMERA_MAX_DISTANCE := 26000.0
+const CAMERA_ZOOM_LEVELS := [24.0, 120.0, 420.0, 1500.0, 4500.0, 12000.0, 26000.0]
 # From this zoom a pixel covers metres of ground, so clicks are approximate.
 const APPROXIMATE_CLICK_MIN_CAMERA_DISTANCE := 2000.0
 const APPROXIMATE_CLICK_PIXELS := 24.0
@@ -83,6 +84,7 @@ const FUEL_STATUS_SECONDS := 8.0
 const RECON_PLANE_UNIT_TYPE := 14
 const FogShader := preload("res://fog_of_war.gdshader")
 const MatchEndPanelScript := preload("res://ui/components/match_end_panel.gd")
+const MandateTokens := preload("res://ui/theme/ui_tokens.gd")
 const TerrainVegetation := preload("res://terrain_vegetation.gd")
 const UnitCatalog := preload("res://unit_catalog.gd")
 const TERRAIN_MASKS_PATH := "res://scenarios/terrain_masks.png"
@@ -91,11 +93,20 @@ const TREE_CLUSTER_COUNT := 9
 const SkirmishConfigLoader := preload("res://skirmish_config.gd")
 const ControlPointPresentationScript := preload("res://control_point_presentation.gd")
 const ReinforcementPresentationScript := preload("res://reinforcement_delivery_presentation.gd")
+const RangeEnvelopeRendererScript := preload("res://range_envelope_renderer.gd")
 const OrderOverlayRendererScript := preload("res://order_overlay_renderer.gd")
 const UnitRouteRendererScript := preload("res://unit_route_renderer.gd")
 ## How often held-Shift route lines re-read the native routes as units move.
 const UNIT_ROUTE_REFRESH_SECONDS := 0.1
+const CombatEffectsScript := preload("res://combat_effects.gd")
+const UiAudioScript := preload("res://audio/ui_audio.gd")
+const AudioMixScript := preload("res://audio/audio_mix.gd")
+const AudioSettingsScript := preload("res://ui/components/audio_settings.gd")
+const EngineAudioScript := preload("res://audio/engine_audio.gd")
 const StrategicCommandPanelScript := preload("res://ui/components/strategic_command_panel.gd")
+const CommandPostModel := preload("res://structures/command_post_model.gd")
+const CommandPostPanelScript := preload("res://ui/components/command_post_panel.gd")
+const MagnifierViewScript := preload("res://ui/components/magnifier_view.gd")
 const ArmorTexture := preload("res://assets/units/near_future_armor_tile_v1.png")
 const MATERIAL_SITES := [
 	{"id": 900, "name": "RARE METALS", "position": Vector2(-10500, -3500), "owner": -1, "color": Color("#ffbd52")},
@@ -125,11 +136,13 @@ const MATERIAL_SITES := [
 @onready var strategic_icon_overlay: Control = $HUD/UIRoot/StrategicIconOverlay
 @onready var hud_layer: CanvasLayer = $HUD
 @onready var startup_overlay: ColorRect = $HUD/UIRoot/StartupOverlay
-@onready var scenario_title: Label = $HUD/UIRoot/StartupOverlay/Panel/VBox/ScenarioTitle
-@onready var scenario_description: Label = $HUD/UIRoot/StartupOverlay/Panel/VBox/ScenarioDescription
-@onready var scenario_status: Label = $HUD/UIRoot/StartupOverlay/Panel/VBox/ScenarioStatus
-@onready var start_button: Button = $HUD/UIRoot/StartupOverlay/Panel/VBox/StartButton
-@onready var native_skirmish_button: Button = $HUD/UIRoot/StartupOverlay/Panel/VBox/NativeSkirmishButton
+@onready var scenario_title: Label = %ScenarioTitle
+@onready var scenario_factions: Label = %ScenarioFactions
+@onready var scenario_description: Label = %ScenarioDescription
+@onready var scenario_objective: Label = %ScenarioObjective
+@onready var scenario_status: Label = %ScenarioStatus
+@onready var start_button: Button = %StartButton
+@onready var native_skirmish_button: Button = %NativeSkirmishButton
 @onready var territory_debug_label: Label = $HUD/UIRoot/TerritoryDebugLabel
 @onready var territory_material: ShaderMaterial = $Ocean.material_override
 @onready var battlefield_environment: WorldEnvironment = $WorldEnvironment
@@ -141,6 +154,12 @@ const MATERIAL_SITES := [
 var extension: Object
 var order_overlay_renderer: Node3D
 var unit_route_renderer: Node3D
+var combat_effects: Node3D
+var ui_audio: Node
+var engine_audio: Node3D
+var audio_settings: Control
+var magnifier_view: Control
+var range_envelope_renderer: Node3D
 var unit_route_refresh_seconds := 0.0
 var unit_multimesh: MultiMesh
 var demo_unit_views: Dictionary = {}
@@ -170,21 +189,6 @@ var UNIT_TYPE_TO_CONTENT_ID := {
 	12: "command_walker"
 }
 
-const UNIT_TYPE_DISPLAY_NAME := {
-	0: "ELITE MBT",
-	1: "LONG-RANGE ARTILLERY",
-	2: "ANTI-AIR PLATFORM",
-	3: "MASS SWARM TANK",
-	4: "MASS ASSAULT VEHICLE",
-	5: "MASS ANTI-AIR",
-	6: "INDUSTRIAL MBT",
-	7: "MISSILE PLATFORM",
-	8: "ENGINEERING VEHICLE",
-	9: "T1 FIGHTER",
-	10: "T1 VTOL",
-	11: "PATROL BOAT",
-	12: "COMMAND WALKER"
-}
 
 func _load_mesh_from_json(content_id: String) -> ArrayMesh:
 	if mesh_cache.has(content_id):
@@ -253,6 +257,8 @@ var visual_spawn_bridge
 var prototype_visual_views: Dictionary = {}
 var unit_visual_headings: Dictionary = {}
 var aircraft_heights: Dictionary = {}
+var approach_poses: Dictionary = {}
+var approach_from: Dictionary = {}
 # Frame interpolation between simulation ticks: each unit's pose at the
 # previous and the latest tick seen, as Vector3(x, z, heading).
 var interpolation_tick := -1
@@ -275,6 +281,8 @@ var road_start := Vector2.INF
 var road_preview: MeshInstance3D
 var road_preview_material: StandardMaterial3D
 var road_views: Dictionary = {}
+var transport_corridor_views: Dictionary = {}
+var ground_transport_views: Dictionary = {}
 var blueprint_pointer_down := false
 var pending_completed_structures: Array[Dictionary] = []
 var selected_structure_view: Node3D
@@ -292,18 +300,28 @@ var forest_tree_scales: Array[Vector2] = []
 var forest_tree_variant_indices: Array[int] = []
 var forest_tree_root_depths: Array[float] = []
 var pending_build_order: Dictionary = {}
+## Shift+click placements that follow pending_build_order, oldest first:
+## {"type", "target"}. Each is sent to the engineer when the one before it is
+## handed to the native queue; queue_faction_structure still decides each one.
+var queued_build_orders: Array[Dictionary] = []
+var queued_build_markers: Node3D
 var material_site_state: Dictionary = {}
 var fuel_depot_state: Dictionary = {}
 var fuel_supply_status := ""
 var fuel_supply_reason_seen := ""
 var fuel_supply_status_expires_msec := 0
-var fuel_shipment_presentation: Node3D
 var assault_enabled := true
 var match_finished := false
 var match_record_path := ""
 var ai_style_state: Dictionary = {}
 var match_end_panel: Control
 var command_post_views: Dictionary = {}
+# The player's command post is selected on its own: it is not in selected_ids,
+# so no move, attack or stop order can ever reach it.
+var command_post_selected := false
+var command_post_panel: Control
+# Why the last order to the selected post was refused, shown in its panel.
+var command_post_notice := ""
 var fog_view: MeshInstance3D
 var fog_texture: ImageTexture
 var vision_revision_seen := -1
@@ -311,8 +329,16 @@ var seen_enemy_ids: Dictionary = {}
 var removed_entity_ids: Dictionary = {}
 # Flat x, y, seconds since seen, unit type for each enemy now out of sight.
 var last_known_contacts := PackedFloat32Array()
+var radar_contacts := PackedFloat32Array()
 var recon_targeting := false
+# The unit type the next map click drops by parachute, or -1.
+var paradrop_targeting_type := -1
+var paradrop_markers := {}
+var paradrops_lost_seen := 0
 var enemy_post_discovered := false
+# Enemy airfields the player has seen, keyed by rounded position. They stay
+# drawn once found, like the enemy command post.
+var enemy_airfield_views := {}
 var material_order_mode := 0 # 0 normal, 1 claim/capture, 2 demolish
 var fob_build_mode := false
 var fob_build_target := Vector2.INF
@@ -353,9 +379,15 @@ var free_float_camera := false
 var free_camera_yaw := 0.0
 var free_camera_pitch := 38.0
 var tactical_camera_yaw := 0.0
-var environment_debug_brightness := 0.72
+# Tuned in the F8 panel on a clear day. 0.72 stays the reference level the
+# light and terrain brightness scales are normalised against.
+const MAP_BRIGHTNESS_DEFAULT := 0.93
+var environment_debug_brightness := MAP_BRIGHTNESS_DEFAULT
 var environment_debug_fog := 0.000009
 var environment_debug_exposure := 1.08
+# Fog of war darkness over unexplored ground (fog_of_war.gdshader fog_strength).
+const FOG_OF_WAR_DEFAULT_STRENGTH := 0.33
+var fog_of_war_strength := FOG_OF_WAR_DEFAULT_STRENGTH
 var environment_debug_sliders: Dictionary = {}
 var environment_debug_value_labels: Dictionary = {}
 var environment_debug_weather := "OVERCAST"
@@ -415,7 +447,25 @@ func _ready() -> void:
 	UiTypographyScript.apply_to(self)
 	_setup_environment_debug_panel()
 	strategic_icon_overlay.match_view = self
+	AudioMixScript.new().setup()
+	_setup_audio_settings()
+	engine_audio = EngineAudioScript.new()
+	engine_audio.name = "EngineAudio"
+	add_child(engine_audio)
+	ui_audio = UiAudioScript.new()
+	ui_audio.name = "UiAudio"
+	add_child(ui_audio)
+	_setup_command_post_panel()
 	_setup_strategic_command_view()
+	_setup_magnifier_view()
+	combat_effects = CombatEffectsScript.new()
+	combat_effects.name = "CombatEffects"
+	combat_effects.viewer = HUMAN_PLAYER_ID
+	combat_effects.height_at = _terrain_height_at
+	combat_effects.position_visible = func(event: Dictionary) -> bool:
+		return bool(extension.call("can_see", HUMAN_PLAYER_ID, float(event.x), float(event.y), bool(event.airborne)))
+	combat_effects.listener = camera
+	add_child(combat_effects)
 	# Territory data is still a development diagnostic; the centered table was
 	# competing with the tactical view. Keep the update path available for a
 	# future operational-theater panel, but never show it over the battlefield.
@@ -479,8 +529,14 @@ func _ready() -> void:
 	scenario_definition = scenario_result.definition
 	_configure_scenario_theater()
 	scenario_title.text = String(scenario_definition.display_name).to_upper()
-	scenario_description.text = String(scenario_definition.description).to_upper()
-	scenario_status.text = "Elite Precision vs Mass Warfare\n%s" % scenario_definition.victory.description
+	# Sentence case for prose: easier to read than all-caps paragraphs.
+	scenario_description.text = String(scenario_definition.description)
+	scenario_factions.text = "ELITE PRECISION  VS  MASS WARFARE"
+	scenario_objective.text = String(scenario_definition.victory.description).to_upper()
+	scenario_status.text = "•  Build an airfield with your Field Engineer, then order forces in Strategic Command (G)."
+	scenario_status.text += "\n•  Scout before advancing. The enemy's position is unknown and terrain blocks sight."
+	scenario_status.text += "\n•  Ship fuel in or capture depots to keep vehicles moving."
+	start_button.grab_focus.call_deferred()
 	if OS.get_environment("RTS_CONTROL_POINT_SKIRMISH") == "1":
 		_start_control_point_skirmish.call_deferred()
 	elif OS.get_environment("RTS_REINFORCEMENT_DELIVERY_SMOKE") == "1":
@@ -563,6 +619,61 @@ func _activate_reinforcement_delivery_from_airfield() -> void:
 		reinforcement_delivery_status = String(extension.call("reinforcement_delivery_state").get("reason", "AIRFIELD REQUIRED FOR REINFORCEMENTS"))
 
 
+func _setup_audio_settings() -> void:
+	# A separate layer keeps the panel above startup and after-action overlays.
+	var layer := CanvasLayer.new()
+	layer.layer = 20
+	add_child(layer)
+	audio_settings = AudioSettingsScript.new()
+	audio_settings.name = "AudioSettings"
+	layer.add_child(audio_settings)
+	var actions := startup_overlay.get_node("Panel/VBox/Footer/FooterRow") if startup_overlay.has_node("Panel/VBox/Footer/FooterRow") else null
+	if actions != null:
+		var button := preload("res://ui/components/mandate_button.gd").new()
+		button.text = "AUDIO & CREDITS"
+		button.tooltip_text = "Audio levels and asset credits  [F2]"
+		button.variant = "ghost"
+		button.pressed.connect(audio_settings.toggle)
+		actions.add_child(button)
+		actions.move_child(button, 1)
+		actions.get_node("ControlsHint").text = "F1 CONTROLS"
+
+
+func _setup_magnifier_view() -> void:
+	magnifier_view = MagnifierViewScript.new()
+	ui_root.add_child(magnifier_view)
+	magnifier_view.set_enabled(false)
+
+
+## Where the magnifier looks: the ground under the cursor, or null when the
+## cursor is over a HUD control or off the map (the inset then holds its view).
+func _magnifier_focus() -> Variant:
+	var pointer := get_viewport().get_mouse_position()
+	if not get_viewport().get_visible_rect().has_point(pointer):
+		return null
+	var hovered := get_viewport().gui_get_hovered_control()
+	if hovered != null and hovered != command_hud and hovered != ui_root:
+		return null
+	var ground := _screen_to_world(pointer)
+	if absf(ground.x) > terrain_world_width * 0.5 or absf(ground.y) > terrain_world_height * 0.5:
+		return null
+	return ground
+
+
+func _update_magnifier() -> void:
+	if magnifier_view == null or not magnifier_view.is_enabled():
+		return
+	var focus: Variant = _magnifier_focus()
+	# Before the first battlefield hover, show the starting camera focus rather
+	# than an uninitialised camera at the world origin.
+	if focus == null and not magnifier_view.has_target():
+		focus = Vector2(camera_target.x, camera_target.z)
+	var height := 0.0
+	if focus != null:
+		height = _terrain_height_at((focus as Vector2).x, (focus as Vector2).y)
+	magnifier_view.update_view(camera, camera_distance, focus, height)
+
+
 func _setup_strategic_command_view() -> void:
 	strategic_command_view = StrategicCommandPanelScript.new()
 	strategic_command_view.name = "StrategicCommand"
@@ -571,6 +682,7 @@ func _setup_strategic_command_view() -> void:
 	strategic_command_view.order_unit.connect(_on_strategic_command_order_unit)
 	strategic_command_view.request_fuel.connect(_request_fuel_shipment)
 	strategic_command_view.request_recon.connect(_begin_recon_targeting)
+	strategic_command_view.order_paradrop.connect(_begin_paradrop_targeting)
 	strategic_command_view.dismissed.connect(_close_strategic_command)
 	ui_root.add_child(strategic_command_view)
 
@@ -584,12 +696,16 @@ func _toggle_strategic_command() -> void:
 	if not match_started or extension == null:
 		return
 	strategic_command_view.visible = true
+	# Modal: above the magnifier and every HUD card.
+	strategic_command_view.move_to_front()
+	ui_audio.play_cue("panel_open")
 	_sync_strategic_command()
 
 
 func _close_strategic_command() -> void:
-	if strategic_command_view != null:
+	if strategic_command_view != null and strategic_command_view.visible:
 		strategic_command_view.visible = false
+		ui_audio.play_cue("panel_close")
 
 
 func _on_strategic_command_select_zone() -> void:
@@ -624,16 +740,18 @@ func _sync_strategic_command() -> void:
 
 # Forces are ordered here, not by the engineer. The unit is paid for now and
 # lands at the airfield when its build and flight time are up.
-func _on_strategic_command_order_unit(unit_type: int) -> void:
-	var accepted := _order_unit_by_transport(unit_type)
+func _on_strategic_command_order_unit(unit_type: int, mode: int = 0) -> void:
+	var accepted := _order_unit_by_transport(unit_type) if mode == 0 else bool(extension.call("order_ground_transport", HUMAN_PLAYER_ID, unit_type, mode))
+	ui_audio.play_cue("order_accepted" if accepted else "order_refused")
 	var refusal := ""
 	if not accepted:
 		for entry in extension.call("get_build_catalog", HUMAN_PLAYER_ID):
 			if int(entry.get("type", -1)) == unit_type:
-				refusal = String(entry.get("reason", ""))
+				var reason_key := "reason" if mode == 0 else "road_reason" if mode == 1 else "rail_reason"
+				refusal = String(entry.get(reason_key, ""))
 		reinforcement_delivery_status = refusal if not refusal.is_empty() else "ORDER REFUSED"
 	else:
-		reinforcement_delivery_status = "FORCES ORDERED // INBOUND"
+		reinforcement_delivery_status = "FORCES ORDERED // %s INBOUND" % ["AIR", "ROAD", "RAIL"][clampi(mode, 0, 2)]
 	_sync_strategic_command()
 	_update_hud()
 
@@ -674,8 +792,76 @@ func _order_recon_flight(target: Vector2) -> bool:
 	return accepted
 
 
+# The next map click picks the drop zone. Native rules decide: the ground must
+# be watched right now, and the unit is paid for and counts against the cap.
+func _begin_paradrop_targeting(unit_type: int) -> void:
+	_cancel_tactical_modes()
+	_close_strategic_command()
+	paradrop_targeting_type = unit_type
+	_announce_intel("SELECT DROP ZONE // GROUND YOU CAN SEE")
+
+
+func _order_paradrop(target: Vector2) -> bool:
+	var unit_type := paradrop_targeting_type
+	paradrop_targeting_type = -1
+	var refusal := String(extension.call("order_paradrop", HUMAN_PLAYER_ID, unit_type, target.x, target.y))
+	_announce_intel("PARADROP INBOUND" if refusal.is_empty() else "PARADROP REFUSED // " + refusal)
+	_sync_strategic_command()
+	_update_hud()
+	return refusal.is_empty()
+
+
+# A marker over each drop zone with a paratroop drop still in the air.
+func _sync_paradrop_markers() -> void:
+	var active := {}
+	var delivery: Dictionary = extension.call("delivery_state", HUMAN_PLAYER_ID)
+	# A drop's transport flies in over the map and can be shot down.
+	var lost := int(delivery.get("airdrops_lost", 0))
+	if lost > paradrops_lost_seen:
+		_announce_intel("PARADROP TRANSPORT SHOT DOWN")
+	paradrops_lost_seen = lost
+	for force in delivery.get("inbound", []):
+		if not bool(force.get("airdrop", false)):
+			continue
+		var point := Vector2(float(force.x), float(force.y))
+		var key := Vector2i(roundi(point.x), roundi(point.y))
+		var seconds := float(force.remaining_ms) / 1000.0
+		active[key] = minf(float(active.get(key, INF)), seconds)
+	for key in paradrop_markers.keys():
+		if not active.has(key):
+			var stale: Node3D = paradrop_markers[key]
+			if is_instance_valid(stale):
+				stale.queue_free()
+			paradrop_markers.erase(key)
+	for key in active.keys():
+		var marker: Node3D = paradrop_markers.get(key)
+		if marker == null:
+			marker = Node3D.new()
+			marker.name = "DropZone_%d_%d" % [key.x, key.y]
+			marker.position = Vector3(key.x, _terrain_height_at(key.x, key.y) + 2.0, key.y)
+			var ring := MeshInstance3D.new()
+			var torus := TorusMesh.new()
+			torus.inner_radius = 140.0
+			torus.outer_radius = 150.0
+			ring.mesh = torus
+			ring.material_override = _demo_material(Color("#7fd4ff"), 1.2)
+			marker.add_child(ring)
+			var label := Label3D.new()
+			label.name = "Countdown"
+			label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+			label.pixel_size = 0.6
+			label.font_size = 48
+			label.outline_size = 10
+			label.position.y = 40.0
+			marker.add_child(label)
+			add_child(marker)
+			paradrop_markers[key] = marker
+		(marker.get_node("Countdown") as Label3D).text = "PARADROP  %.0f S" % float(active[key])
+
+
 func _request_fuel_shipment() -> bool:
 	var accepted := bool(extension.call("fuel_shipment_request", HUMAN_PLAYER_ID))
+	ui_audio.play_cue("order_accepted" if accepted else "order_refused")
 	_sync_fuel_supply()
 	_sync_strategic_command()
 	_update_hud()
@@ -693,6 +879,13 @@ func _sync_fuel_supply() -> void:
 		site.owner = int(depot.owner)
 		site.stock = float(depot.stock)
 		site.capturing = bool(depot.capturing)
+	for status in extension.call("material_sites_state", HUMAN_PLAYER_ID):
+		var material_site: Dictionary = material_site_state.get(int(status.id), {})
+		if material_site.is_empty() or bool(material_site.get("destroyed", false)):
+			continue
+		owners_changed = owners_changed or int(material_site.owner) != int(status.owner)
+		material_site.owner = int(status.owner)
+		material_site.capturing = bool(status.capturing)
 	if owners_changed:
 		_rebuild_material_site_views()
 	var reason := String(supply.get("reason", ""))
@@ -706,29 +899,23 @@ func _sync_fuel_supply() -> void:
 		fuel_supply_status_expires_msec = Time.get_ticks_msec() + int(FUEL_STATUS_SECONDS * 1000.0)
 	elif Time.get_ticks_msec() > fuel_supply_status_expires_msec:
 		fuel_supply_status = ""
-	if fuel_shipment_presentation == null and inbound:
-		fuel_shipment_presentation = ReinforcementPresentationScript.new()
-		add_child(fuel_shipment_presentation)
-	if fuel_shipment_presentation != null:
-		var duration := float(supply.get("shipment_duration_ms", 1.0))
-		fuel_shipment_presentation.sync({
-			"state": 3 if inbound else 0,
-			"elapsed_ms": duration - float(supply.get("shipment_remaining_ms", 0.0)),
-			"duration_ms": duration,
-			"delivery_x": float(supply.get("shipment_x", 0.0)),
-			"delivery_y": float(supply.get("shipment_y", 0.0)),
-		}, func(x: float, z: float): return _terrain_height_at(x, z))
+	# Out of fuel outranks every other supply message: the army cannot move.
+	var starved := int(supply.get("starved_units", 0))
+	if starved > 0:
+		fuel_supply_status = "OUT OF FUEL // %d VEHICLE%s HALTED" % [starved, "" if starved == 1 else "S"]
+		fuel_supply_status_expires_msec = Time.get_ticks_msec() + int(FUEL_STATUS_SECONDS * 1000.0)
+	# The shipment's cargo aircraft is a real unit now, drawn like any other
+	# aircraft, so there is no separate scripted fly-in for it.
 
 
 func _setup_environment_debug_panel() -> void:
 	var environment := battlefield_environment.environment
 	if environment == null:
 		return
-	environment_debug_brightness = environment.ambient_light_energy
 	environment_debug_fog = environment.fog_density
 	environment_debug_exposure = environment.tonemap_exposure
 	debug_panel.offset_right = 380.0
-	debug_panel.offset_bottom = 346.0
+	debug_panel.offset_bottom = 386.0
 	debug_label.visible = false
 	var title := Label.new()
 	title.text = "ENVIRONMENT DEBUG // F8"
@@ -738,13 +925,14 @@ func _setup_environment_debug_panel() -> void:
 	_add_environment_slider("brightness", "MAP BRIGHTNESS", 0.25, 1.8, environment_debug_brightness, 42.0)
 	_add_environment_slider("fog", "FOG DENSITY", 0.0, 0.00006, environment_debug_fog, 82.0)
 	_add_environment_slider("exposure", "EXPOSURE", 0.5, 1.8, environment_debug_exposure, 122.0)
+	_add_environment_slider("war_fog", "FOG OF WAR", 0.0, 1.0, fog_of_war_strength, 162.0)
 	var weather_label := Label.new()
 	weather_label.text = "WEATHER"
-	weather_label.position = Vector2(12, 164)
+	weather_label.position = Vector2(12, 204)
 	weather_label.size = Vector2(132, 24)
 	debug_panel.add_child(weather_label)
 	environment_debug_weather_option = OptionButton.new()
-	environment_debug_weather_option.position = Vector2(138, 162)
+	environment_debug_weather_option.position = Vector2(138, 202)
 	environment_debug_weather_option.size = Vector2(190, 28)
 	for weather_name in ["CLEAR", "OVERCAST", "STORM"]:
 		environment_debug_weather_option.add_item(weather_name)
@@ -753,30 +941,30 @@ func _setup_environment_debug_panel() -> void:
 	environment_debug_weather_option.select(1)
 	var time_label := Label.new()
 	time_label.text = "TIME OF DAY"
-	time_label.position = Vector2(12, 204)
+	time_label.position = Vector2(12, 244)
 	time_label.size = Vector2(132, 24)
 	debug_panel.add_child(time_label)
 	environment_debug_day_button = Button.new()
 	environment_debug_day_button.text = "DAYTIME"
-	environment_debug_day_button.position = Vector2(138, 202)
+	environment_debug_day_button.position = Vector2(138, 242)
 	environment_debug_day_button.size = Vector2(92, 28)
 	environment_debug_day_button.pressed.connect(func(): _apply_time_of_day("DAYTIME"))
 	debug_panel.add_child(environment_debug_day_button)
 	environment_debug_night_button = Button.new()
 	environment_debug_night_button.text = "NIGHTTIME"
-	environment_debug_night_button.position = Vector2(236, 202)
+	environment_debug_night_button.position = Vector2(236, 242)
 	environment_debug_night_button.size = Vector2(92, 28)
 	environment_debug_night_button.pressed.connect(func(): _apply_time_of_day("NIGHTTIME"))
 	debug_panel.add_child(environment_debug_night_button)
 	environment_debug_steering_label = Label.new()
-	environment_debug_steering_label.position = Vector2(12, 244)
+	environment_debug_steering_label.position = Vector2(12, 284)
 	environment_debug_steering_label.size = Vector2(356, 28)
 	environment_debug_steering_label.autowrap_mode = TextServer.AUTOWRAP_OFF
 	environment_debug_steering_label.add_theme_color_override("font_color", Color("#b6c7cf"))
 	debug_panel.add_child(environment_debug_steering_label)
 	var reset := Button.new()
 	reset.text = "RESET DEFAULTS"
-	reset.position = Vector2(208, 284)
+	reset.position = Vector2(208, 324)
 	reset.size = Vector2(120, 28)
 	reset.pressed.connect(_reset_environment_debug)
 	debug_panel.add_child(reset)
@@ -820,10 +1008,22 @@ func _set_environment_debug_value(key: String, value: float) -> void:
 			environment_debug_fog = value
 			battlefield_environment.environment.fog_density = value
 			(environment_debug_value_labels.get(key) as Label).text = "%.5f" % value
+		"war_fog":
+			fog_of_war_strength = value
+			_apply_fog_of_war_strength()
+			(environment_debug_value_labels.get(key) as Label).text = "%.2f" % value
 		"exposure":
 			environment_debug_exposure = value
 			battlefield_environment.environment.tonemap_exposure = value
 			(environment_debug_value_labels.get(key) as Label).text = "%.2f" % value
+
+
+func _apply_fog_of_war_strength() -> void:
+	if fog_view == null:
+		return
+	var material := fog_view.material_override as ShaderMaterial
+	if material != null:
+		material.set_shader_parameter("fog_strength", fog_of_war_strength)
 
 
 func _apply_environment_weather(weather_name: String) -> void:
@@ -893,10 +1093,10 @@ func _apply_time_of_day(time_name: String) -> void:
 
 
 func _reset_environment_debug() -> void:
-	for key in ["brightness", "fog", "exposure"]:
+	for key in ["brightness", "fog", "exposure", "war_fog"]:
 		var slider := environment_debug_sliders.get(key) as HSlider
 		if slider != null:
-			slider.value = 0.72 if key == "brightness" else 0.000009 if key == "fog" else 1.08
+			slider.value = MAP_BRIGHTNESS_DEFAULT if key == "brightness" else 0.000009 if key == "fog" else 1.08 if key == "exposure" else FOG_OF_WAR_DEFAULT_STRENGTH
 	if environment_debug_weather_option != null:
 		environment_debug_weather_option.select(1)
 	_apply_environment_weather("OVERCAST")
@@ -1013,6 +1213,12 @@ func _configure_scenario_theater() -> void:
 func _start_scale_profile() -> void:
 	extension.call("start_simulation")
 	match_started = true
+	if combat_effects != null:
+		combat_effects.clear()
+	if engine_audio != null:
+		engine_audio.clear()
+	if magnifier_view != null:
+		magnifier_view.set_enabled(true)
 	var unit_count := _get_visible_unit_count()
 	_create_unit_multimesh(unit_count)
 	_spawn_units(unit_count)
@@ -1041,6 +1247,12 @@ func _on_start_skirmish_pressed() -> void:
 	terrain_revision_seen = int(extension.call("get_terrain_revision"))
 	extension.call("start_simulation")
 	match_started = true
+	if combat_effects != null:
+		combat_effects.clear()
+	if engine_audio != null:
+		engine_audio.clear()
+	if magnifier_view != null:
+		magnifier_view.set_enabled(true)
 	_setup_economy_for_player_1()
 	_create_unit_multimesh(2)
 	demo_mode = true
@@ -1057,17 +1269,29 @@ func _on_start_skirmish_pressed() -> void:
 	hidden_base_ids.clear()
 	pending_player_build_types.clear()
 	recon_targeting = false
+	paradrop_targeting_type = -1
+	paradrops_lost_seen = 0
+	for marker in paradrop_markers.values():
+		if is_instance_valid(marker):
+			marker.queue_free()
+	paradrop_markers.clear()
 	removed_entity_ids.clear()
 	last_known_contacts = PackedFloat32Array()
+	radar_contacts = PackedFloat32Array()
 	material_site_state.clear()
 	fuel_depot_state.clear()
 	fuel_supply_status = ""
 	fuel_supply_reason_seen = ""
 	match_finished = false
 	command_post_views.clear()
+	command_post_selected = false
 	seen_enemy_ids.clear()
 	vision_revision_seen = -1
 	enemy_post_discovered = false
+	for airfield in enemy_airfield_views.values():
+		if is_instance_valid(airfield):
+			airfield.queue_free()
+	enemy_airfield_views.clear()
 	material_order_mode = 0
 	if not _spawn_commander_start():
 		push_error("Failed to create the authoritative engineer-start forces")
@@ -1083,6 +1307,9 @@ func _on_start_skirmish_pressed() -> void:
 	# This presentation skirmish is a build-test sandbox, not an economy slice.
 	# Resource generation and capture remain authoritative native systems.
 	extension.call("reinforcement_delivery_set_resources", HUMAN_PLAYER_ID,
+		SKIRMISH_PRESENTATION_STARTING_MATERIALS, SKIRMISH_PRESENTATION_STARTING_FUEL)
+	# The AI starts with exactly what the player starts with: no bonus, no handicap.
+	extension.call("reinforcement_delivery_set_resources", int(scenario_definition.ai.faction_id),
 		SKIRMISH_PRESENTATION_STARTING_MATERIALS, SKIRMISH_PRESENTATION_STARTING_FUEL)
 	_spawn_material_sites()
 	_spawn_fuel_depots()
@@ -1145,14 +1372,17 @@ func _process(delta: float) -> void:
 		build_ghost.position = Vector3(ghost_target.x, _terrain_height_at(ghost_target.x, ghost_target.y) + 0.08, ghost_target.y)
 	_update_unit_routes(delta)
 	if extension == null or not match_started or match_finished:
+		engine_audio.clear()
 		return
 
 	var simulation_start_us := Time.get_ticks_usec()
+	_enforce_game_speed_policy()
 	extension.call("update_simulation", delta * 1000.0)
 	_update_match_state()
 	_sync_vision()
 	_process_pending_build_order()
 	var simulation_call_ms := float(Time.get_ticks_usec() - simulation_start_us) / 1000.0
+	combat_effects.consume(extension.call("get_combat_events", combat_effects.cursor, HUMAN_PLAYER_ID))
 	_sync_new_entities()
 	_sync_completed_roads()
 	_update_keyboard_pan(delta)
@@ -1161,8 +1391,12 @@ func _process(delta: float) -> void:
 		order_overlay_renderer.set_camera_distance(camera_distance)
 	_sync_tree_lod()
 	var sync_timings := _sync_unit_transforms()
+	_sync_ground_transport_presentation()
+	engine_audio.update_from_view(self, delta)
+	_update_range_envelopes()
 	_record_profile_frame(delta, simulation_call_ms, sync_timings.x, sync_timings.y)
 	_update_hover_context()
+	_update_magnifier()
 
 	hud_elapsed += delta
 	if hud_elapsed >= 0.2:
@@ -1214,6 +1448,7 @@ func _transport_flight_snapshot(anchor: Dictionary) -> Dictionary:
 	var flight_ms := Simulation_TRANSIT_MS
 	var inbound: Array = extension.call("delivery_state", HUMAN_PLAYER_ID).get("inbound", [])
 	var snapshot := anchor.duplicate()
+	snapshot["runway_offset"] = AIRFIELD_PAVING[0].center
 	snapshot["duration_ms"] = flight_ms
 	if inbound.is_empty():
 		snapshot["state"] = 4 if reinforcement_transport_has_landed else int(anchor.get("state", 0))
@@ -1282,6 +1517,33 @@ func _update_territory() -> void:
 
 
 func _unhandled_input(event: InputEvent) -> void:
+	if audio_settings != null and audio_settings.visible:
+		get_viewport().set_input_as_handled()
+		return
+	if event is InputEventKey and event.pressed and not event.echo and event.keycode == KEY_F2 and not event.ctrl_pressed and not event.meta_pressed and not event.alt_pressed:
+		audio_settings.toggle()
+		get_viewport().set_input_as_handled()
+		return
+	if match_started and not match_finished:
+		if event is InputEventMagnifyGesture:
+			# macOS delivers incremental magnification factors, not wheel clicks.
+			# Spreading fingers increases magnification, so camera distance shrinks.
+			if is_finite(event.factor) and event.factor > 0.0:
+				_zoom_toward_cursor(event.position, 1.0 / event.factor)
+			get_viewport().set_input_as_handled()
+			return
+		if event is InputEventKey and event.pressed and not event.ctrl_pressed and not event.meta_pressed and not event.alt_pressed:
+			if event.keycode in [KEY_SLASH, KEY_KP_DIVIDE]:
+				if not event.echo:
+					_cycle_camera_zoom()
+				get_viewport().set_input_as_handled()
+				return
+			if event.keycode in [KEY_PLUS, KEY_EQUAL, KEY_KP_ADD, KEY_MINUS, KEY_KP_SUBTRACT]:
+				if not event.echo:
+					_change_game_speed(-1 if event.keycode in [KEY_MINUS, KEY_KP_SUBTRACT] else 1)
+				get_viewport().set_input_as_handled()
+				return
+
 	if event is InputEventKey and event.pressed and not event.echo and event.keycode == KEY_F1:
 		if hotkey_display != null:
 			hotkey_display.toggle()
@@ -1292,6 +1554,13 @@ func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventKey and event.pressed and event.keycode == KEY_G:
 		_toggle_strategic_command()
 		return
+	if event is InputEventKey and event.pressed and not event.echo and magnifier_view != null:
+		if event.keycode == KEY_M:
+			magnifier_view.toggle()
+			return
+		if event.keycode == KEY_BRACKETRIGHT or event.keycode == KEY_BRACKETLEFT:
+			magnifier_view.cycle_zoom(1 if event.keycode == KEY_BRACKETRIGHT else -1)
+			return
 	if event is InputEventKey and event.pressed and event.keycode == KEY_F8:
 		debug_panel.visible = not debug_panel.visible
 		return
@@ -1299,7 +1568,7 @@ func _unhandled_input(event: InputEvent) -> void:
 		if strategic_command_view != null and strategic_command_view.visible:
 			_close_strategic_command()
 			return
-		if build_mode_type >= 0 or fob_build_mode or material_order_mode != 0 or recon_targeting:
+		if build_mode_type >= 0 or fob_build_mode or material_order_mode != 0 or recon_targeting or paradrop_targeting_type >= 0:
 			_cancel_tactical_modes()
 			return
 		get_tree().quit()
@@ -1369,6 +1638,9 @@ func _unhandled_input(event: InputEvent) -> void:
 				if recon_targeting:
 					_order_recon_flight(_screen_to_world(event.position))
 					return
+				if paradrop_targeting_type >= 0:
+					_order_paradrop(_screen_to_world(event.position))
+					return
 				if reinforcement_delivery_selecting:
 					var airfield_target := _screen_to_world(event.position)
 					reinforcement_delivery_selecting = false
@@ -1404,7 +1676,16 @@ func _unhandled_input(event: InputEvent) -> void:
 					return
 				if build_mode_type >= 0:
 					var target := _screen_to_world(event.position)
+					if event.shift_pressed:
+						# Shift adds to the engineer's build queue and keeps placing.
+						_queue_build_placement(build_mode_type, target)
+						selecting = false
+						selection_rect.visible = false
+						return
+					# A plain click replaces the queue, as a plain move order does.
+					queued_build_orders.clear()
 					_order_commander_to_build(build_mode_type, target)
+					_sync_queued_build_markers()
 					build_mode_type = -1
 					if build_mode_type < 0 and build_ghost != null: build_ghost.queue_free(); build_ghost = null
 					selecting = false
@@ -1412,7 +1693,7 @@ func _unhandled_input(event: InputEvent) -> void:
 				else:
 					_finish_selection(event.position)
 		elif event.button_index == MOUSE_BUTTON_RIGHT and event.pressed:
-			if build_mode_type >= 0 or fob_build_mode or recon_targeting:
+			if build_mode_type >= 0 or fob_build_mode or recon_targeting or paradrop_targeting_type >= 0:
 				_cancel_tactical_modes()
 				return
 			if material_order_mode != 0:
@@ -1463,6 +1744,8 @@ func _create_unit_multimesh(instance_count: int) -> void:
 	unit_positions.clear()
 	prototype_visual_views.clear()
 	unit_visual_headings.clear()
+	approach_poses.clear()
+	approach_from.clear()
 
 	var material := StandardMaterial3D.new()
 	material.vertex_color_use_as_albedo = true
@@ -1554,7 +1837,8 @@ func _spawn_commander_start() -> bool:
 
 
 func _find_engineer_spawn(origin: Vector2) -> Vector2:
-	var offsets: Array[Vector2] = [Vector2(4.0, 0.0)]
+	# First choice: just outside the command post's south gate, not inside it.
+	var offsets: Array[Vector2] = [Vector2(0.0, CommandPostModel.FOOTPRINT.y * 0.5 + 10.0)]
 	for radius in range(1, 9):
 		var distance := float(radius) * 500.0
 		for direction in [Vector2(-1.0, -1.0), Vector2(-1.0, 0.0), Vector2(-1.0, 1.0), Vector2(0.0, -1.0), Vector2(0.0, 1.0), Vector2(1.0, -1.0), Vector2(1.0, 0.0), Vector2(1.0, 1.0)]:
@@ -1574,22 +1858,16 @@ func _spawn_material_sites() -> void:
 	_clear_material_sites()
 	for definition in MATERIAL_SITES:
 		var site: Dictionary = definition.duplicate(true)
+		site.discovered = false
+		site.known_owner = -1
 		material_site_state[int(site.id)] = site
 		var position: Vector2 = site.position
 		# ResourceNode METAL is the game's single shared Materials economy; the
 		# labels describe the near-future field source, not separate inventories.
 		extension.call("economy_add_resource_node", int(site.id), position.x, position.y, 50000.0, 0)
-		if int(site.owner) == 1:
-			var enemy_commander := int(commander_ids.get(1, -1))
-			if enemy_commander > 0:
-				extension.call("issue_harvest_commands", PackedInt32Array([enemy_commander]), 1, position.x, position.y)
-	# Apply initial enemy ownership through the same fixed-tick command path.
-	extension.call("update_simulation", 50.0)
-	# The claim also sends the claimant to the site, but a command post stays put.
-	var enemy_post := int(commander_ids.get(1, -1))
-	if enemy_post > 0:
-		extension.call("issue_stop_commands", PackedInt32Array([enemy_post]), 1)
-		extension.call("update_simulation", 50.0)
+		# Sites the enemy holds when the match starts. Later captures need a unit there.
+		if int(site.owner) >= 0:
+			extension.call("economy_assign_material_site", int(site.id), int(site.owner))
 	_rebuild_material_site_views()
 
 
@@ -1622,8 +1900,7 @@ func _spawn_fuel_depots() -> void:
 			"stock": stock,
 			"capacity": stock,
 			"capturing": false,
-			# Civilian terminals are on the recon map. Military depots must be found.
-			"discovered": owner < 0,
+			"discovered": false,
 			"known_owner": -1,
 		}
 	_rebuild_material_site_views()
@@ -1632,6 +1909,10 @@ func _spawn_fuel_depots() -> void:
 func _begin_battle() -> void:
 	_apply_ai_style()
 	extension.call("match_begin", int(commander_ids.get(HUMAN_PLAYER_ID, -1)), int(commander_ids.get(1, -1)))
+	var victory: Dictionary = scenario_definition.get("victory", {})
+	if victory.has("key_sites"):
+		if not bool(extension.call("match_configure_key_sites", victory.get("key_sites", []), int(victory.get("required", 0)), int(victory.get("hold_seconds", 0)))):
+			push_error("Broken Strait key-site victory could not be configured")
 	_apply_force_arrival_rules()
 	match_record_path = ""
 	extension.call("match_record_set_info", "scenario", String(scenario_definition.get("id", "")))
@@ -1652,26 +1933,126 @@ func _begin_battle() -> void:
 	_setup_fog()
 
 
-# Forces fly in rather than being built on the field. The player lands at an
-# airfield they must build. The AI, which cannot build one yet, is given a
-# landing zone beside its command post, so its orders cost the same and take
-# the same build and flight time.
+# Forces fly in rather than being built on the field. Each side lands them at
+# an airfield it must build first. The AI builds its own through its Field
+# Engineer (native AIManager::build_airfield), at the same price and time.
 func _apply_force_arrival_rules() -> void:
+	# Ground vehicles drive on shipped or captured fuel, from the same store.
+	extension.call("ground_fuel_burn_set", bool(scenario_definition.get("ground_vehicles_burn_fuel", false)))
 	if not bool(scenario_definition.get("forces_by_transport", false)):
 		return
 	extension.call("forces_by_transport_set", true)
-	var ai_side: Dictionary = scenario_definition.ai
-	var post := Vector2(float(ai_side.spawn[0]), float(ai_side.spawn[1]))
-	var zone: Array = ai_side.get("landing_zone", [])
-	var candidates: Array[Vector2] = []
-	if zone.size() == 2:
-		candidates.append(Vector2(float(zone[0]), float(zone[1])))
-	for offset in [Vector2(300, 0), Vector2(-300, 0), Vector2(0, 300), Vector2(0, -300), Vector2(500, 0), Vector2(-500, 0), Vector2(0, 500), Vector2(0, -500)]:
-		candidates.append(post + offset)
-	for candidate in candidates:
-		if bool(extension.call("landing_zone_set", int(ai_side.faction_id), candidate.x, candidate.y)):
-			return
-	push_warning("The AI has no valid landing zone; it cannot receive forces")
+	for side: Dictionary in scenario_definition.get("transport_routes", []):
+		var faction_id := int(side.get("faction_id", -1))
+		for mode_name in ["road", "rail"]:
+			var route: Dictionary = side.get(mode_name, {})
+			var entry: Array = route.get("entry", [])
+			var terminal: Array = route.get("terminal", [])
+			if entry.size() != 2 or terminal.size() != 2:
+				continue
+			var start := Vector2(float(entry[0]), float(entry[1]))
+			var finish := Vector2(float(terminal[0]), float(terminal[1]))
+			var mode := 1 if mode_name == "road" else 2
+			if bool(extension.call("configure_transport_route", faction_id, mode, start.x, start.y, finish.x, finish.y)):
+				_add_transport_corridor_view(faction_id, mode, start, finish)
+			else:
+				push_error("%s transport corridor for faction %d is invalid" % [mode_name, faction_id])
+	if transport_corridor_views.has("0:1") and transport_corridor_views.has("0:2") and not reinforcement_delivery_enabled:
+		reinforcement_delivery_status = "ROAD/RAIL CORRIDORS READY // AIRLIFT NEEDS AIRFIELD"
+		_update_hud()
+
+
+func _add_transport_corridor_view(faction_id: int, mode: int, start: Vector2, finish: Vector2) -> void:
+	var root := Node3D.new()
+	root.name = "%s_Corridor_%d" % ["Road" if mode == 1 else "Rail", faction_id]
+	add_child(root)
+	root.visible = faction_id == HUMAN_PLAYER_ID
+	transport_corridor_views["%d:%d" % [faction_id, mode]] = root
+	var bed := MeshInstance3D.new()
+	bed.name = "Roadbed" if mode == 1 else "RailBallast"
+	bed.mesh = _make_road_mesh(start, finish, 12.0 if mode == 1 else 9.0)
+	bed.material_override = _demo_material(Color("#3b4242") if mode == 1 else Color("#514f4a"), 0.0)
+	root.add_child(bed)
+	var terminal_label := Label3D.new()
+	terminal_label.name = "TerminalLabel"
+	terminal_label.text = "ROAD TERMINAL" if mode == 1 else "RAILHEAD"
+	terminal_label.font_size = 28
+	terminal_label.pixel_size = 0.12
+	terminal_label.outline_size = 3
+	terminal_label.modulate = Color("#d6ddd7")
+	terminal_label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+	terminal_label.position = Vector3(finish.x, _terrain_height_at(finish.x, finish.y) + 6.0, finish.y)
+	root.add_child(terminal_label)
+	if mode == 2:
+		var side := (finish - start).normalized().orthogonal()
+		var tie_mesh := BoxMesh.new()
+		tie_mesh.size = Vector3(8.4, 0.16, 0.9)
+		var ties := MultiMesh.new()
+		ties.transform_format = MultiMesh.TRANSFORM_3D
+		ties.mesh = tie_mesh
+		ties.instance_count = maxi(1, int(start.distance_to(finish) / 8.0))
+		var rail_yaw := atan2(finish.x - start.x, finish.y - start.y)
+		for index in range(ties.instance_count):
+			var fraction := (float(index) + 0.5) / float(ties.instance_count)
+			var point := start.lerp(finish, fraction)
+			var position := Vector3(point.x, _terrain_height_at(point.x, point.y) + 0.20, point.y)
+			ties.set_instance_transform(index, Transform3D(Basis(Vector3.UP, rail_yaw), position))
+		var tie_view := MultiMeshInstance3D.new()
+		tie_view.name = "RailTies"
+		tie_view.multimesh = ties
+		tie_view.material_override = _demo_material(Color("#363b3c"), 0.0)
+		root.add_child(tie_view)
+		for offset in [-2.7, 2.7]:
+			var rail := MeshInstance3D.new()
+			rail.name = "SteelRail"
+			rail.mesh = _make_road_mesh(start + side * offset, finish + side * offset, 0.28, 0.24)
+			rail.material_override = _demo_material(Color("#a6aaa5"), 0.0)
+			root.add_child(rail)
+
+
+func _sync_ground_transport_presentation() -> void:
+	if extension == null:
+		return
+	var inbound: Array = extension.call("delivery_state", HUMAN_PLAYER_ID).get("inbound", [])
+	var seen := {}
+	for force: Dictionary in inbound:
+		var mode := int(force.get("route_mode", 0))
+		if mode < 1 or not bool(force.get("in_transit", false)):
+			continue
+		var order_id := int(force.get("order_id", 0))
+		seen[order_id] = true
+		if not ground_transport_views.has(order_id):
+			ground_transport_views[order_id] = _make_ground_transport_view(mode)
+		var vehicle: Node3D = ground_transport_views[order_id]
+		var start: Vector2 = force.get("entry", Vector2.ZERO)
+		var finish: Vector2 = force.get("terminal", Vector2.ZERO)
+		var point := start.lerp(finish, float(force.get("progress", 0.0)))
+		vehicle.position = Vector3(point.x, _terrain_height_at(point.x, point.y) + 2.0, point.y)
+		vehicle.rotation.y = atan2(finish.x - start.x, finish.y - start.y)
+	for order_id in ground_transport_views.keys():
+		if not seen.has(order_id):
+			ground_transport_views[order_id].queue_free()
+			ground_transport_views.erase(order_id)
+
+
+func _make_ground_transport_view(mode: int) -> Node3D:
+	var root := Node3D.new()
+	root.name = "RailConvoy" if mode == 2 else "RoadConvoy"
+	add_child(root)
+	var body := MeshInstance3D.new()
+	var box := BoxMesh.new()
+	box.size = Vector3(3.8, 3.2, 26.0) if mode == 2 else Vector3(3.0, 2.8, 11.0)
+	body.mesh = box
+	body.material_override = _demo_material(Color("#596568") if mode == 2 else Color("#535e56"), 0.0)
+	root.add_child(body)
+	var cab := MeshInstance3D.new()
+	var cab_box := BoxMesh.new()
+	cab_box.size = Vector3(3.8, 4.1, 6.0) if mode == 2 else Vector3(3.0, 3.5, 3.4)
+	cab.mesh = cab_box
+	cab.position.z = 11.0 if mode == 2 else 4.0
+	cab.material_override = _demo_material(Color("#424e52"), 0.0)
+	root.add_child(cab)
+	return root
 
 
 func _setup_fog() -> void:
@@ -1689,6 +2070,7 @@ func _setup_fog() -> void:
 		add_child(fog_view)
 	var fog_material := fog_view.material_override as ShaderMaterial
 	fog_material.set_shader_parameter("world_size", Vector2(terrain_world_width, terrain_world_height))
+	fog_material.set_shader_parameter("fog_strength", fog_of_war_strength)
 	fog_texture = null
 	_sync_vision()
 
@@ -1714,10 +2096,13 @@ func _sync_vision() -> void:
 	for id in state.get("seen_enemies", PackedInt32Array()):
 		seen_enemy_ids[int(id)] = true
 	last_known_contacts = state.get("last_known", PackedFloat32Array())
+	radar_contacts = state.get("radar_contacts", PackedFloat32Array())
 	removed_entity_ids.clear()
 	for id in extension.call("get_removed_entities", PackedInt32Array(entity_ids)):
 		removed_entity_ids[int(id)] = true
 		aircraft_heights.erase(int(id))
+		approach_poses.erase(int(id))
+		approach_from.erase(int(id))
 		simulated_poses.erase(int(id))
 		interpolation_from.erase(int(id))
 	var enemy_post := int(commander_ids.get(1, -1))
@@ -1727,6 +2112,14 @@ func _sync_vision() -> void:
 		if post != null:
 			post.visible = true
 		_announce_intel("ENEMY COMMAND POST LOCATED")
+	for mode in [1, 2]:
+		var key := "1:%d" % mode
+		var route_view: Node3D = transport_corridor_views.get(key)
+		if route_view != null and not route_view.visible:
+			var route: Dictionary = extension.call("transport_route", 1, mode)
+			var terminal: Vector2 = route.get("terminal", Vector2.INF)
+			if terminal != Vector2.INF and bool(extension.call("can_see", HUMAN_PLAYER_ID, terminal.x, terminal.y)):
+				route_view.visible = true
 	_refresh_site_intel()
 
 
@@ -1748,7 +2141,9 @@ func _refresh_site_intel() -> void:
 		if bool(site.get("destroyed", false)):
 			continue
 		var position: Vector2 = site.position
-		if bool(extension.call("can_see", HUMAN_PLAYER_ID, position.x, position.y)) and int(site.get("known_owner", -1)) != int(site.owner):
+		var newly_visible := bool(extension.call("can_see", HUMAN_PLAYER_ID, position.x, position.y))
+		if newly_visible and (not bool(site.get("discovered", false)) or int(site.get("known_owner", -1)) != int(site.owner)):
+			site.discovered = true
 			site.known_owner = int(site.owner)
 			changed = true
 	for site in fuel_depot_state.values():
@@ -1763,22 +2158,44 @@ func _refresh_site_intel() -> void:
 			changed = true
 	if changed:
 		_rebuild_material_site_views()
+	var airfields: PackedFloat32Array = extension.call("enemy_airfields_in_sight", HUMAN_PLAYER_ID)
+	for index in range(0, airfields.size() - 1, 2):
+		var position := Vector2(airfields[index], airfields[index + 1])
+		var key := Vector2i(roundi(position.x), roundi(position.y))
+		if not enemy_airfield_views.has(key):
+			enemy_airfield_views[key] = _add_enemy_airfield_view(position)
+			_announce_intel("ENEMY AIRFIELD LOCATED")
+
+
+func _add_enemy_airfield_view(position: Vector2) -> Node3D:
+	var root := Node3D.new()
+	root.name = "EnemyAirfield_%d_%d" % [roundi(position.x), roundi(position.y)]
+	root.set_meta("structure_type", 2)
+	root.position = Vector3(position.x, _terrain_height_at(position.x, position.y) + 0.05, position.y)
+	_add_airfield_paving(root)
+	_add_airfield_buildings(root)
+	add_child(root)
+	return root
 
 
 func _add_command_post_view(faction_id: int, position: Vector2, color: Color) -> void:
-	var root := Node3D.new()
+	# The pad sits on the highest ground under its footprint; its skirt reaches
+	# the lowest, so the post is level and never floats over a slope.
+	var half: Vector2 = CommandPostModel.FOOTPRINT * 0.5
+	var highest := -INF
+	var lowest := INF
+	for sample_x in [-1.0, 0.0, 1.0]:
+		for sample_z in [-1.0, 0.0, 1.0]:
+			var height := _terrain_height_at(position.x + sample_x * half.x, position.y + sample_z * half.y)
+			highest = maxf(highest, height)
+			lowest = minf(lowest, height)
+	var root := CommandPostModel.build(color, highest - lowest + 0.6)
 	root.name = "CommandPost_%d" % faction_id
-	root.position = Vector3(position.x, _terrain_height_at(position.x, position.y), position.y)
+	root.set_meta("faction_id", faction_id)
+	root.position = Vector3(position.x, highest, position.y)
 	root.visible = faction_id == HUMAN_PLAYER_ID
 	add_child(root)
 	command_post_views[faction_id] = root
-	var hull := _demo_material(Color("#3a4447"))
-	var signal_material := _demo_material(color, 1.4)
-	_add_box_model(root, Vector3(26.0, 0.8, 18.0), Vector3(0, 0.4, 0), _demo_material(Color("#2b3537")))
-	_add_box_model(root, Vector3(14.0, 5.0, 9.0), Vector3(-3.0, 3.1, 0), hull)
-	_add_box_model(root, Vector3(14.4, 0.5, 9.4), Vector3(-3.0, 5.7, 0), signal_material)
-	_add_box_model(root, Vector3(0.5, 16.0, 0.5), Vector3(8.0, 8.8, 0), hull)
-	_add_cylinder_model(root, 1.8, 0.5, Vector3(8.0, 17.0, 0), signal_material)
 
 
 # The enemy's style and difficulty: RTS_AI_DOCTRINE and RTS_AI_DIFFICULTY
@@ -1821,16 +2238,23 @@ func _update_match_state() -> void:
 	var state: Dictionary = extension.call("match_state")
 	var result := int(state.get("result", -1))
 	if result < 0:
+		if int(state.get("key_sites_required", 0)) > 0:
+			control_point_battle_status = "COMMAND POST OR KEY SITES %d/%d // HOLD %.0f/%.0f SEC // ENEMY %.0f SEC" % [
+				int(state.get("key_sites_player", 0)), int(state.get("key_sites_required", 0)),
+				float(state.get("key_site_hold_player_seconds", 0.0)), float(state.get("key_site_hold_target_seconds", 0.0)),
+				float(state.get("key_site_hold_enemy_seconds", 0.0))]
 		return
 	match_finished = true
 	if match_record_path == "" and bool(extension.call("match_record_state").get("finished", false)):
 		match_record_path = _save_match_record()
 	var post: Node3D = command_post_views.get(1 if result == 0 else HUMAN_PLAYER_ID)
-	if post != null and result != 2:
+	if post != null and result != 2 and int(state.get("victory_reason", 0)) == 0:
 		post.visible = false
 	var seconds := int(float(state.get("seconds", 0.0)))
 	var titles := ["VICTORY", "DEFEAT", "DRAW"]
 	var subtitles := ["ENEMY COMMAND POST DESTROYED", "YOUR COMMAND POST WAS DESTROYED", "BOTH COMMAND POSTS DESTROYED"]
+	if int(state.get("victory_reason", 0)) == 1:
+		subtitles = ["KEY SITES HELD", "ENEMY HELD THE KEY SITES", "BOTH SIDES HELD THE KEY SITES"]
 	if match_end_panel == null:
 		match_end_panel = MatchEndPanelScript.new()
 		match_end_panel.name = "MatchEnd"
@@ -1838,7 +2262,7 @@ func _update_match_state() -> void:
 		match_end_panel.play_again_requested.connect(func(): get_tree().reload_current_scene())
 		match_end_panel.quit_requested.connect(func(): get_tree().quit())
 		ui_root.add_child(match_end_panel)
-	var accents := [Color("#7ad99b"), Color("#ff6d65"), Color("#ffbd52")]
+	var accents := [MandateTokens.SUCCESS, MandateTokens.DANGER, MandateTokens.WARNING]
 	match_end_panel.show_result(titles[result], subtitles[result],
 		"MATCH TIME %d:%02d  //  ENEMY WAVES %d\nENEMY COMMANDER  %s  //  %s" % [seconds / 60, seconds % 60, int(state.get("waves", 0)),
 			String(ai_style_state.get("doctrine_name", "")).to_upper(), String(ai_style_state.get("difficulty_name", "")).to_upper()], accents[result])
@@ -1853,7 +2277,7 @@ func _clear_material_sites() -> void:
 func _rebuild_material_site_views() -> void:
 	_clear_material_sites()
 	for site in material_site_state.values():
-		if bool(site.get("destroyed", false)):
+		if bool(site.get("destroyed", false)) or not bool(site.get("discovered", false)):
 			continue
 		var root := Node3D.new()
 		root.name = "MaterialFacility_%d" % int(site.id)
@@ -1907,11 +2331,31 @@ func _spawn_civilian_buildings() -> void:
 	var transforms: Array[Array] = []
 	var colors: Array[Color] = []
 	var sizes: Array[Vector3] = []
+	var scenes: Array[PackedScene] = []
+	var scene_bounds: Array[AABB] = []
+	var type_cycle: Array[int] = []
 	for definition in type_definitions:
 		var dimensions: Array = definition.get("size", [60, 30, 50])
 		transforms.append([])
 		colors.append(Color(String(definition.get("color", "#68736f"))))
 		sizes.append(Vector3(float(dimensions[0]), float(dimensions[1]), float(dimensions[2])))
+		var scene_path := String(definition.get("scene", ""))
+		var scene := load(scene_path) as PackedScene if not scene_path.is_empty() else null
+		if not scene_path.is_empty() and scene == null:
+			push_warning("Civilian model could not be loaded: %s" % scene_path)
+		scenes.append(scene)
+		var model_bounds := AABB()
+		if scene != null:
+			var sample := scene.instantiate() as Node3D
+			if sample != null:
+				var limits: Array = [Vector3(INF, INF, INF), Vector3(-INF, -INF, -INF)]
+				_civilian_collect_bounds(sample, Transform3D.IDENTITY, limits)
+				if (limits[0] as Vector3).x < INF:
+					model_bounds = AABB(limits[0], (limits[1] as Vector3) - (limits[0] as Vector3))
+				sample.free()
+		scene_bounds.append(model_bounds)
+		for _weight in range(maxi(1, int(definition.get("weight", 1)))):
+			type_cycle.append(transforms.size() - 1)
 	if transforms.is_empty():
 		return
 	var spawn_origins: Array[Vector2] = []
@@ -1926,7 +2370,7 @@ func _spawn_civilian_buildings() -> void:
 		rng.seed = int(cluster.get("seed", 1))
 		var center := Vector2(float(cluster.center[0]), float(cluster.center[1]))
 		var spread := Vector2(float(cluster.spread[0]), float(cluster.spread[1]))
-		var attempts := int(cluster.get("count", 0)) * 8
+		var attempts := int(cluster.get("count", 0)) * 24
 		var placed := 0
 		for _attempt in range(attempts):
 			if placed >= int(cluster.get("count", 0)):
@@ -1934,17 +2378,19 @@ func _spawn_civilian_buildings() -> void:
 			var candidate := center + Vector2(rng.randf_range(-spread.x, spread.x), rng.randf_range(-spread.y, spread.y))
 			if not bool(extension.call("is_land_position", candidate.x, candidate.y)):
 				continue
+			var type_index: int = type_cycle[(placed + int(cluster.get("seed", 0))) % type_cycle.size()]
+			var building_size: Vector3 = sizes[type_index]
 			# Civilian dressing is authored scenery rather than a military build
-			# order. Keep the cluster on land, but allow a broader terrain range
-			# than an outpost so the world does not look unnaturally empty.
+			# order. A building still needs ground that supports its whole footprint.
 			var local_height := _terrain_height_at(candidate.x, candidate.y)
 			var local_height_min := local_height
 			var local_height_max := local_height
-			for sample_offset in [Vector2(-100.0, 0.0), Vector2(100.0, 0.0), Vector2(0.0, -100.0), Vector2(0.0, 100.0)]:
+			for sample_offset in [Vector2(-building_size.x * 0.5, 0.0), Vector2(building_size.x * 0.5, 0.0),
+				Vector2(0.0, -building_size.z * 0.5), Vector2(0.0, building_size.z * 0.5)]:
 				var sample_height := _terrain_height_at(candidate.x + sample_offset.x, candidate.y + sample_offset.y)
 				local_height_min = minf(local_height_min, sample_height)
 				local_height_max = maxf(local_height_max, sample_height)
-			if local_height_max - local_height_min > 180.0:
+			if local_height_max - local_height_min > 12.0:
 				continue
 			var too_close := false
 			for protected in spawn_origins:
@@ -1953,14 +2399,27 @@ func _spawn_civilian_buildings() -> void:
 					break
 			if too_close:
 				continue
-			var type_index := (placed + int(cluster.get("seed", 0))) % transforms.size()
-			var building_size: Vector3 = sizes[type_index]
 			var scale := rng.randf_range(0.82, 1.16)
 			var height := _terrain_height_at(candidate.x, candidate.y)
-			var transform := Transform3D(
-				Basis(Vector3.UP, rng.randf_range(0.0, TAU)).scaled(Vector3(scale, scale, scale)),
-				Vector3(candidate.x, height + building_size.y * scale * 0.5, candidate.y))
-			(transforms[type_index] as Array).append(transform)
+			var angle := rng.randf_range(0.0, TAU)
+			if scenes[type_index] != null and scene_bounds[type_index].size.y > 0.0:
+				var view := Node3D.new()
+				view.name = "Civilian_%s_%d" % [String(type_definitions[type_index].get("id", type_index)), civilian_building_instance_count]
+				view.position = Vector3(candidate.x, height, candidate.y)
+				view.rotation.y = angle
+				view.scale = Vector3.ONE * scale
+				var model := scenes[type_index].instantiate() as Node3D
+				var bounds := scene_bounds[type_index]
+				var model_scale: float = building_size.y / bounds.size.y
+				model.scale = Vector3.ONE * model_scale
+				model.position = -Vector3(bounds.get_center().x, bounds.position.y, bounds.get_center().z) * model_scale
+				view.add_child(model)
+				civilian_buildings.add_child(view)
+			else:
+				var transform := Transform3D(
+					Basis(Vector3.UP, angle).scaled(Vector3(scale, scale, scale)),
+					Vector3(candidate.x, height + building_size.y * scale * 0.5, candidate.y))
+				(transforms[type_index] as Array).append(transform)
 			civilian_building_positions.append(candidate)
 			extension.call("block_civilian_area", candidate.x, candidate.y, maxf(building_size.x, building_size.z) * 0.32)
 			placed += 1
@@ -1985,6 +2444,21 @@ func _spawn_civilian_buildings() -> void:
 		view.multimesh = multimesh
 		view.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON
 		civilian_buildings.add_child(view)
+
+
+func _civilian_collect_bounds(node: Node3D, parent_transform: Transform3D, limits: Array) -> void:
+	var world_transform := parent_transform * node.transform
+	if node is MeshInstance3D and (node as MeshInstance3D).mesh != null:
+		var mesh_bounds := (node as MeshInstance3D).mesh.get_aabb()
+		for x in [0.0, 1.0]:
+			for y in [0.0, 1.0]:
+				for z in [0.0, 1.0]:
+					var point := world_transform * (mesh_bounds.position + mesh_bounds.size * Vector3(x, y, z))
+					limits[0] = (limits[0] as Vector3).min(point)
+					limits[1] = (limits[1] as Vector3).max(point)
+	for child in node.get_children():
+		if child is Node3D:
+			_civilian_collect_bounds(child, world_transform, limits)
 
 
 func _set_material_order_mode(mode: int) -> void:
@@ -2045,9 +2519,10 @@ func _issue_material_site_order(screen_position: Vector2) -> void:
 		return
 	if material_order_mode == 1:
 		var accepted: int = extension.call("issue_harvest_commands", PackedInt32Array([commander_id]), HUMAN_PLAYER_ID, site_position.x, site_position.y)
+		# The site changes hands when the engineer reaches it (native), and
+		# _sync_fuel_supply picks the new holder up from material_sites_state.
 		if accepted == 1:
-			selected_site.owner = HUMAN_PLAYER_ID
-			material_site_state[int(selected_site.id)] = selected_site
+			selected_site.capturing = true
 	elif material_order_mode == 2:
 		if extension.call("destroy_resource_site", commander_id, site_position.x, site_position.y):
 			selected_site.destroyed = true
@@ -2086,6 +2561,7 @@ func _register_presented_unit(entity_id: int, unit_type: int, faction_id: int, w
 		var visual_id := _visual_id_for_unit_faction(unit_type, faction_id)
 		var wrapper = visual_spawn_bridge.spawn(self, visual_registry, visual_id, Transform3D(Basis.IDENTITY, Vector3(world.x, _terrain_height_at(world.x, world.y) + _unit_model_ground_clearance(unit_type), world.y)), color)
 		wrapper.set_strategic_icon(unit_type, color)
+		_configure_unit_ranges(wrapper, entity_id)
 		wrapper.set_range_terrain_height_sampler(func(world_x: float, world_z: float): return _terrain_height_at(world_x, world_z))
 		prototype_visual_views[entity_id] = wrapper
 	else:
@@ -2094,6 +2570,9 @@ func _register_presented_unit(entity_id: int, unit_type: int, faction_id: int, w
 		player_entity_ids.append(entity_id)
 	else:
 		ai_entity_ids.append(entity_id)
+		# Opponents never see the enemy's range outlines, even on a seen unit.
+		if prototype_visual_views.has(entity_id):
+			prototype_visual_views[entity_id].set_range_overlays_visible(false)
 
 
 func _sync_new_entities() -> void:
@@ -2146,14 +2625,66 @@ func _spawn_faction_units(side: Dictionary, color: Color, player_controlled: boo
 				var visual_id := _visual_id_for_unit_faction(unit_type, faction_id)
 				var wrapper = visual_spawn_bridge.spawn(self, visual_registry, visual_id, Transform3D(Basis.IDENTITY, Vector3(world_x, 0.4, world_y)), color)
 				wrapper.set_strategic_icon(unit_type, color)
+				_configure_unit_ranges(wrapper, entity_id)
+				# Ground ranges are drawn merged from the first frame; per-unit hex
+				# meshes rebuilt on every move are far too slow for a crowd.
+				wrapper.set_merged_ground_ranges(true)
 				wrapper.set_range_terrain_height_sampler(func(world_x: float, world_z: float): return _terrain_height_at(world_x, world_z))
 				prototype_visual_views[entity_id] = wrapper
 			if player_controlled:
 				player_entity_ids.append(entity_id)
 			else:
 				ai_entity_ids.append(entity_id)
+				if prototype_visual_views.has(entity_id):
+					prototype_visual_views[entity_id].set_range_overlays_visible(false)
 			side_index += 1
 	return true
+
+
+# Ground units' range hexes, merged per side and kind into one outline each.
+func _update_range_envelopes() -> void:
+	if range_envelope_renderer == null:
+		range_envelope_renderer = RangeEnvelopeRendererScript.new()
+		range_envelope_renderer.name = "RangeEnvelopes"
+		add_child(range_envelope_renderer)
+	var player_ids := {}
+	for id in player_entity_ids:
+		player_ids[id] = true
+	var hexes_by_key := {}
+	for entity_id in prototype_visual_views:
+		var wrapper = prototype_visual_views[entity_id]
+		if not is_instance_valid(wrapper):
+			continue
+		wrapper.set_merged_ground_ranges(true)
+		if not wrapper.visible or wrapper.ranges_airborne():
+			continue
+		var side := HUMAN_PLAYER_ID if player_ids.has(entity_id) else 1
+		var center := Vector2(wrapper.global_position.x, wrapper.global_position.z)
+		for envelope in wrapper.range_envelopes():
+			var key := "%d:%s" % [side, envelope.kind]
+			if not hexes_by_key.has(key):
+				hexes_by_key[key] = []
+			hexes_by_key[key].append({"center": center, "radius": envelope.radius, "dash_phase": envelope.dash_phase})
+	range_envelope_renderer.update_envelopes(hexes_by_key, func(x: float, z: float): return _terrain_height_at(x, z))
+
+
+func _configure_unit_ranges(wrapper: Node3D, entity_id: int) -> void:
+	var ranges: PackedFloat32Array = extension.call("get_unit_range_profile", entity_id)
+	if ranges.size() == 3:
+		wrapper.set_gameplay_ranges(ranges[0], ranges[1], ranges[2])
+
+
+# The same presented pose drives the aircraft model, range plane and icon leader.
+func _unit_overlay_anchor(entity_id: int) -> Vector3:
+	var wrapper := prototype_visual_views.get(entity_id) as Node3D
+	if wrapper != null:
+		return wrapper.global_position + Vector3.UP * 5.0
+	var index := int(entity_to_instance.get(entity_id, -1))
+	if index >= 0 and index * 2 + 1 < unit_positions.size():
+		var x := unit_positions[index * 2]
+		var z := unit_positions[index * 2 + 1]
+		return Vector3(x, _terrain_height_at(x, z) + 5.0, z)
+	return Vector3.ZERO
 
 
 func _sync_unit_transforms() -> Vector2:
@@ -2165,6 +2696,12 @@ func _sync_unit_transforms() -> Vector2:
 		return Vector2(fetch_ms, 0.0)
 	unit_positions = PackedFloat32Array()
 	unit_positions.resize(entity_ids.size() * 2)
+	# Model detail follows the closest camera drawing units, so the magnifier
+	# keeps models loaded while the main view shows map-scale icons.
+	var unit_lod_distance := camera_distance
+	if magnifier_view != null and magnifier_view.is_enabled():
+		unit_lod_distance = minf(camera_distance, magnifier_view.distance_for(camera_distance))
+	var flight_poses: PackedFloat32Array = extension.call("get_aircraft_approach_poses", entity_ids)
 	var airborne: PackedByteArray = extension.call("get_airborne_flags", entity_ids)
 	if airborne.size() != entity_ids.size():
 		airborne.resize(entity_ids.size())
@@ -2200,17 +2737,30 @@ func _sync_unit_transforms() -> Vector2:
 		var heading := lerp_angle(start.z, sim_heading, blend)
 		unit_visual_headings[entity_id] = heading
 		var basis := Basis(Vector3.UP, heading)
+		var approach := Vector3(-1.0, 0.0, 0.0)
+		if flight_poses.size() == entity_ids.size() * 3 and flight_poses[index * 3] >= 0.0:
+			var latest := Vector3(flight_poses[index * 3], flight_poses[index * 3 + 1], flight_poses[index * 3 + 2])
+			if new_tick or not approach_from.has(entity_id):
+				approach_from[entity_id] = approach_poses.get(entity_id, latest)
+				approach_poses[entity_id] = latest
+			approach = (approach_from[entity_id] as Vector3).lerp(latest, blend)
+			basis = basis * Basis(Vector3.RIGHT, approach.y) * Basis(Vector3.FORWARD, approach.z)
 		if prototype_visuals_enabled and prototype_visual_views.has(entity_ids[index]):
 			var wrapper = prototype_visual_views[entity_ids[index]]
 			var ground := _terrain_height_at(x, z)
 			var height := ground + _unit_model_ground_clearance(int(entity_unit_types.get(entity_ids[index], 0)))
-			height = _presented_flight_height(entity_ids[index], airborne[index] != 0, x, z, height, climb_step)
+			if approach.x >= 0.0:
+				height += approach.x
+				aircraft_heights.erase(entity_id)
+			else:
+				height = _presented_flight_height(entity_ids[index], airborne[index] != 0, x, z, height, climb_step)
 			# Vehicles on land sit on the slope beneath them; aircraft in the air
 			# and vessels on the water stay level.
-			if not aircraft_heights.has(entity_id) and ground > AIRCRAFT_SEA_LEVEL + 0.5:
+			if approach.x < 0.0 and not aircraft_heights.has(entity_id) and ground > AIRCRAFT_SEA_LEVEL + 0.5:
 				basis = Basis(Quaternion(Vector3.UP, _terrain_normal_at(x, z))) * basis
+			wrapper.set_ranges_airborne(airborne[index] != 0)
 			wrapper.apply_simulation_transform(Transform3D(basis, Vector3(x, height, z)))
-			wrapper.update_lod(camera_distance)
+			wrapper.update_lod(unit_lod_distance)
 			wrapper.visible = _is_unit_shown(entity_ids[index])
 		else:
 			var shown := _is_unit_shown(entity_ids[index])
@@ -2334,6 +2884,8 @@ func _print_profile_result() -> void:
 
 
 func _update_keyboard_pan(delta: float) -> void:
+	if audio_settings != null and audio_settings.visible:
+		return
 	var yaw_direction := 0.0
 	if Input.is_key_pressed(KEY_Q):
 		yaw_direction -= 1.0
@@ -2360,12 +2912,20 @@ func _update_keyboard_pan(delta: float) -> void:
 			var forward := Vector2(sin(free_camera_yaw), cos(free_camera_yaw))
 			var right := Vector2(cos(free_camera_yaw), -sin(free_camera_yaw))
 			var free_direction := right * direction.x + forward * direction.y
-			camera_target += Vector3(free_direction.x, 0.0, free_direction.y) * speed * delta
+			_pan_camera(Vector3(free_direction.x, 0.0, free_direction.y) * speed * delta)
 		else:
 			var forward := Vector2(sin(tactical_camera_yaw), cos(tactical_camera_yaw))
 			var right := Vector2(cos(tactical_camera_yaw), -sin(tactical_camera_yaw))
 			var yawed_direction := right * direction.x + forward * direction.y
-			camera_target += Vector3(yawed_direction.x, 0.0, yawed_direction.y) * speed * delta
+			_pan_camera(Vector3(yawed_direction.x, 0.0, yawed_direction.y) * speed * delta)
+
+
+# The camera moves with its target, so a pan covers exactly speed x time. Easing
+# the camera after a moving target lurched forward after every long frame.
+func _pan_camera(step: Vector3) -> void:
+	camera_target += step
+	if camera != null:
+		camera.global_position += step
 
 
 func _rotate_camera_facing(direction: float, delta: float) -> void:
@@ -2376,7 +2936,9 @@ func _rotate_camera_facing(direction: float, delta: float) -> void:
 
 
 func _update_camera(delta: float) -> void:
-	camera_distance = lerpf(camera_distance, target_camera_distance, clampf(delta * 9.0, 0.0, 1.0))
+	# Exponential easing covers the same share of the gap per second at any frame
+	# rate. The old clamp(delta * k) eased unevenly and snapped after a long frame.
+	camera_distance = lerpf(camera_distance, target_camera_distance, 1.0 - exp(-9.0 * delta))
 	camera.near = clampf(camera_distance * CAMERA_NEAR_PER_DISTANCE, CAMERA_MIN_NEAR, CAMERA_MAX_NEAR)
 	var desired_offset := Vector3(
 		sin(tactical_camera_yaw) * camera_distance,
@@ -2390,8 +2952,12 @@ func _update_camera(delta: float) -> void:
 			cos(free_camera_yaw) * cos(pitch)) * camera_distance
 	var desired_position := camera_target + desired_offset
 	desired_position.y = _camera_clearance_height(camera_target, desired_position)
-	camera.global_position = camera.global_position.lerp(desired_position, clampf(delta * 10.0, 0.0, 1.0))
+	camera.global_position = camera.global_position.lerp(desired_position, 1.0 - exp(-10.0 * delta))
 	camera.look_at(camera_target, Vector3.UP)
+	# Unit models are on their own layer: the main view draws them only up close,
+	# so the magnifier can still show them when the main view is zoomed out.
+	var model_layer := int(UnitVisualRoot.MODEL_LAYER)
+	camera.cull_mask = (camera.cull_mask | model_layer) if camera_distance < UnitVisualRoot.MODEL_HIDE_DISTANCE else (camera.cull_mask & ~model_layer)
 	if zoom_focus_pending:
 		var under_cursor: Vector2 = _screen_to_world(zoom_focus_screen)
 		var correction := zoom_focus_world - under_cursor
@@ -2406,7 +2972,39 @@ func _update_camera(delta: float) -> void:
 			zoom_focus_pending = false
 
 
+func _cycle_camera_zoom() -> void:
+	var next_distance: float = CAMERA_ZOOM_LEVELS[0]
+	for level: float in CAMERA_ZOOM_LEVELS:
+		if level > target_camera_distance + 0.01:
+			next_distance = level
+			break
+	_zoom_toward_cursor(get_viewport().get_mouse_position(), next_distance / target_camera_distance)
+
+
+func _can_change_game_speed() -> bool:
+	if extension == null or bool(extension.call("is_multiplayer_session")):
+		return false
+	# Godot scene networking is separate from the native TCP transport.
+	return not multiplayer.has_multiplayer_peer() or multiplayer.multiplayer_peer is OfflineMultiplayerPeer
+
+
+func _enforce_game_speed_policy() -> void:
+	if not _can_change_game_speed() and float(extension.call("get_game_speed")) != 1.0:
+		extension.call("set_game_speed", 1.0)
+
+
+func _change_game_speed(direction: int) -> void:
+	if _can_change_game_speed():
+		var current := float(extension.call("get_game_speed"))
+		extension.call("set_game_speed", clampf(current + 0.25 * direction, 0.25, 1.75))
+	else:
+		_enforce_game_speed_policy()
+	_update_hud()
+
+
 func _zoom_toward_cursor(screen_position: Vector2, multiplier: float) -> void:
+	if not is_finite(multiplier) or multiplier <= 0.0 or multiplier == 1.0:
+		return
 	var anchor := _screen_to_world(screen_position)
 	zoom_focus_world = anchor
 	zoom_focus_screen = screen_position
@@ -2462,6 +3060,12 @@ func _select_nearest(screen_position: Vector2) -> void:
 		_set_selected(closest_id, true)
 		return
 
+	# Units take the click first; then the player's own command post. The
+	# enemy's post is never selectable, only hovered once discovered.
+	if _command_post_under_cursor(HUMAN_PLAYER_ID, screen_position):
+		_select_command_post()
+		return
+
 	var closest_structure: Node3D
 	for structure in completed_structure_views:
 		if not is_instance_valid(structure) or camera.is_position_behind(structure.global_position):
@@ -2474,8 +3078,109 @@ func _select_nearest(screen_position: Vector2) -> void:
 		_set_selected_structure(closest_structure)
 
 
-func _update_hover_context() -> void:
-	var pointer := get_viewport().get_mouse_position()
+# True when the cursor is over a command post's compound. The enemy's post only
+# counts once it has been discovered and is drawn.
+func _command_post_under_cursor(faction_id: int, screen_position: Vector2) -> bool:
+	var post: Node3D = command_post_views.get(faction_id)
+	if post == null or not is_instance_valid(post) or not post.visible:
+		return false
+	if faction_id != HUMAN_PLAYER_ID and not enemy_post_discovered:
+		return false
+	if camera.is_position_behind(post.global_position):
+		return false
+	# Close up: the ground under the cursor is inside the compound (with a margin
+	# for the buildings standing above it). Far out: near its projected centre.
+	var ground := _screen_ground_point(screen_position)
+	var half: Vector2 = CommandPostModel.FOOTPRINT * 0.5 + Vector2(6.0, 6.0)
+	if ground != Vector2.INF:
+		var local := ground - Vector2(post.global_position.x, post.global_position.z)
+		if absf(local.x) <= half.x and absf(local.y) <= half.y:
+			return true
+	var center := post.global_position + Vector3(0.0, 4.0, 0.0)
+	return camera.unproject_position(center).distance_to(screen_position) <= clampf(camera_distance * 0.22, 20.0, 32.0)
+
+
+func _select_command_post() -> void:
+	var post: Node3D = command_post_views.get(HUMAN_PLAYER_ID)
+	if post == null or not is_instance_valid(post) or not post.visible:
+		return
+	_clear_selection()
+	command_post_selected = true
+	var ring := post.get_node_or_null("SelectionRing") as Node3D
+	if ring != null:
+		ring.visible = true
+	if strategic_command_view != null and not strategic_command_view.visible:
+		_toggle_strategic_command()
+
+
+func _deselect_command_post() -> void:
+	command_post_selected = false
+	command_post_notice = ""
+	var post: Node3D = command_post_views.get(HUMAN_PLAYER_ID)
+	if post != null and is_instance_valid(post):
+		var ring := post.get_node_or_null("SelectionRing") as Node3D
+		if ring != null:
+			ring.visible = false
+
+
+# Name, integrity, role and inbound logistics for the command post panel. All
+# numbers come from native state; the post's own unit record is a placeholder
+# type, so its name is fixed here rather than read from the prototype table.
+func _command_post_snapshot(faction_id: int, with_logistics := true) -> Dictionary:
+	var post_id := int(commander_ids.get(faction_id, -1))
+	var health: Array = extension.call("get_unit_health", post_id) if post_id > 0 else []
+	var snapshot := {
+		"id": post_id,
+		"name": "FORWARD COMMAND POST" if faction_id == HUMAN_PLAYER_ID else "ENEMY COMMAND POST",
+		"role": "HEADQUARTERS  ·  ITS LOSS ENDS THE MATCH" if faction_id == HUMAN_PLAYER_ID else "HEADQUARTERS  ·  DESTROY IT TO WIN",
+		"health": float(health[0]) if health.size() >= 2 else -1.0,
+		"max_health": float(health[1]) if health.size() >= 2 else -1.0,
+	}
+	if faction_id != HUMAN_PLAYER_ID or not with_logistics:
+		return snapshot
+	var names := {}
+	for entry in extension.call("get_build_catalog", HUMAN_PLAYER_ID):
+		names[int(entry.get("type", -1))] = String(entry.get("name", "UNIT")).to_upper()
+	var inbound: Array = []
+	for force in extension.call("delivery_state", HUMAN_PLAYER_ID).get("inbound", []):
+		inbound.append({
+			"name": ("PARADROP " if bool(force.get("airdrop", false)) else "") + String(names.get(int(force.type), "UNIT")),
+			"seconds": float(force.remaining_ms) / 1000.0,
+		})
+	var supply: Dictionary = extension.call("fuel_supply_state", HUMAN_PLAYER_ID)
+	if supply.has("shipment_remaining_ms"):
+		inbound.push_front({"name": "FUEL SHIPMENT  %.0f" % float(supply.get("shipment_load", 0.0)), "seconds": float(supply.shipment_remaining_ms) / 1000.0, "fuel": true})
+	snapshot["inbound"] = inbound
+	snapshot["fuel_load"] = float(supply.get("shipment_load", 0.0))
+	snapshot["fuel_cost"] = float(supply.get("shipment_material_cost", 0.0))
+	snapshot["fuel_inbound"] = supply.has("shipment_remaining_ms")
+	snapshot["status"] = command_post_notice if not command_post_notice.is_empty() else _with_fuel_status(reinforcement_delivery_status)
+	return snapshot
+
+
+func _setup_command_post_panel() -> void:
+	command_post_panel = CommandPostPanelScript.new()
+	command_post_panel.name = "CommandPostPanel"
+	command_post_panel.visible = false
+	command_post_panel.open_strategic_command.connect(_toggle_strategic_command)
+	command_post_panel.request_fuel.connect(_request_fuel_shipment)
+	ui_root.add_child(command_post_panel)
+
+
+func _sync_command_post_panel() -> void:
+	if command_post_panel == null:
+		return
+	var post: Node3D = command_post_views.get(HUMAN_PLAYER_ID)
+	if command_post_selected and (post == null or not is_instance_valid(post) or not post.visible or match_finished):
+		_deselect_command_post()
+	command_post_panel.visible = command_post_selected
+	if command_post_selected:
+		command_post_panel.set_state(_command_post_snapshot(HUMAN_PLAYER_ID))
+
+
+func _update_hover_context(pointer := Vector2.INF) -> void:
+	if pointer == Vector2.INF:
+		pointer = get_viewport().get_mouse_position()
 	var nearest_distance := clampf(camera_distance * 0.22, 20.0, 32.0)
 	var next_context: Dictionary = command_hud.get_build_hover_context()
 	if next_context.is_empty():
@@ -2527,6 +3232,23 @@ func _update_hover_context() -> void:
 					"detail": "FUEL STOCK %.0f / %.0f  //  2 THEN RIGHT-CLICK TO CAPTURE" % [float(site.stock), float(site.capacity)],
 					"accent": Color("#7ad99b") if owner == HUMAN_PLAYER_ID else Color("#ff6d65") if owner >= 0 else Color("#ffbd52"),
 				}
+	# Command posts: our own always, the enemy's only once discovered. Its
+	# integrity shows only while it is in sight; otherwise the last fix.
+	if next_context.is_empty() and match_started:
+		for faction_id in [HUMAN_PLAYER_ID, 1]:
+			if not _command_post_under_cursor(faction_id, pointer):
+				continue
+			var post := _command_post_snapshot(faction_id, false)
+			var friendly: bool = faction_id == HUMAN_PLAYER_ID
+			var in_sight: bool = friendly or seen_enemy_ids.has(int(post.id))
+			var integrity := "INTEGRITY %.0f / %.0f" % [post.health, post.max_health] if in_sight and float(post.max_health) > 0.0 else "LAST KNOWN POSITION"
+			next_context = {
+				"key": "post:%d:%d:%s" % [faction_id, int(float(post.health) / 10.0), str(in_sight)],
+				"title": "%s // %s" % ["FRIENDLY" if friendly else "HOSTILE", post.name],
+				"detail": "%s  //  %s" % [integrity, "CLICK TO OPEN COMMAND POST" if friendly else "CTRL RIGHT-CLICK TO ATTACK"],
+				"accent": Color("#7ad99b") if friendly else Color("#ff6d65"),
+			}
+			break
 	if next_context.get("key", "") == hover_context.get("key", ""):
 		return
 	hover_context = next_context
@@ -2547,6 +3269,7 @@ func _clear_selection() -> void:
 	if order_overlay_renderer != null:
 		order_overlay_renderer.clear_order()
 	_set_selected_structure(null)
+	_deselect_command_post()
 
 
 func _set_selected_structure(structure: Node3D) -> void:
@@ -2562,6 +3285,8 @@ func _set_selected_structure(structure: Node3D) -> void:
 
 
 func _set_selected(entity_id: int, selected: bool) -> void:
+	if selected and command_post_selected:
+		_deselect_command_post()
 	if selected and not selected_ids.has(entity_id):
 		selected_ids.append(entity_id)
 		_set_instance_color(entity_id, UNIT_SELECTED_COLOR)
@@ -3187,12 +3912,11 @@ func _set_demo_unit_color(entity_id: int, color: Color) -> void:
 ## appends the spot as a waypoint after each unit's current orders; otherwise
 ## it replaces them.
 func _issue_move_order(screen_position: Vector2, queued := false) -> void:
+	# The command post is a fixed installation: an empty selection used to fall
+	# back to it (commander_ids holds the post), which drove the post's native
+	# entity away from its drawn compound. Nothing selected now means no order.
 	if selected_ids.is_empty():
-		var commander_id := int(commander_ids.get(HUMAN_PLAYER_ID, -1))
-		if commander_id <= 0:
-			return
-		_set_selected(commander_id, true)
-	if selected_ids.is_empty():
+		_refuse_command_post_order()
 		return
 
 	var target := _screen_to_world(screen_position)
@@ -3302,6 +4026,16 @@ func _update_unit_routes(delta: float) -> void:
 	unit_route_renderer.show_routes(routes, waypoints)
 
 
+func _refuse_command_post_order() -> void:
+	if not command_post_selected:
+		return
+	command_post_notice = "COMMAND POST IS A FIXED INSTALLATION // SELECT UNITS TO GIVE ORDERS"
+	_announce_intel(command_post_notice)
+	if ui_audio != null:
+		ui_audio.play_cue("order_refused")
+	_update_hud()
+
+
 func _issue_stop_order() -> void:
 	if selected_ids.is_empty():
 		return
@@ -3405,11 +4139,81 @@ func _process_pending_build_order() -> void:
 		return
 	var build_type := int(pending_build_order.type)
 	if build_type >= 100:
-		if _queue_commander_structure(build_type - 100, target):
+		# The order was given with the engineer selected; selecting other units
+		# while it drives there must not drop it.
+		if _queue_commander_structure(build_type - 100, target, false):
 			pending_completed_structures.append({"type": build_type - 100, "target": target})
 	else:
 		_queue_commander_unit(build_type, target)
 	pending_build_order.clear()
+	_advance_build_queue()
+
+
+## Shift+click: the first placement goes straight to the engineer, later ones
+## wait their turn. Returns whether the placement was taken.
+func _queue_build_placement(build_type: int, target: Vector2) -> bool:
+	if pending_build_order.is_empty() and queued_build_orders.is_empty():
+		_order_commander_to_build(build_type, target)
+		_sync_queued_build_markers()
+		return not pending_build_order.is_empty()
+	var resolved := _resolve_build_target(build_type, target)
+	if resolved == Vector2.INF:
+		push_warning("Structure placement rejected at the cursor location")
+		return false
+	queued_build_orders.append({"type": build_type, "target": resolved})
+	_sync_queued_build_markers()
+	return true
+
+
+# Send the engineer to the next queued placement. One the engineer cannot
+# reach is skipped, so a bad entry never stalls the rest of the queue.
+func _advance_build_queue() -> void:
+	while pending_build_order.is_empty() and not queued_build_orders.is_empty():
+		var next: Dictionary = queued_build_orders.pop_front()
+		_order_commander_to_build(int(next.type), next.target)
+	_sync_queued_build_markers()
+
+
+## One translucent footprint with its place in the queue over every build the
+## engineer has been ordered to make and has not yet handed to the native queue.
+func _sync_queued_build_markers() -> void:
+	if queued_build_markers == null:
+		queued_build_markers = Node3D.new()
+		queued_build_markers.name = "QueuedBuildMarkers"
+		add_child(queued_build_markers)
+	for child in queued_build_markers.get_children():
+		queued_build_markers.remove_child(child)
+		child.queue_free()
+	var orders: Array[Dictionary] = []
+	if not pending_build_order.is_empty():
+		orders.append(pending_build_order)
+	orders.append_array(queued_build_orders)
+	if orders.is_empty():
+		return
+	var material := StandardMaterial3D.new()
+	material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	material.albedo_color = Color("#47d9ff", 0.30)
+	material.cull_mode = BaseMaterial3D.CULL_DISABLED
+	for index in range(orders.size()):
+		var order: Dictionary = orders[index]
+		var build_type := int(order.type)
+		var target: Vector2 = order.target
+		var marker := _make_build_preview(build_type, material)
+		marker.name = "QueuedBuild_%d" % (index + 1)
+		marker.set_meta("build_type", build_type)
+		marker.position = Vector3(target.x, _terrain_height_at(target.x, target.y) + 0.08, target.y)
+		var label := Label3D.new()
+		label.name = "Order"
+		label.text = "%d  %s" % [index + 1, _structure_display_name(build_type - 100) if build_type >= 100 else "BUILD"]
+		label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+		label.pixel_size = 0.12
+		label.font_size = 30
+		label.outline_size = 4
+		label.modulate = Color("#47d9ff")
+		label.position.y = 8.0
+		marker.add_child(label)
+		queued_build_markers.add_child(marker)
 
 
 func _native_unit_position(entity_id: int) -> Vector2:
@@ -3495,6 +4299,7 @@ func _begin_build_placement(build_type: int) -> void:
 
 func _cancel_tactical_modes() -> void:
 	recon_targeting = false
+	paradrop_targeting_type = -1
 	build_mode_type = -1
 	blueprint_pointer_down = false
 	road_build_mode = false
@@ -3628,8 +4433,13 @@ func _build_unit_type_at_index(index: int) -> int:
 	return int(units[index].get("type", -1))
 
 func _make_build_ghost(build_type: int) -> Node3D:
-	var root := Node3D.new()
 	build_ghost_material = _make_agent_orange_ghost_material()
+	return _make_build_preview(build_type, build_ghost_material)
+
+
+# Placement and construction share geometry; only their materials differ.
+func _make_build_preview(build_type: int, material: Material) -> Node3D:
+	var root := Node3D.new()
 	var structure_type := build_type - 100 if build_type >= 100 else -1
 	match structure_type:
 		0:
@@ -3647,6 +4457,8 @@ func _make_build_ghost(build_type: int) -> Node3D:
 		_:
 			# Existing buildable ground units retain a compact volume preview.
 			_add_build_ghost_box(root, Vector3(5.0, 2.0, 5.0), Vector3(0.0, 1.0, 0.0))
+	for child in root.get_children():
+		(child as MeshInstance3D).material_override = material
 	return root
 
 
@@ -3685,7 +4497,6 @@ func _add_build_ghost_box(root: Node3D, size: Vector3, position: Vector3, yaw_de
 	mesh.mesh = box
 	mesh.position = position
 	mesh.rotation_degrees.y = yaw_degrees
-	mesh.material_override = build_ghost_material
 	root.add_child(mesh)
 
 
@@ -3697,7 +4508,6 @@ func _add_build_ghost_cylinder(root: Node3D, bottom_radius: float, height: float
 	cylinder.height = height
 	mesh.mesh = cylinder
 	mesh.position = position
-	mesh.material_override = build_ghost_material
 	root.add_child(mesh)
 
 func _begin_road_placement() -> void:
@@ -3740,7 +4550,7 @@ func _update_road_preview(target: Vector2) -> void:
 	road_preview_material.albedo_color = Color("#47d9ff") if valid else Color("#ff334d")
 	road_preview_material.albedo_color.a = 0.55
 
-func _make_road_mesh(start: Vector2, finish: Vector2, width: float) -> ArrayMesh:
+func _make_road_mesh(start: Vector2, finish: Vector2, width: float, height_offset := 0.12) -> ArrayMesh:
 	var direction := finish - start
 	if direction.length_squared() < 0.001:
 		direction = Vector2.RIGHT
@@ -3754,11 +4564,13 @@ func _make_road_mesh(start: Vector2, finish: Vector2, width: float) -> ArrayMesh
 	for index in range(steps + 1):
 		var center := start.lerp(finish, float(index) / float(steps))
 		for edge in [center + side, center - side]:
-			vertices.append(Vector3(edge.x, _terrain_height_at(edge.x, edge.y) + 0.12, edge.y))
+			vertices.append(Vector3(edge.x, _terrain_height_at(edge.x, edge.y) + height_offset, edge.y))
 			normals.append(Vector3.UP)
 		if index < steps:
 			var first := index * 2
-			indices.append_array(PackedInt32Array([first, first + 1, first + 2, first + 2, first + 1, first + 3]))
+			# Counter-clockwise from above. The previous winding faced into the
+			# terrain, so culling hid both built roads and authored corridors.
+			indices.append_array(PackedInt32Array([first, first + 2, first + 1, first + 2, first + 3, first + 1]))
 	var arrays := []
 	arrays.resize(Mesh.ARRAY_MAX)
 	arrays[Mesh.ARRAY_VERTEX] = vertices
@@ -3793,8 +4605,8 @@ func _set_build_ghost_valid(valid: bool, earthworks := false) -> void:
 		tint = Color("#ffc83d", 0.55) if earthworks else Color("#ff6b2c", 0.52)
 	build_ghost_material.set_shader_parameter("tint", tint)
 
-func _queue_commander_structure(structure_type: int, target: Vector2) -> bool:
-	if not selected_ids.has(_player_engineer_id()):
+func _queue_commander_structure(structure_type: int, target: Vector2, require_selection := true) -> bool:
+	if require_selection and not selected_ids.has(_player_engineer_id()):
 		return false
 	if bool(extension.call("queue_faction_structure", HUMAN_PLAYER_ID, structure_type, target.x, target.y)):
 		pending_structure_position = target
@@ -4015,17 +4827,19 @@ func _sync_construction_frames(queue: Array) -> void:
 	if queue.is_empty():
 		return
 	var queued: Dictionary = queue[0]
-	var root := Node3D.new()
-	root.name = "InProgress_%s" % String(queued.get("name", "UNIT"))
-	var build_x := float(queued.get("target_x", 0.0))
-	var build_z := float(queued.get("target_y", 0.0))
-	root.position = Vector3(build_x, _terrain_height_at(build_x, build_z) + 0.1, build_z)
-	construction_frames.add_child(root)
 	var scaffold := _demo_material(Color("#47d9ff"), 0.75)
 	scaffold.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
 	scaffold.albedo_color.a = 0.52
-	# The same open frame encloses a structure foundation and the partially
-	# assembled unit, making construction state visible before completion.
+	var build_type := int(queued.get("type", -1))
+	var root := _make_build_preview(build_type, scaffold) if build_type >= 100 else Node3D.new()
+	root.name = "InProgress_%s" % String(queued.get("name", "UNIT"))
+	var build_x := float(queued.get("target_x", 0.0))
+	var build_z := float(queued.get("target_y", 0.0))
+	root.position = Vector3(build_x, _terrain_height_at(build_x, build_z) + 0.08, build_z)
+	construction_frames.add_child(root)
+	if build_type >= 100:
+		return
+	# Legacy unit production keeps its compact assembly frame.
 	for x in [-3.0, 3.0]:
 		for z in [-2.5, 2.5]:
 			_add_box_model(root, Vector3(0.18, 5.0, 0.18), Vector3(x, 2.5, z), scaffold)
@@ -4038,12 +4852,9 @@ func _sync_construction_frames(queue: Array) -> void:
 
 
 func _issue_attack_order(screen_position: Vector2) -> int:
+	# As for moves: the fixed command post never takes the order.
 	if selected_ids.is_empty():
-		var commander_id := int(commander_ids.get(HUMAN_PLAYER_ID, -1))
-		if commander_id <= 0:
-			return -1
-		_set_selected(commander_id, true)
-	if selected_ids.is_empty():
+		_refuse_command_post_order()
 		return -1
 
 	var target := _screen_ground_point(screen_position)
@@ -4134,6 +4945,8 @@ func _sync_terrain_edits() -> void:
 	if last.x < 0:
 		return
 	HeightMap.update_terrain_arrays(terrain_mesh_arrays, heights, Rect2i(first, last - first), terrain_world_width, terrain_world_height)
+	for wrapper in prototype_visual_views.values():
+		wrapper.invalidate_range_terrain()
 	_apply_terrain_mesh()
 	var cell_size := Vector2(terrain_world_width, terrain_world_height) / Vector2(TERRAIN_SAMPLE_WIDTH - 1, TERRAIN_SAMPLE_HEIGHT - 1)
 	var world_origin := Vector2(first) * cell_size - Vector2(terrain_world_width, terrain_world_height) * 0.5
@@ -4147,6 +4960,7 @@ func _update_hud() -> void:
 		_sync_terrain_edits()
 		_sync_fuel_supply()
 		_sync_strategic_command()
+		_sync_paradrop_markers()
 	_activate_reinforcement_delivery_from_airfield()
 	_update_steering_debug()
 	var scenario_name: String = scenario_definition.get("display_name", "Scale profile")
@@ -4205,6 +5019,8 @@ func _update_hud() -> void:
 		pending_completed_structures.clear()
 	command_hud.refresh({
 		"scenario": scenario_name,
+		"game_speed": roundi(float(extension.call("get_game_speed")) * 100.0),
+		"speed_locked": not _can_change_game_speed(),
 		"friendly": player_entity_ids.size(),
 		"enemy": seen_enemy_ids.size(),
 		"selected": selected_ids.size(),
@@ -4230,6 +5046,7 @@ func _update_hud() -> void:
 		"power": _hud_power(tactical_resources),
 		"power_reserve": _hud_power_reserve(tactical_resources),
 		"power_deficit": tactical_resources.size() >= 7 and float(tactical_resources[6]) < 0.0,
+		"tactical_resources": tactical_resources,
 		"tick": hud_state.get("tick_ms", 0.0),
 		"fps": Engine.get_frames_per_second(),
 		"engine": "ONLINE",
@@ -4237,6 +5054,7 @@ func _update_hud() -> void:
 		"reinforcement_status": _with_fuel_status(reinforcement_delivery_status),
 	})
 	_sync_strategic_command()
+	_sync_command_post_panel()
 
 
 func _hud_resource_pair(resources: Array, current_index: int, capacity_index: int) -> String:
@@ -4258,13 +5076,12 @@ func _hud_power_reserve(resources: Array) -> String:
 
 
 func _selected_unit_snapshot(entity_id: int, health: Array = []) -> Dictionary:
-	var root: Node3D = demo_unit_views.get(entity_id, null)
-	var unit_type := int(root.get_meta("unit_type", -1)) if root != null else -1
+	var display_name := String(extension.call("get_unit_display_name", entity_id)).to_upper()
 	if health.is_empty():
 		health = extension.call("get_unit_health", entity_id)
 	return {
 		"id": entity_id,
-		"name": UNIT_TYPE_DISPLAY_NAME.get(unit_type, "COMBAT UNIT"),
+		"name": display_name if not display_name.is_empty() else "UNKNOWN UNIT",
 		"health": float(health[0]) if health.size() >= 2 else -1.0,
 		"max_health": float(health[1]) if health.size() >= 2 else -1.0,
 	}

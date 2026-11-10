@@ -30,11 +30,14 @@ GAMEPLAY_SCENARIOS = {
     "oak_grove_showcase",
     "airfield_fighter_ferry",
     "road_construction",
+    "ground_transport_routes",
     "ui_design_system_showcase",
     "queued_waypoint_move",
+    "civilian_building_models",
 }
 PERFORMANCE_SCENARIOS = {"simulation_scale_1000", "combat_benchmark_2000"}
 CONTRACT_SCENARIOS = {
+    "construction_preview": ("test_construction_preview.gd", "CONSTRUCTION_PREVIEW checks="),
     "native_extension_smoke": ("test.gd", "RtsExtension smoke test passed"),
     "gdextension_boundary": ("test_gdextension_boundary.gd", "GDEXTENSION_BOUNDARY checks="),
     "hud_bridge": ("test_hud_bridge.gd", "HUD_BRIDGE checks="),
@@ -42,9 +45,12 @@ CONTRACT_SCENARIOS = {
     "build_catalog": ("test_build_catalog.gd", "BUILD_CATALOG checks=7 failures=0"),
     "skirmish_presentation": ("test_skirmish.gd", "GODOT_SKIRMISH_PRESENTATION"),
     "match_flow": ("test_match_flow.gd", "GODOT_MATCH_FLOW"),
+    "key_site_victory": ("test_key_site_victory.gd", "KEY_SITE_VICTORY checks="),
+    "command_post": ("test_command_post.gd", "COMMAND_POST checks="),
     "native_skirmish_match_to_result": ("test_native_skirmish.gd", "GODOT_NATIVE_SKIRMISH"),
     "terrain_contract": ("test_goal10_terrain.gd", "GODOT_GOAL10_TERRAIN"),
     "tree_impostors": ("test_tree_impostors.gd", "TREE_IMPOSTORS checks="),
+    "unit_range_overlays": ("test_unit_range_overlays.gd", "UNIT_RANGE_OVERLAYS checks="),
     "unit_motion": ("test_unit_motion.gd", "UNIT_MOTION checks="),
     "visual_registry": ("test_visual_registry.gd", "VISUAL_REGISTRY"),
     "visual_spawn_bridge": ("test_visual_spawn_bridge.gd", "VISUAL_SPAWN_BRIDGE"),
@@ -55,11 +61,25 @@ CONTRACT_SCENARIOS = {
     "engineer_movement_presentation": ("test_engineer_movement_presentation.gd", "ENGINEER_MOVEMENT_PRESENTATION"),
     "order_overlay_renderer": ("test_order_overlay_renderer.gd", "order_overlay_renderer: PASS"),
     "unit_route_overlay": ("test_unit_route_overlay.gd", "UNIT_ROUTE_OVERLAY checks="),
+    "presentation_pacing": ("test_presentation_pacing.gd", "PRESENTATION_PACING checks="),
+    "range_envelopes": ("test_range_envelopes.gd", "RANGE_ENVELOPES checks="),
+    "landing_approach": ("test_landing_approach.gd", "LANDING_APPROACH checks="),
+    "game_speed": ("test_game_speed.gd", "GAME_SPEED checks="),
+    "camera_zoom_input": ("test_camera_zoom_input.gd", "CAMERA_ZOOM_INPUT checks="),
+    "combat_effects": ("test_combat_effects.gd", "COMBAT_EFFECTS checks="),
+    "slice4_audio": ("test_slice4_audio.gd", "SLICE4_AUDIO checks="),
+    "audio_library": ("test_audio_library.gd", "AUDIO_LIBRARY checks="),
+    "build_menu_hover": ("test_build_menu_hover.gd", "BUILD_MENU_HOVER checks="),
+    "queued_builds": ("test_queued_builds.gd", "QUEUED_BUILDS checks="),
+    "ground_transport": ("test_ground_transport.gd", "GROUND_TRANSPORT checks="),
+    "slice4_briefing": ("test_slice4_briefing.gd", "SLICE4_BRIEFING checks="),
+    "magnifier": ("test_magnifier.gd", "magnifier checks="),
     "unit_visual_root": ("test_unit_visual_root.gd", "UNIT_VISUAL_ROOT"),
     "reference_model_load": ("test_reference_model_load.gd", "REFERENCE_MODEL_LOAD checks="),
     "map_editor_model": ("test_map_editor_model.gd", "Map editor model assertions passed"),
     "map_editor_export": ("test_map_editor_export.gd", "Map editor native export assertions passed"),
     "map_editor_ui": ("test_map_editor_ui.gd", "MAP_EDITOR_UI"),
+    "strategic_map_symbols": ("test_strategic_map_symbols.gd", "STRATEGIC_MAP_SYMBOLS checks="),
 }
 
 
@@ -89,6 +109,9 @@ def isolated_environment(artifact_dir: Path) -> dict[str, str]:
         env["XDG_CACHE_HOME"] = str(artifact_dir / "user-cache")
     elif sys.platform == "win32":
         env["APPDATA"] = str(artifact_dir / "user-data")
+    elif sys.platform == "darwin":
+        # Godot on macOS keeps user:// under $HOME/Library/Application Support.
+        env["HOME"] = str(artifact_dir / "user-home")
     return env
 
 
@@ -129,6 +152,7 @@ def godot_executable() -> Path:
     candidates = [
         Path(configured) if configured else None,
         Path.home() / "mow-tools/godot/Godot_v4.7.2-stable_win64_console.exe",
+        Path.home() / "mow-tools/godot/Godot.app/Contents/MacOS/Godot",
         ROOT / "Godot_v4.7.2-stable_linux.x86_64",
         Path(shutil.which("godot4") or "") if shutil.which("godot4") else None,
         Path(shutil.which("godot") or "") if shutil.which("godot") else None,

@@ -2,10 +2,18 @@ class_name UnitVisualRoot
 extends Node3D
 
 const StrategicUnitIconScript = preload("res://strategic_unit_icon.gd")
+const RangeOutlineScript = preload("res://range_outline.gd")
 
 ## Generic presentation wrapper for imported donor GLBs. This node has no
 ## gameplay processing, physics, or timers; simulation code drives it through
 ## apply_simulation_transform().
+
+# Unit models render on their own layer, so each camera can decide whether to
+# draw them: the main view hides them at map scale (screen-space icons take
+# over there), while the magnifier always shows them.
+const MODEL_LAYER := 1 << 1
+# Below this camera distance a unit is drawn as its model.
+const MODEL_HIDE_DISTANCE := 600.0
 
 var _registry
 var _definition: Dictionary = {}
@@ -21,6 +29,12 @@ var _hardpoints: Dictionary = {}
 var _lod_tier := 0
 var _terrain_height_sampler: Callable
 var _range_overlays: Array[Dictionary] = []
+var _ranges_airborne := false
+# On the ground the game draws this unit's hexes merged with its side's others
+# (RangeEnvelopeRenderer); the unit then draws its own only while airborne.
+var merged_ground_ranges := false
+var _last_range_center := Vector3.INF
+static var _flat_range_meshes: Dictionary = {}
 static var _fallback_materials: Dictionary = {}
 
 
@@ -39,12 +53,87 @@ func configure(registry, visual_id: String, faction_color := Color.WHITE) -> boo
 		_model_root.add_child(instance)
 		if _definition.has("isolate"):
 			_isolate_vehicle(instance as Node3D, _definition.isolate, visual_id)
+		if bool(_definition.get("repair_winding", false)):
+			_repair_winding(instance)
 		_make_materials_opaque(instance, _definition.get("opaque_materials", []))
 	else:
 		_add_fallback_mesh(faction_color)
 	_apply_definition_transform()
 	_configure_hardpoints()
+	_assign_model_layer(_model_root)
 	return not bool(_definition.get("fallback", false)) and model != null
+
+
+# Some donor meshes do not light properly when drawn double-sided. The F-15C
+# sits under a mirrored transform (negative scale) and winds a quarter of its
+# triangles against its own normals, so Godot took sunlit faces for back faces,
+# flipped their normals and the aircraft looked black. "repair_winding" bakes
+# any mirror into the mesh and turns each triangle round to agree with its
+# normals. Repaired meshes are cached so every unit of the type shares them.
+static var _repaired_meshes := {}
+
+
+func _repair_winding(node: Node) -> void:
+	if node is MeshInstance3D:
+		var mesh_instance := node as MeshInstance3D
+		if mesh_instance.mesh != null:
+			var mirrored := mesh_instance.transform.basis.determinant() < 0.0
+			var key := [mesh_instance.mesh, mirrored]
+			if not _repaired_meshes.has(key):
+				_repaired_meshes[key] = repaired_winding(mesh_instance.mesh, mirrored)
+			mesh_instance.mesh = _repaired_meshes[key]
+			if mirrored:
+				# The mesh now carries the mirror, so the node no longer does.
+				var basis := mesh_instance.transform.basis
+				basis.z = -basis.z
+				mesh_instance.transform.basis = basis
+	for child in node.get_children():
+		_repair_winding(child)
+
+
+## A copy of the mesh whose triangles all wind the way their normals face
+## (Godot's front faces wind clockwise). With unmirror, the mesh is first
+## reflected through its own z axis, to stand in for a mirrored transform.
+static func repaired_winding(source: Mesh, unmirror := false) -> ArrayMesh:
+	var repaired := ArrayMesh.new()
+	for surface in range(source.get_surface_count()):
+		var arrays := source.surface_get_arrays(surface)
+		var vertices: PackedVector3Array = arrays[Mesh.ARRAY_VERTEX]
+		var normals = arrays[Mesh.ARRAY_NORMAL]
+		if unmirror:
+			for index in range(vertices.size()):
+				vertices[index].z = -vertices[index].z
+			arrays[Mesh.ARRAY_VERTEX] = vertices
+			if normals != null:
+				var flipped: PackedVector3Array = normals
+				for index in range(flipped.size()):
+					flipped[index].z = -flipped[index].z
+				normals = flipped
+				arrays[Mesh.ARRAY_NORMAL] = flipped
+			if arrays[Mesh.ARRAY_TANGENT] != null:
+				var tangents: PackedFloat32Array = arrays[Mesh.ARRAY_TANGENT]
+				for index in range(0, tangents.size() - 3, 4):
+					tangents[index + 2] = -tangents[index + 2]
+					tangents[index + 3] = -tangents[index + 3]
+				arrays[Mesh.ARRAY_TANGENT] = tangents
+		if normals != null and (normals as PackedVector3Array).size() == vertices.size():
+			var indices: PackedInt32Array = arrays[Mesh.ARRAY_INDEX] if arrays[Mesh.ARRAY_INDEX] != null else PackedInt32Array(range(vertices.size()))
+			for start in range(0, indices.size() - 2, 3):
+				var a := indices[start]
+				var b := indices[start + 1]
+				var c := indices[start + 2]
+				var facing := (vertices[c] - vertices[a]).cross(vertices[b] - vertices[a])
+				if facing.dot(normals[a] + normals[b] + normals[c]) < 0.0:
+					indices[start + 1] = c
+					indices[start + 2] = b
+			arrays[Mesh.ARRAY_INDEX] = indices
+		# Custom vertex channels keep the format their data was written in.
+		var custom_bits: int = (1 << (Mesh.ARRAY_FORMAT_CUSTOM_BITS * 4)) - 1
+		var flags: int = source.surface_get_format(surface) & (custom_bits << Mesh.ARRAY_FORMAT_CUSTOM_BASE)
+		repaired.add_surface_from_arrays(source.surface_get_primitive_type(surface), arrays, [], {}, flags)
+		repaired.surface_set_material(surface, source.surface_get_material(surface))
+		repaired.surface_set_name(surface, source.surface_get_name(surface))
+	return repaired
 
 
 # Some donor files are packs that lay out many vehicles side by side, with
@@ -159,7 +248,7 @@ func set_selected(selected: bool) -> void:
 
 func set_range_terrain_height_sampler(sampler: Callable) -> void:
 	_terrain_height_sampler = sampler
-	_update_range_overlays(global_position)
+	invalidate_range_terrain()
 
 
 func update_lod(camera_distance: float) -> void:
@@ -171,7 +260,7 @@ func update_lod(camera_distance: float) -> void:
 	# Keep the 3D model visible until the screen-space strategic overlay turns
 	# off at 600 m. The old 500 m floor created a 500-600 m gap where the
 	# strategic marker was still visible but the unit mesh was already hidden.
-	var far_distance := maxf(float(lod.get("strategic_distance", 190.0)), 600.0)
+	var far_distance := maxf(float(lod.get("strategic_distance", 190.0)), MODEL_HIDE_DISTANCE)
 	var mid_distance := float(lod.get("reduced_distance", 95.0))
 	var tier := 2 if camera_distance >= far_distance else (1 if camera_distance >= mid_distance else 0)
 	if tier == _lod_tier:
@@ -235,9 +324,9 @@ func _ensure_nodes() -> void:
 	_hardpoint_markers = Node3D.new()
 	_hardpoint_markers.name = "OptionalHardpointMarkers"
 	add_child(_hardpoint_markers)
-	_add_hex_range_overlay("VisibilityHex", 15.0, Color("#2d8cff"))
-	_add_hex_range_overlay("RadarHex", 22.0, Color("#a04dff"))
-	_add_hex_range_overlay("AttackHex", 10.0, Color("#e33b3b"))
+	_add_hex_range_overlay("VisibilityHex", 0.0, Color("#2d8cff"))
+	_add_hex_range_overlay("RadarHex", 0.0, Color("#a04dff"))
+	_add_hex_range_overlay("AttackHex", 0.0, Color("#e33b3b"))
 	_strategic_visual = MeshInstance3D.new()
 	_strategic_visual.name = "StrategicZoomVisual"
 	_strategic_visual.mesh = StrategicUnitIconScript.mesh_for(-1)
@@ -270,40 +359,99 @@ func _add_hex_range_overlay(ring_name: String, radius: float, color: Color) -> v
 	overlay.name = ring_name
 	# Top-level world geometry avoids inheriting vehicle rotation or model lift.
 	overlay.top_level = true
-	var material := _shared_fallback_material(color)
-	material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-	material.albedo_color.a = 0.88
+	var material := RangeOutlineScript.material_for(color)
+	overlay.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	overlay.material_override = material
-	overlay.visible = true
+	overlay.visible = false
 	add_child(overlay)
 	_range_overlays.append({"node": overlay, "radius": radius, "material": material})
 
 
+func set_gameplay_ranges(attack: float, view: float, intel: float) -> void:
+	_ensure_nodes()
+	for spec in _range_overlays:
+		var radius := view if spec.node.name == "VisibilityHex" else (intel if spec.node.name == "RadarHex" else attack)
+		spec.radius = maxf(radius, 0.0) if is_finite(radius) else 0.0
+		spec.node.visible = spec.radius > 0.0
+		spec["dash_phase"] = (0 if spec.node.name == "AttackHex" else 1) if spec.node.name != "RadarHex" and attack > 0 and is_equal_approx(attack, view) else -1
+	invalidate_range_terrain()
+
+
+## This unit's range hexes as the merged renderer needs them.
+func range_envelopes() -> Array:
+	var envelopes: Array = []
+	for spec in _range_overlays:
+		if float(spec.radius) > 0.0:
+			envelopes.append({"kind": String(spec.node.name), "radius": float(spec.radius), "dash_phase": int(spec.get("dash_phase", -1))})
+	return envelopes
+
+
+func ranges_airborne() -> bool:
+	return _ranges_airborne
+
+
+func set_merged_ground_ranges(merged: bool) -> void:
+	if merged_ground_ranges == merged:
+		return
+	merged_ground_ranges = merged
+	invalidate_range_terrain()
+
+
+func set_ranges_airborne(airborne: bool) -> void:
+	if _ranges_airborne == airborne:
+		return
+	_ranges_airborne = airborne
+	_last_range_center = Vector3.INF
+
+
+func invalidate_range_terrain() -> void:
+	_last_range_center = Vector3.INF
+	_update_range_overlays(global_position)
+
+
+## Enemy units keep their range outlines hidden from the opponent.
+func set_range_overlays_visible(shown: bool) -> void:
+	for spec in _range_overlays:
+		(spec.node as MeshInstance3D).visible = shown
+
+
 func _update_range_overlays(center: Vector3) -> void:
+	# Aircraft carry their horizontal envelopes at flight height, independent
+	# of pitch/bank. Ground units drape the same metre-scale ranges over terrain.
+	if not _ranges_airborne and _last_range_center.is_equal_approx(center):
+		return
+	_last_range_center = center
+	var own_hexes := _ranges_airborne or not merged_ground_ranges
 	for spec in _range_overlays:
 		var overlay := spec.node as MeshInstance3D
-		if overlay == null:
-			continue
 		var radius := float(spec.radius)
-		var lines := ImmediateMesh.new()
-		lines.surface_begin(Mesh.PRIMITIVE_LINES)
-		for side in range(6):
-			var a := TAU * float(side) / 6.0 + PI / 6.0
-			var b := TAU * float(side + 1) / 6.0 + PI / 6.0
-			var start := Vector3(center.x + cos(a) * radius, center.y, center.z + sin(a) * radius)
-			var finish := Vector3(center.x + cos(b) * radius, center.y, center.z + sin(b) * radius)
-			if _terrain_height_sampler.is_valid():
-				start.y = float(_terrain_height_sampler.call(start.x, start.z)) + 0.12
-				finish.y = float(_terrain_height_sampler.call(finish.x, finish.z)) + 0.12
-			else:
-				start.y += 0.12
-				finish.y += 0.12
-			lines.surface_add_vertex(start)
-			lines.surface_add_vertex(finish)
-		lines.surface_end()
-		lines.surface_set_material(0, spec.material)
-		overlay.mesh = lines
+		if overlay == null or radius <= 0.0:
+			continue
+		overlay.visible = own_hexes
+		if not own_hexes:
+			continue
+		if _ranges_airborne:
+			var key := Vector2(radius, float(spec.get("dash_phase", -1)))
+			if not _flat_range_meshes.has(key):
+				_flat_range_meshes[key] = _range_mesh(Vector3.ZERO, radius, false, int(key.y))
+			overlay.mesh = _flat_range_meshes[key]
+			overlay.global_transform = Transform3D(Basis.IDENTITY, center + Vector3.UP * 0.12)
+		else:
+			overlay.global_transform = Transform3D.IDENTITY
+			overlay.mesh = _range_mesh(center, radius, true, int(spec.get("dash_phase", -1)))
+
+
+func _range_mesh(center: Vector3, radius: float, drape: bool, dash_phase := -1) -> ArrayMesh:
+	return RangeOutlineScript.ribbon_mesh(_range_vertices(center, radius, drape, dash_phase))
+
+
+## One range as line-segment endpoint pairs: a circle, draped over the terrain
+## for ground units or flat at the given height for aircraft.
+func _range_vertices(center: Vector3, radius: float, drape: bool, dash_phase := -1) -> PackedVector3Array:
+	var height_at := Callable()
+	if drape and _terrain_height_sampler.is_valid():
+		height_at = _terrain_height_sampler
+	return RangeOutlineScript.circle_vertices(center, radius, height_at, 0.12, dash_phase)
 
 
 func _clear_model() -> void:
@@ -403,6 +551,19 @@ func _shared_fallback_material(color: Color) -> StandardMaterial3D:
 	material.roughness = 0.55
 	_fallback_materials[key] = material
 	return material
+
+
+## Whether this unit's model shows in what the camera renders: the model is up
+## and the camera draws the unit model layer.
+func model_drawn_by(camera: Camera3D) -> bool:
+	return _model_root != null and _model_root.visible and camera != null and (camera.cull_mask & MODEL_LAYER) != 0
+
+
+func _assign_model_layer(node: Node) -> void:
+	for child in node.get_children():
+		if child is VisualInstance3D:
+			(child as VisualInstance3D).layers = MODEL_LAYER
+		_assign_model_layer(child)
 
 
 func _set_imported_lod_visibility(node: Node, tier: int) -> void:

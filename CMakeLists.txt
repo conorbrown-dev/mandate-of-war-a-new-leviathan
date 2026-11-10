@@ -109,9 +109,15 @@ target_link_libraries(rts_gdextension
     rts_simulation
     godot::cpp
 )
+# The extension finds the simulation library beside itself in godot/project/bin.
+if(APPLE)
+    set(RTS_LOADER_RPATH "@loader_path")
+else()
+    set(RTS_LOADER_RPATH "$ORIGIN")
+endif()
 set_target_properties(rts_gdextension PROPERTIES
-    BUILD_RPATH "$ORIGIN"
-    INSTALL_RPATH "$ORIGIN"
+    BUILD_RPATH "${RTS_LOADER_RPATH}"
+    INSTALL_RPATH "${RTS_LOADER_RPATH}"
 )
 
 # Keep the editor-facing binaries together so the extension's simulation
@@ -140,6 +146,10 @@ if(NOT WIN32)
 endif()
 
 # The accepted movement/formation harness (tools/validate.py simulation_scale_1000).
+add_executable(rts_intel_benchmark benchmark/intel_benchmark.cpp)
+target_link_libraries(rts_intel_benchmark rts_simulation)
+target_include_directories(rts_intel_benchmark PUBLIC ${CMAKE_SOURCE_DIR}/src)
+
 add_executable(rts_scale_benchmark benchmark/scale_benchmark.cpp)
 target_link_libraries(rts_scale_benchmark rts_simulation)
 target_include_directories(rts_scale_benchmark PUBLIC ${CMAKE_SOURCE_DIR}/src)
@@ -215,6 +225,7 @@ add_executable(rts_integration_tests
     tests/test_stats.cpp
     tests/test_unit_cap.cpp
     tests/test_unit_data.cpp
+    tests/test_unit_separation.cpp
     tests/test_framework.hpp
 )
 target_link_libraries(rts_integration_tests rts_simulation)

@@ -84,6 +84,7 @@ void AIManager::update(float delta_ms) {
         update_visibility();
         update_sectors();
         gather_resources();
+        order_paradrop(simulation_->production_manager().faction_line(faction_id_));
         produce_units();
         plan_expansion();
         update_scouts();
@@ -121,6 +122,12 @@ void AIManager::reset() {
     scouts_on_order_ = 0;
     arrived_scouts_.clear();
     recon_flights_ordered_ = 0;
+    airfield_orders_ = 0;
+    next_airfield_tick_ = 0;
+    fuel_shipments_ordered_ = 0;
+    next_fuel_order_tick_ = 0;
+    next_paradrop_tick_ = 0;
+    paradrops_ordered_ = 0;
     sites_surveyed_ = false;
     unknown_sites_.clear();
     enemy_sites_.clear();
@@ -299,6 +306,13 @@ bool AIManager::nearest_contact(float x, float y, float& contact_x, float& conta
             contact_y = sighting.y;
         }
     }
+    for (const auto& contact : simulation_->radar_contacts(faction_id_)) {
+        const float dx = contact[0]-x, dy = contact[1]-y;
+        if (dx*dx+dy*dy < best) {
+            best = dx*dx+dy*dy;
+            contact_x = contact[0]; contact_y = contact[1];
+        }
+    }
     return std::isfinite(best);
 }
 
@@ -321,7 +335,7 @@ void AIManager::update_waves() {
     }
     if (static_cast<int>(ready.size()) < next_wave_size_) return;
     // A cautious style does not march out blind.
-    if (doctrine_.attack_only_known_enemy && enemy_units_.empty() && simulation_->last_known(faction_id_).empty()) return;
+    if (doctrine_.attack_only_known_enemy && enemy_units_.empty() && simulation_->last_known(faction_id_).empty() && simulation_->radar_contacts(faction_id_).empty()) return;
     committed_.insert(ready.begin(), ready.end());
     ++waves_launched_;
     next_wave_size_ = std::min(max_wave_, next_wave_size_ + wave_growth_);
@@ -350,6 +364,10 @@ void AIManager::update_visibility() {
     // The legacy visible_units API denotes owned, controllable units.
     for (EntityId id : simulation_->get_entity_list()) {
         const auto* faction = components.get_component<Faction>(id);
+        // A cargo aircraft flies its own route and takes no orders.
+        const auto* data = components.get_component<UnitData>(id);
+        const auto prototype = data ? get_unit_prototypes().find(static_cast<UnitType>(data->unit_type)) : get_unit_prototypes().end();
+        if (prototype != get_unit_prototypes().end() && prototype->second.cargo_transport) continue;
         if (faction && faction->faction_id == faction_id_ && alive(id)) {
             visible_units_.push_back(id);
         }
@@ -432,6 +450,8 @@ void AIManager::produce_units() {
     auto& production = simulation_->production_manager();
     const auto base = production.faction_line(faction_id_);
     if (base == INVALID_ENTITY) return;
+    build_airfield(base);
+    order_fuel(base);
     if (assault_active_) {
         produce_for_assault(base);
         return;
@@ -439,14 +459,15 @@ void AIManager::produce_units() {
     // Recon units belong to the assault planner; this path only buys fighters.
     std::vector<UnitType> candidates;
     for (const auto& [type, prototype] : get_unit_prototypes())
-        if (!is_scout(prototype) && !is_recon_plane(prototype) && production.can_queue_unit(base, faction_id_, type))
+        if (!is_scout(prototype) && !is_recon_plane(prototype) && production.can_queue_unit(base, faction_id_, type) && can_receive(type))
             candidates.push_back(type);
     std::sort(candidates.begin(), candidates.end(), [](UnitType a, UnitType b) {
         const auto& prototypes = get_unit_prototypes();
         const float ca = prototypes.at(a).material_cost, cb = prototypes.at(b).material_cost;
         return ca != cb ? ca < cb : a < b;
     });
-    if (!candidates.empty()) simulation_->issue_build_commands({base}, faction_id_, 0, 0, static_cast<int>(candidates.front()));
+    if (!candidates.empty() && !holding_for_fuel(production.get_unit_metal_cost(faction_id_, candidates.front())))
+        simulation_->issue_build_commands({base}, faction_id_, 0, 0, static_cast<int>(candidates.front()));
 }
 
 // Everything here is an ordinary order through the production line, at the
@@ -467,7 +488,7 @@ void AIManager::produce_for_assault(EntityId base) {
             flight_price = prototype.material_cost + prototype.operational_material;
             flight_view = prototype.view_range;
         }
-        if (!production.can_queue_unit(base, faction_id_, type)) continue;
+        if (!production.can_queue_unit(base, faction_id_, type) || !can_receive(type)) continue;
         if (is_scout(prototype)) scout = type;
         else if (is_recon_plane(prototype)) plane = type;
         else if (!prototype.is_aircraft && !prototype.is_naval && !prototype.construction_unit) fighters.push_back(type);
@@ -480,13 +501,14 @@ void AIManager::produce_for_assault(EntityId base) {
             scouts_on_order_ = std::max(0, scouts_on_order_ - 1);
         }
     }
-    if (scout && scout_count() + scouts_on_order_ < doctrine_.scouts_wanted) {
+    if (scout && scout_count() + scouts_on_order_ < doctrine_.scouts_wanted &&
+        !holding_for_fuel(production.get_unit_metal_cost(faction_id_, *scout))) {
         simulation_->issue_build_commands({base}, faction_id_, base_x, base_y, static_cast<int>(*scout));
         ++scouts_on_order_;
         return;
     }
     const bool enemy_unknown = simulation_->last_known(faction_id_).empty();
-    if (plane && !sectors_.empty() && enemy_unknown && tick >= next_flight_tick_) {
+    if (plane && !sectors_.empty() && enemy_unknown && tick >= next_flight_tick_ && !holding_for_fuel(flight_price)) {
         const size_t target = plot_recon_flight(flight_view, base_x, base_y);
         simulation_->issue_build_commands({base}, faction_id_, sectors_[target].x, sectors_[target].y, static_cast<int>(*plane));
         ++recon_flights_ordered_;
@@ -513,9 +535,146 @@ void AIManager::produce_for_assault(EntityId base) {
     // unknown the price of the next flight stays in the bank.
     const auto storage = production.storages().find(line->second.storage_id);
     const float price = get_unit_prototypes().at(choice).material_cost;
+    if (holding_for_fuel(production.get_unit_metal_cost(faction_id_, choice))) return;
     if (doctrine_.save_for_recon_flight && enemy_unknown && storage != production.storages().end() &&
         storage->second.tactical.materials.current - price < flight_price) return;
     if (simulation_->issue_build_commands({base}, faction_id_, base_x, base_y, static_cast<int>(choice)) > 0) ++mixed_cursor_;
+}
+
+float AIManager::own_fuel() const {
+    const auto& storages = simulation_->production_manager().storages();
+    const auto store = storages.find(simulation_->production_manager().faction_storage(faction_id_));
+    return store == storages.end() ? 0.0f : store->second.tactical.fuel.current;
+}
+
+// Drop a scout near a contact the AI can see now. The ordinary command checks
+// the landing point again when applied, including sight, terrain and payment.
+void AIManager::order_paradrop(EntityId base) {
+    if (!assault_active_ || !simulation_->forces_by_transport() || base == INVALID_ENTITY || enemy_units_.empty() ||
+        simulation_->simulation_tick() < next_paradrop_tick_) return;
+    std::optional<UnitType> scout;
+    for (const auto& [type, prototype] : get_unit_prototypes()) {
+        if (prototype.faction == faction_id_ && prototype.airdrop && is_scout(prototype) && (!scout || type < *scout)) scout = type;
+    }
+    if (!scout || holding_for_fuel(simulation_->production_manager().get_unit_metal_cost(faction_id_, *scout))) return;
+    constexpr float kDropOffset = 350.0f;
+    constexpr float kMinimumAdvance = 1200.0f;
+    const float home_x = simulation_->get_unit_x(base), home_y = simulation_->get_unit_y(base);
+    for (EntityId enemy : enemy_units_) {
+        const float enemy_x = simulation_->get_unit_x(enemy), enemy_y = simulation_->get_unit_y(enemy);
+        if (std::hypot(enemy_x - home_x, enemy_y - home_y) < kMinimumAdvance) continue;
+        for (int side = 0; side < 8; ++side) {
+            const float angle = static_cast<float>(side) * 3.14159265f / 4.0f;
+            const float x = enemy_x + std::cos(angle) * kDropOffset;
+            const float y = enemy_y + std::sin(angle) * kDropOffset;
+            if (!simulation_->paradrop_refusal(faction_id_, *scout, x, y).empty()) continue;
+            if (simulation_->issue_paradrop_command(faction_id_, *scout, x, y) == 0) return;
+            ++paradrops_ordered_;
+            next_paradrop_tick_ = simulation_->simulation_tick() + seconds_to_ticks(90.0f);
+            return;
+        }
+    }
+}
+
+// A shipment, at the player's price and through the player's rules: it needs
+// an airfield, one at a time, and room in the store.
+void AIManager::order_fuel(EntityId base) {
+    (void)base;
+    const uint32_t tick = simulation_->simulation_tick();
+    if (tick < next_fuel_order_tick_ || own_fuel() >= kLowFuel || simulation_->fuel_shipment(faction_id_) ||
+        !simulation_->territorial_control_manager().has_active_installation(faction_id_, InstallationType::AIRFIELD)) return;
+    const auto& storages = simulation_->production_manager().storages();
+    const auto store = storages.find(simulation_->production_manager().faction_storage(faction_id_));
+    if (store == storages.end() || store->second.tactical.materials.current < kFuelShipmentMaterialCost) return;
+    next_fuel_order_tick_ = tick + seconds_to_ticks(5.0f);
+    if (simulation_->issue_fuel_shipment_command(faction_id_) > 0) ++fuel_shipments_ordered_;
+}
+
+// Short of fuel with no shipment coming, the price of one is not spent on units.
+bool AIManager::holding_for_fuel(float price) const {
+    if (!simulation_->ground_fuel_burn() || own_fuel() >= kLowFuel || simulation_->fuel_shipment(faction_id_)) return false;
+    const auto& storages = simulation_->production_manager().storages();
+    const auto store = storages.find(simulation_->production_manager().faction_storage(faction_id_));
+    return store == storages.end() || store->second.tactical.materials.current - price < kFuelShipmentMaterialCost;
+}
+
+bool AIManager::can_receive(UnitType type) const {
+    return !simulation_->needs_delivery(type) || simulation_->delivery_refusal(faction_id_, type).empty();
+}
+
+// Under the transport rule ground forces land only at an airfield. The AI
+// builds one the way the player does: its Field Engineer orders it, the line
+// builds it at the ordinary price, and with no engineer alive it cannot.
+void AIManager::build_airfield(EntityId base) {
+    if (!simulation_->forces_by_transport()) return;
+    constexpr uint8_t kAirfield = 2;
+    if (simulation_->territorial_control_manager().has_active_installation(faction_id_, InstallationType::AIRFIELD) ||
+        simulation_->structure_queued(faction_id_, kAirfield)) return;
+    const uint32_t tick = simulation_->simulation_tick();
+    if (tick < next_airfield_tick_) return;
+    EntityId engineer = INVALID_ENTITY;
+    for (EntityId unit : visible_units_) {
+        if (simulation_->is_construction_unit(unit)) {
+            engineer = unit;
+            break;
+        }
+    }
+    if (engineer == INVALID_ENTITY) return;
+    float site_x = 0.0f;
+    float site_y = 0.0f;
+    // Look again a little later if nothing fits or the order did not take,
+    // for example because the site's earthworks cost more than is in store.
+    next_airfield_tick_ = tick + seconds_to_ticks(15.0f);
+    if (!find_airfield_site(base, site_x, site_y)) return;
+    if (simulation_->issue_structure_command(engineer, faction_id_, kAirfield, site_x, site_y) > 0) ++airfield_orders_;
+}
+
+// The nearest open ground to the command post that takes a runway, preferring
+// ground that needs no earthworks. Only terrain and the AI's own funds are
+// read, both of which the player knows too.
+bool AIManager::find_airfield_site(EntityId base, float& site_x, float& site_y) const {
+    constexpr uint8_t kAirfield = 2;
+    const float base_x = simulation_->get_unit_x(base);
+    const float base_y = simulation_->get_unit_y(base);
+    const auto& production = simulation_->production_manager();
+    const auto& navigation = simulation_->pathfinding();
+    const StructureSiteRules rules = structure_site_rules(kAirfield);
+    const float half_x = rules.footprint_x * 0.5f;
+    const float half_y = rules.footprint_y * 0.5f;
+    // Clear of the command post and the units parked around it.
+    const float minimum = std::hypot(half_x, half_y) + 150.0f;
+    bool found = false;
+    float best_cost = std::numeric_limits<float>::max();
+    for (float ring = minimum; ring <= 4000.0f && !found; ring += 250.0f) {
+        const int steps = std::max(12, static_cast<int>(std::ceil(2.0f * 3.14159265f * ring / 250.0f)));
+        for (int step = 0; step < steps; ++step) {
+            const float angle = 2.0f * 3.14159265f * static_cast<float>(step) / static_cast<float>(steps);
+            const float x = base_x + std::cos(angle) * ring;
+            const float y = base_y + std::sin(angle) * ring;
+            const StructureSite site = simulation_->assess_structure_site(kAirfield, x, y);
+            if (!site.buildable ||
+                !production.can_queue_structure(base, faction_id_, kAirfield, site.material, site.fuel, site.earthworks ? 1 : 0)) continue;
+            // A runway cannot go over blocked ground: buildings, other structures.
+            bool open = true;
+            for (int row = 0; row < 5 && open; ++row) {
+                for (int column = 0; column < 5 && open; ++column) {
+                    const float sample_x = x - half_x + rules.footprint_x * 0.25f * static_cast<float>(column);
+                    const float sample_y = y - half_y + rules.footprint_y * 0.25f * static_cast<float>(row);
+                    open = navigation.is_walkable(navigation.to_grid_x(sample_x), navigation.to_grid_y(sample_y));
+                }
+            }
+            if (!open) continue;
+            const float cost = site.earthworks ? site.material + site.fuel : 0.0f;
+            if (cost < best_cost) {
+                best_cost = cost;
+                site_x = x;
+                site_y = y;
+            }
+        }
+        // Take the nearest ring with any site; a level one there beats a nearer dig.
+        found = best_cost < std::numeric_limits<float>::max();
+    }
+    return found;
 }
 
 void AIManager::plan_expansion() {
@@ -537,6 +696,7 @@ void AIManager::plan_expansion() {
         if (!node.depleted && node.amount > 0.0f) nodes.push_back(id);
     }
     std::sort(nodes.begin(), nodes.end());
+    const bool short_of_fuel = simulation_->ground_fuel_burn() && own_fuel() < kLowFuel;
     EntityId selected = INVALID_ENTITY;
     float selected_amount = -1.0f;
     for (EntityId id : nodes) {
@@ -547,6 +707,12 @@ void AIManager::plan_expansion() {
             (assault_active_ && extractor.storage_id != own_storage ? foreign : own) = true;
         }
         const auto& node = simulation_->production_manager().resource_nodes().at(id);
+        const bool depot = node.type == ResourceNode::Type::ENERGY;
+        if (depot) {
+            const EntityId holder = simulation_->production_manager().fuel_depot_holder(id);
+            if (holder == own_storage) own = true;
+            else if (holder != INVALID_ENTITY && assault_active_) foreign = true;
+        }
         if (assault_active_) {
             // Sites held by the enemy at the start are as hidden from the AI as
             // its depots are from the player. After that it knows only what it
@@ -559,9 +725,11 @@ void AIManager::plan_expansion() {
             }
             if (unknown_sites_.contains(id) || enemy_sites_.contains(id)) continue;
         }
-        if (!own && (node.amount > selected_amount || (node.amount == selected_amount && id < selected))) {
+        // Short of fuel, any depot comes before any Materials site.
+        const float priority = node.amount + (depot && short_of_fuel ? 1.0e9f : 0.0f);
+        if (!own && (priority > selected_amount || (priority == selected_amount && id < selected))) {
             selected = id;
-            selected_amount = node.amount;
+            selected_amount = priority;
         }
     }
     sites_surveyed_ = true;

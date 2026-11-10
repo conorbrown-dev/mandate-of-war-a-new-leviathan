@@ -13,6 +13,9 @@ struct Weapon {
     float lead_bias;
     float aoe_radius;
     float cooldown_remaining;
+    // What it can engage: targets on the ground (or water), aircraft in flight.
+    bool hits_ground = true;
+    bool hits_air = false;
 };
 
 } // namespace rts

@@ -58,6 +58,7 @@ public:
     std::unordered_map<EntityId, ResourceNode>& resource_nodes() { return resource_nodes_; }
     const std::unordered_map<EntityId, ResourceNode>& resource_nodes() const { return resource_nodes_; }
     std::unordered_map<EntityId, Extractor>& extractors() { return extractors_; }
+    const std::unordered_map<EntityId, Extractor>& extractors() const { return extractors_; }
     std::unordered_map<EntityId, Storage>& storages() { return storages_; }
     const std::unordered_map<EntityId, Storage>& storages() const { return storages_; }
     std::unordered_map<EntityId, ProductionLine>& production_lines() { return production_lines_; }

@@ -22,7 +22,7 @@ func _init() -> void:
 			for method in [
 				"start_simulation", "update_simulation", "get_unit_position", "get_unit_transforms", "get_unpresented_entities",
 				"issue_move_commands", "queue_faction_structure", "queue_faction_unit", "get_build_catalog", "get_hud_state", "skirmish_state", "economy_get_tactical_resources",
-				"get_road_segments", "territory_get_installation_info", "get_airborne_flags", "get_unit_routes"
+				"get_road_segments", "territory_get_installation_info", "get_airborne_flags", "get_aircraft_approach_poses", "get_unit_range_profile", "get_unit_routes", "set_game_speed", "get_game_speed", "is_multiplayer_session"
 			]:
 				check(bridge.has_method(method), "required bridge method missing: %s" % method, failures)
 			# These had no Godot consumer. Their removal prevents presentation code
@@ -61,6 +61,10 @@ func _init() -> void:
 			check(bridge.call("get_unpresented_entities", PackedInt32Array([entity_id])).is_empty(), "entity snapshot must omit already-presented entities", failures)
 			var airborne: PackedByteArray = bridge.call("get_airborne_flags", PackedInt32Array([entity_id]))
 			check(airborne.size() == 1 and airborne[0] == 0, "flight snapshot must report a ground unit as not airborne", failures)
+			var approach: PackedFloat32Array = bridge.call("get_aircraft_approach_poses", PackedInt32Array([entity_id, -1]))
+			check(approach == PackedFloat32Array([-1, 0, 0, -1, 0, 0]), "non-approach and unknown IDs use the documented sentinel without changing array shape", failures)
+			check((bridge.call("get_aircraft_approach_poses", PackedInt32Array()) as PackedFloat32Array).is_empty(), "empty approach batch returns empty", failures)
+			check(bridge.call("get_unit_range_profile", -1) == PackedFloat32Array([0,0,0]), "unknown IDs have no combat or sensor range", failures)
 			bridge.call("stop_simulation")
 	if not failures.is_empty():
 		for failure in failures:

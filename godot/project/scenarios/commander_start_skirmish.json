@@ -2,8 +2,8 @@
   "version": 1,
   "id": "commander_start_skirmish_v1",
   "display_name": "Broken Strait",
-  "description": "Long-range reconnaissance places enemy forces somewhere in this sector, but it could not resolve them any closer. Scout the sector, find their command post and destroy it before they find yours.",
-  "objective": "DESTROY THE ENEMY COMMAND POST",
+  "description": "Long-range reconnaissance places enemy forces somewhere in this sector, but it could not resolve them any closer. Find and destroy their command post, or capture and hold two key resource sites before they find yours.",
+  "objective": "DESTROY ENEMY COMMAND POST OR HOLD TWO KEY SITES",
   "theater": {
     "width": 40000,
     "height": 40000,
@@ -16,5 +16,10 @@
   "player": {"faction_id": 0, "spawn": [-12500, 0], "units": [{"unit_type": 0, "count": 1}]},
   "ai": {"faction_id": 1, "spawn": [-15000, -6500], "units": [{"unit_type": 3, "count": 1}], "doctrine": "balanced", "difficulty": "normal", "assault": {"search_area": [-19500, -19000, -5500, 19000], "first_wave": 6, "wave_growth": 4, "max_wave": 24}},
   "forces_by_transport": true,
-  "victory": {"type": "command_center", "description": "Destroy the enemy command post."}
+  "transport_routes": [
+    {"faction_id": 0, "road": {"entry": [-12150, 4200], "terminal": [-12150, 650]}, "rail": {"entry": [-13000, 4200], "terminal": [-13000, 650]}},
+    {"faction_id": 1, "road": {"entry": [-18000, -11000], "terminal": [-18000, -7400]}, "rail": {"entry": [-18500, -11000], "terminal": [-18500, -7400]}}
+  ],
+  "ground_vehicles_burn_fuel": true,
+  "victory": {"type": "command_center_or_key_sites", "description": "Destroy the enemy command post, or hold two of three key sites for two minutes.", "key_sites": [900, 903, 913], "required": 2, "hold_seconds": 120}
 }

@@ -726,6 +726,107 @@ TEST(commands_runway_aircraft_ferries_in_airborne_from_outside_theater) {
     check(s.get_unit_x(fighter) >= -20000.0f && s.get_unit_x(fighter) > entry_x,
           "airborne fighter crosses the theater boundary under simulation movement");
 }
+TEST(commands_ferried_aircraft_lands_on_its_airfield_and_never_hovers) {
+    Simulation s;
+    s.configure_world_size(40000.0f, 40000.0f);
+    s.configure_theater_landmasses(-12500.0f, 0.0f, 14000.0f, 38000.0f,
+                                  12500.0f, 0.0f, 14000.0f, 38000.0f);
+    s.start();
+    const float airfield_x = -15500.0f, airfield_y = 1000.0f;
+    const auto base = s.create_faction_base(FactionId::ELITE_PRECISION, airfield_x, airfield_y);
+    s.territorial_control_manager().add_installation(
+        airfield_x, airfield_y, InstallationType::AIRFIELD, FactionId::ELITE_PRECISION);
+    check(s.issue_build_commands({base}, FactionId::ELITE_PRECISION, 12000.0f, 0.0f,
+                                 static_cast<uint8_t>(UnitType::ELITE_T1_FIGHTER)) == 1,
+          "fighter ferry request with a far-away destination is accepted");
+    EntityId fighter = INVALID_ENTITY;
+    bool landed = false;
+    float closest = 1e9f;
+    for (int tick = 0; tick < 20 * 600 && !landed; ++tick) {
+        s.update(50.0f);
+        if (fighter == INVALID_ENTITY) {
+            const auto planes = s.component_manager().entities_with<Aircraft>(s.get_entity_list());
+            if (!planes.empty()) fighter = planes.front();
+        }
+        if (fighter == INVALID_ENTITY) continue;
+        const auto* state = s.component_manager().get_component<Aircraft>(fighter);
+        if (!state) break;
+        closest = std::min(closest, std::hypot(s.get_unit_x(fighter) - (airfield_x + kAirfieldRunwayOffsetX), s.get_unit_y(fighter) - airfield_y));
+        landed = state->status == Aircraft::Status::ON_GROUND;
+    }
+    check(landed, "ferried fighter touches down instead of hovering");
+    check(std::abs(s.get_unit_x(fighter) - (airfield_x + 43.0f)) < 1.0f &&
+          std::abs(s.get_unit_y(fighter) - (airfield_y - 94.0f)) < 1.0f,
+          "ferried fighter taxis to its own airfield apron");
+    check(closest < 1.0f, "fighter rolls to rest on the main runway centre");
+}
+static EntityId landed_ferry_fighter(Simulation& s, float airfield_x, float airfield_y) {
+    s.configure_world_size(40000.0f, 40000.0f);
+    s.configure_theater_landmasses(-12500.0f, 0.0f, 14000.0f, 38000.0f,
+                                  12500.0f, 0.0f, 14000.0f, 38000.0f);
+    s.start();
+    const auto base = s.create_faction_base(FactionId::ELITE_PRECISION, airfield_x, airfield_y);
+    s.territorial_control_manager().add_installation(
+        airfield_x, airfield_y, InstallationType::AIRFIELD, FactionId::ELITE_PRECISION);
+    s.issue_build_commands({base}, FactionId::ELITE_PRECISION, 0.0f, 0.0f,
+                           static_cast<uint8_t>(UnitType::ELITE_T1_FIGHTER));
+    for (int tick = 0; tick < 20 * 600; ++tick) {
+        s.update(50.0f);
+        const auto planes = s.component_manager().entities_with<Aircraft>(s.get_entity_list());
+        if (planes.empty()) continue;
+        const auto* state = s.component_manager().get_component<Aircraft>(planes.front());
+        if (state && state->status == Aircraft::Status::ON_GROUND) return planes.front();
+    }
+    return INVALID_ENTITY;
+}
+
+TEST(commands_ordered_aircraft_orbits_its_destination_and_never_stops) {
+    Simulation s;
+    const float ax = -15500.0f, ay = 1000.0f;
+    const auto fighter = landed_ferry_fighter(s, ax, ay);
+    check(fighter != INVALID_ENTITY, "orbit test has a landed fighter");
+    const float target_x = ax + 3000.0f, target_y = ay;
+    s.move_unit(fighter, target_x, target_y);
+    float px = s.get_unit_x(fighter), py = s.get_unit_y(fighter);
+    bool ever_stopped = false;
+    float farthest = 0.0f;
+    for (int tick = 0; tick < 20 * 120; ++tick) {
+        s.update(50.0f);
+        const float x = s.get_unit_x(fighter), y = s.get_unit_y(fighter);
+        if (tick > 20 && std::hypot(x - px, y - py) < 0.5f) ever_stopped = true;
+        if (tick > 20 * 30) farthest = std::max(farthest, std::hypot(x - target_x, y - target_y));
+        px = x; py = y;
+    }
+    const auto* state = s.component_manager().get_component<Aircraft>(fighter);
+    check(state && state->status == Aircraft::Status::AIRBORNE, "ordered fighter stays in flight");
+    check(!ever_stopped, "airborne fighter never stands still");
+    check(farthest > 400.0f && farthest < 6000.0f, "fighter circles widely around the ordered spot");
+}
+
+TEST(commands_aircraft_returns_to_airfield_before_fuel_runs_out) {
+    Simulation s;
+    const float ax = -15500.0f, ay = 1000.0f;
+    const auto fighter = landed_ferry_fighter(s, ax, ay);
+    check(fighter != INVALID_ENTITY, "bingo test has a landed fighter");
+    auto* state = s.component_manager().get_component<Aircraft>(fighter);
+    check(state && state->fuel >= state->max_fuel, "landing refuels the aircraft");
+    state->fuel = state->max_fuel * 0.25f;
+    s.move_unit(fighter, ax + 9000.0f, ay);
+    bool landed = false, crashed = false, took_off = false;
+    float farthest = 0.0f;
+    for (int tick = 0; tick < 20 * 900 && !landed; ++tick) {
+        s.update(50.0f);
+        state = s.component_manager().get_component<Aircraft>(fighter);
+        if (!state) { crashed = true; break; }
+        if (state->status == Aircraft::Status::AIRBORNE) took_off = true;
+        farthest = std::max(farthest, std::hypot(s.get_unit_x(fighter) - ax, s.get_unit_y(fighter) - ay));
+        landed = took_off && state->status == Aircraft::Status::ON_GROUND;
+    }
+    check(!crashed, "aircraft is not lost to fuel exhaustion");
+    check(landed, "low-fuel aircraft lands back on the friendly airfield");
+    check(farthest > 500.0f, "aircraft actually flew out before turning back");
+    check(state && state->fuel > state->max_fuel * 0.9f, "airfield refuels the returned aircraft");
+}
 TEST(combat_projectile_pool_recycles_and_hits_between_ticks) {
     SpatialGrid grid(10); ComponentManager components;
     components.add_component(EntityId{1}, Position{5,0,0});
@@ -777,9 +878,12 @@ TEST(harvest_command_creates_extractor_and_harvester_component) {
     
     check(s.issue_harvest_commands({unit_id}, FactionId::ELITE_PRECISION, 50.0f, 50.0f) == 1, "harvest command accepted");
     s.update(50);
+    check(s.component_manager().get_component<Harvester>(unit_id) == nullptr, "the site is not taken while the unit is still 70 m away");
+    for (int tick = 0; tick < 20 * 60 && !s.component_manager().get_component<Harvester>(unit_id); ++tick) s.update(50);
     
     auto* harvester = s.component_manager().get_component<Harvester>(unit_id);
-    check(harvester != nullptr, "unit has Harvester component after harvest command");
+    check(harvester != nullptr, "unit has Harvester component once it reaches the site");
+    check(std::hypot(s.get_unit_x(unit_id) - 50.0f, s.get_unit_y(unit_id) - 50.0f) <= kSiteCaptureRadius, "and it is at the site");
     
     auto* position = s.component_manager().get_component<Position>(unit_id);
     check(position != nullptr, "unit has Position component");
@@ -790,24 +894,39 @@ TEST(harvest_command_creates_extractor_and_harvester_component) {
 
 TEST(resource_sites_transfer_shared_materials_and_can_be_destroyed) {
     Simulation s; s.start();
+    // The units now drive to the site, so keep the AI from spending meanwhile.
+    s.enable_ai(false);
     const auto elite = s.create_faction_base(FactionId::ELITE_PRECISION, -100, 0);
     const auto mass = s.create_faction_base(FactionId::MASS_WARFARE, 100, 0);
     s.production_manager().add_resource_node(900, ResourceNode{0, 0, 1000});
     const float elite_before = s.production_manager().storages().at(elite).metal_storage;
     const float mass_before = s.production_manager().storages().at(mass).metal_storage;
+    // A site changes hands when a unit reaches it, so each side sends one.
+    const auto elite_unit = s.create_unit(-60, 0).id;
+    s.set_unit_faction(elite_unit, FactionId::ELITE_PRECISION);
+    const auto mass_unit = s.create_unit(60, 0).id;
+    s.set_unit_faction(mass_unit, FactionId::MASS_WARFARE);
+    const auto owner = [&s]() { return s.material_sites().at(0).owner; };
 
-    check(s.issue_harvest_commands({elite}, FactionId::ELITE_PRECISION, 0, 0) == 1,
-          "commander claims unowned material facility");
+    check(s.issue_harvest_commands({elite_unit}, FactionId::ELITE_PRECISION, 0, 0) == 1,
+          "a unit is sent to claim the unowned material facility");
+    s.update(50);
+    check(owner() == -1 && s.material_sites().at(0).capturing, "the site is not claimed by the order alone");
+    check(s.production_manager().storages().at(elite).metal_storage == elite_before, "and pays nothing yet");
+    for (int tick = 0; tick < 20 * 30 && owner() != 0; ++tick) s.update(50);
+    check(owner() == 0, "the site is claimed when the unit arrives");
     s.update(50);
     check(s.production_manager().storages().at(elite).metal_storage > elite_before,
           "claimed site increases the single Materials balance");
     check(s.production_manager().storages().at(mass).metal_storage == mass_before,
           "other resource categories are not tracked as separate site balances");
 
-    check(s.issue_harvest_commands({mass}, FactionId::MASS_WARFARE, 0, 0) == 1,
-          "enemy commander may capture material facility");
+    check(s.issue_harvest_commands({mass_unit}, FactionId::MASS_WARFARE, 0, 0) == 1,
+          "an enemy unit may capture material facility");
+    for (int tick = 0; tick < 20 * 30 && owner() != 1; ++tick) s.update(50);
+    const float mass_captured = s.production_manager().storages().at(mass).metal_storage;
     s.update(50);
-    check(s.production_manager().storages().at(mass).metal_storage > mass_before,
+    check(owner() == 1 && s.production_manager().storages().at(mass).metal_storage > mass_captured,
           "captured site routes Materials to its new owner");
     check(s.destroy_resource_site(elite, 0, 0), "commander can destroy a material facility");
     check(s.production_manager().resource_nodes().empty() && s.production_manager().extractors().empty(),
@@ -927,4 +1046,137 @@ TEST(unit_route_query_reports_the_corners_the_unit_drives_through) {
     check(queried.get_unit_x(queried_tank) == untouched.get_unit_x(untouched_tank) &&
           queried.get_unit_y(queried_tank) == untouched.get_unit_y(untouched_tank),
           "route queries leave the simulation unchanged");
+}
+
+TEST(commands_fighter_approach_keeps_forward_speed_turns_gradually_and_rolls_on_main_runway) {
+    for (const float sign : {-1.0f, 1.0f}) {
+        Simulation s;
+        s.configure_world_size(40000.0f, 40000.0f);
+        s.start();
+        const float ax = -15500.0f, ay = sign * 1000.0f;
+        const auto base = s.create_faction_base(FactionId::ELITE_PRECISION, ax, ay);
+        s.territorial_control_manager().add_installation(ax, ay, InstallationType::AIRFIELD, FactionId::ELITE_PRECISION);
+        check(s.issue_build_commands({base}, FactionId::ELITE_PRECISION, ax, ay,
+              static_cast<uint8_t>(UnitType::ELITE_T1_FIGHTER)) == 1, "real fighter order accepted");
+        EntityId fighter = INVALID_ENTITY;
+        float previous_x = 0, previous_y = 0, previous_heading = 0, previous_altitude = 160, previous_bank = 0;
+        bool saw_descent = false, saw_roll = false, landed = false;
+        for (int tick = 0; tick < 20*300 && !landed; ++tick) {
+            s.update(50);
+            if (fighter == INVALID_ENTITY) {
+                const auto planes = s.component_manager().entities_with<Aircraft>(s.get_entity_list());
+                if (planes.empty()) continue;
+                fighter = planes.front();
+                previous_x = s.get_unit_x(fighter);
+                previous_y = s.get_unit_y(fighter);
+                previous_heading = s.get_unit_heading(fighter);
+                check((previous_y-ay)*sign >= 4400, "fighter enters far north or south of its airfield");
+                continue;
+            }
+            float altitude = -1, pitch = 0, bank = 0;
+            check(s.get_aircraft_approach_pose(fighter, altitude, pitch, bank), "native approach remains available through landing");
+            const float x = s.get_unit_x(fighter), y = s.get_unit_y(fighter);
+            const float heading = s.get_unit_heading(fighter);
+            const float step = std::hypot(x-previous_x, y-previous_y);
+            if (step > 6.1f) throw std::runtime_error("approach jump step="+std::to_string(step)+" tick="+std::to_string(tick)+" x="+std::to_string(x)+" y="+std::to_string(y)+" altitude="+std::to_string(altitude));
+            if (!saw_roll) check(std::abs(std::remainder(heading-previous_heading, 2.0f*3.141592654f)) < 0.01f,
+                                 "flight heading changes less than 0.57 degrees per native tick");
+            check(altitude <= previous_altitude + 0.01f, "no vertical takeoff during landing");
+            check(std::abs(bank-previous_bank) < 0.02f, "bank eases through the turn and levels before final");
+            if (altitude > 0.1f) check(step >= 3.3f, "winged aircraft keeps forward airspeed while above ground");
+            if (altitude < 150 && altitude > 1) {
+                saw_descent = true;
+                check(std::abs(x-(ax+kAirfieldRunwayOffsetX)) < 0.01f, "descent is on the large runway centreline, never taxiway");
+                check(std::abs(std::sin(heading)) < 0.001f, "aircraft aligns north/south before descent");
+            }
+            if (altitude == 0.0f && step > 0.1f && std::abs(x-(ax+kAirfieldRunwayOffsetX)) < 0.01f) {
+                saw_roll = true;
+                check(std::abs(y-ay) <= 300, "ground rollout and taxi exit stay within the long runway");
+            }
+            const auto* state = s.component_manager().get_component<Aircraft>(fighter);
+            landed = state && state->status == Aircraft::Status::ON_GROUND;
+            previous_x=x; previous_y=y; previous_heading=heading; previous_altitude=altitude; previous_bank=bank;
+        }
+        check(landed && saw_descent && saw_roll, "real fighter completes flying descent and forward rollout");
+        const float parked_heading = s.get_unit_heading(fighter);
+        for (int i=0;i<20;++i) s.update(50);
+        check(std::abs(s.get_unit_heading(fighter)-parked_heading) < 0.001f, "parked aircraft retains runway heading");
+        check(std::hypot(s.get_unit_x(fighter)-(ax+43.0f),s.get_unit_y(fighter)-(ay-94.0f))<0.02f,
+              "fighter rests in its apron parking slot");
+        s.reset();
+        float reset_altitude, reset_pitch, reset_bank;
+        check(!s.get_aircraft_approach_pose(fighter, reset_altitude, reset_pitch, reset_bank), "reset clears retained landing poses");
+    }
+}
+
+TEST(commands_multiple_fighters_taxi_to_distinct_apron_slots) {
+    Simulation s;
+    s.configure_world_size(40000.0f, 40000.0f);
+    s.start();
+    s.enable_ai(false);
+    const float ax = -15500.0f, ay = 1000.0f;
+    const auto base = s.create_faction_base(FactionId::ELITE_PRECISION, ax, ay);
+    s.territorial_control_manager().add_installation(ax, ay, InstallationType::AIRFIELD, FactionId::ELITE_PRECISION);
+    for (int i = 0; i < 2; ++i)
+        check(s.issue_build_commands({base}, FactionId::ELITE_PRECISION, ax, ay,
+              static_cast<uint8_t>(UnitType::ELITE_T1_FIGHTER)) == 1, "both fighters are ordered");
+    bool both_parked = false;
+    for (int tick = 0; tick < 20 * 700 && !both_parked; ++tick) {
+        s.update(50.0f);
+        const auto planes = s.component_manager().entities_with<Aircraft>(s.get_entity_list());
+        if (planes.size() != 2) continue;
+        both_parked = std::all_of(planes.begin(), planes.end(), [&](EntityId id) {
+            const auto* state = s.component_manager().get_component<Aircraft>(id);
+            return state && state->status == Aircraft::Status::ON_GROUND;
+        });
+    }
+    check(both_parked, "both fighters finish landing and taxiing");
+    const auto planes = s.component_manager().entities_with<Aircraft>(s.get_entity_list());
+    if (planes.size() == 2) {
+        const float gap = std::hypot(s.get_unit_x(planes[0]) - s.get_unit_x(planes[1]),
+                                     s.get_unit_y(planes[0]) - s.get_unit_y(planes[1]));
+        check(gap >= 27.0f, "parked fighters occupy separate apron positions");
+        check(std::abs(s.get_unit_x(planes[0]) - (ax + 43.0f)) < 1.0f &&
+              std::abs(s.get_unit_x(planes[1]) - (ax + 43.0f)) < 1.0f,
+              "the first two slots are on the paved apron");
+    }
+}
+
+TEST(game_speed_scales_wall_time_without_changing_fixed_tick_rules) {
+    for (const float speed : {0.25f,0.5f,0.75f,1.0f,1.25f,1.5f,1.75f}) {
+        Simulation actual, reference;
+        actual.start(); reference.start(); actual.enable_ai(false); reference.enable_ai(false);
+        const auto unit = actual.create_unit_with_type(0,0,UnitType::ELITE_MAIN_BATTLE_TANK,FactionId::ELITE_PRECISION);
+        const auto reference_unit = reference.create_unit_with_type(0,0,UnitType::ELITE_MAIN_BATTLE_TANK,FactionId::ELITE_PRECISION);
+        actual.move_unit(unit,100,0); reference.move_unit(reference_unit,100,0);
+        check(actual.set_game_speed(speed), "single-player accepts every speed step");
+        for(int i=0;i<100;++i) actual.update(10);
+        const int ticks = static_cast<int>(20*speed);
+        for(int i=0;i<ticks;++i) reference.update(50);
+        check(actual.simulation_tick() == static_cast<uint32_t>(ticks), "wall time produces the requested native tick rate");
+        check(actual.state_hash() == reference.state_hash(), "scaled time produces identical fixed-tick movement/state");
+        actual.reset(); actual.enable_ai(false);
+        check(actual.game_speed() == 1.0f, "fresh games always start at 100 percent");
+        actual.set_game_speed(speed);
+        for(int i=0;i<4;++i) actual.update(250);
+        check(actual.simulation_tick() == static_cast<uint32_t>(ticks), "long frames preserve fractional scaled ticks without time loss");
+    }
+}
+
+TEST(game_speed_rejects_invalid_values_and_locks_native_multiplayer_to_normal) {
+    Simulation sim; sim.start(); sim.enable_ai(false);
+    check(sim.set_game_speed(0.75f), "valid speed accepted");
+    for(const float invalid : {0.0f,-1.0f,0.24f,1.76f,std::numeric_limits<float>::infinity(),std::numeric_limits<float>::quiet_NaN()}) {
+        check(!sim.set_game_speed(invalid), "invalid speed rejected");
+        check(sim.game_speed()==0.75f, "invalid speed leaves current pacing intact");
+    }
+    check(sim.set_game_speed(1.75f), "offline game can speed up");
+    check(sim.network_manager().listen(0), "real native multiplayer listener opens");
+    check(sim.game_speed()==1.0f, "hosting immediately locks effective speed to normal");
+    check(!sim.set_game_speed(0.25f), "native API cannot slow multiplayer");
+    check(!sim.set_game_speed(1.75f), "native API cannot speed up multiplayer");
+    for(int i=0;i<4;++i) sim.update(250);
+    check(sim.simulation_tick()==20, "multiplayer clock remains exactly normal speed");
+    sim.network_manager().reset();
+    check(sim.game_speed()==1.0f, "leaving multiplayer does not restore an old fast speed");
 }

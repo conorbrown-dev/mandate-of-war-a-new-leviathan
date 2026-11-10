@@ -20,6 +20,22 @@ func _run() -> void:
 	print("native state units=%d result=%d" % [view.state.get("units", []).size(), int(view.state.get("result", -2))])
 	check(int(view.state.get("result", -2)) == -1 and view.state.get("units", []).size() >= 24, "native route enters the authored two-landmass match with fog-limited state")
 	check(view.state.has("materials") and view.state.has("fuel") and view.state.has("power_reserve_mw") and not view.state.has("research"), "native route exposes canonical tactical Materials, Fuel, and Power without a Research balance")
+	var resources: Array = view.state.get("resources", [])
+	var markers: Array = view.last_resource_markers
+	check(resources.size() == 2 and markers.size() == resources.size(), "native map draws every authored resource node")
+	for resource: Dictionary in resources:
+		var marker: Dictionary = {}
+		for candidate: Dictionary in markers:
+			if int(candidate.id) == int(resource.id):
+				marker = candidate
+				break
+		var expected_kind := "materials" if int(resource.type) == 0 else "fuel" if int(resource.type) == 1 else "unknown"
+		check(not marker.is_empty() and String(marker.kind) == expected_kind and
+			(marker.point as Vector2).distance_to(view._world_to_screen(float(resource.x), float(resource.y))) < 0.01,
+			"native resource %d has a correctly placed %s map marker" % [int(resource.id), expected_kind])
+	check(markers.any(func(marker: Dictionary) -> bool: return String(marker.kind) == "materials") and
+		markers.any(func(marker: Dictionary) -> bool: return String(marker.kind) == "fuel"),
+		"native map distinguishes Materials from Fuel")
 	var aircraft_id := 0
 	var vessel_id := 0
 	for unit in view.state.get("units", []):
@@ -95,7 +111,10 @@ func _run() -> void:
 		view.state = view.extension.call("skirmish_state")
 	check(int(view.state.get("result", -1)) >= 0, "native route reaches a deterministic terminal result")
 	view._complete_match()
-	check(view.result_panel.visible and "DRAW" in view.result_label.text, "native route presents an unambiguous match result")
+	print("native final result=%d label=%s" % [int(view.state.get("result", -1)), view.result_label.text])
+	var result := int(view.state.get("result", -1))
+	check(view.result_panel.visible and result in [0, 1, 2] and ["VICTORY", "DEFEAT", "DRAW"][result] in view.result_label.text,
+		"native route presents the result it reached after movement and combat")
 	var replay_error := String(view.extension.call("skirmish_verify_replay", "user://matches/latest-g08.replay"))
 	check(replay_error.is_empty(), "native route saves and verifies its completed replay under user storage")
 	var summary: Dictionary = view.extension.call("skirmish_stats_summary")

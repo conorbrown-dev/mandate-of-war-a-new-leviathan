@@ -25,11 +25,16 @@ needed unless it needs a new `visual_id`, which is defined in
 | `faction` | Owning faction key |
 | `material_cost`, `build_time_seconds`, `hp`, `speed` | Core stats |
 | `view_range` | Sight. A unit only fires at what it can see |
-| `weapon` | `damage`, `range`, `fire_rate` (seconds between shots), `projectile_speed`, `aoe_radius`, `lead_bias` |
+| `intel_range` | Optional radar/intel radius in metres, 0–10,000; default 0 disables it. Terrain blocks ground contacts; airborne contacts use the sky layer. Grants anonymous coarse contacts only, never visual sight, identity or firing permission |
+| `weapon` | `damage`, `range`, `fire_rate` (seconds between shots), `projectile_speed`, `aoe_radius`, `lead_bias`, and `targets`: which of `"ground"` and `"air"` it can engage, as the real system can (a tank gun cannot engage a jet in flight; a surface-to-air missile cannot engage a tank). An empty list means unarmed. Default `["ground"]`. An aircraft is an air target from take-off to touch-down |
 | `capabilities` | Territorial actions |
 | `construction_unit` | True for units that need a buildable site |
-| `nato_symbol` | Build catalog symbol |
-| `strategic_icon` | One of `mbt`, `artillery`, `air_defense`, `swarm`, `assault`, `missile`, `engineer`, `fighter`, `vtol`, `boat` |
+| `fuel_per_km` | Fuel a ground vehicle draws from its side's store per kilometre driven, when the scenario sets `ground_vehicles_burn_fuel`. Default 0 |
+| `footprint_radius` | Ground units: half the hull length in metres, 0.5–50, default 4. Separation keeps two units' centres at least the sum of their radii apart |
+| `cargo_transport` | True for the unarmed aircraft that flies a side's fuel shipments in. It cannot be ordered and is left out of Strategic Command. Default false |
+| `airdrop` | True for light ground units a transport can drop by parachute (paratroop drops). Default false |
+| `nato_symbol` | Build catalog symbol: an id in the UI NATO icon registry (`assets/ui/symbols/nato/index.json`) |
+| `strategic_icon` | APP-6 function drawn on the map-scale symbol (`nato_map_symbol.gd`). One of `armour`, `sp_artillery`, `air_defense`, `missile`, `recon`, `engineer` (land), `fighter`, `recon_aircraft`, `cargo_aircraft`, `attack_helicopter` (air), `naval_surface` (sea). The frame comes from this dimension and the viewer's affiliation |
 
 Set `view_range` at least as high as `weapon.range`, or the extra range is unused.
 
@@ -86,6 +91,10 @@ Each finished match is written as JSON to `user://match_records/` (or
 - `commands`: every order that ran, as `[tick, faction, type, entity, x, y, extra]`.
   `x` and `y` are the encoded command values; divide by `command_position_scale`
   for meters.
+  A BUILD (type 3) with bit `0x40000000` in `extra` orders a structure (type in
+  the low byte) from a construction unit; bit `0x20000000` orders a paratroop
+  drop of that unit type at `x`, `y` from the command post. MOVE uses bit
+  `0x80000000` for a queued waypoint.
 - `actions`: calls that changed the match outside the command queue, such as
   queueing a structure or calling in a delivery, with their arguments.
 - `state_hashes`: a hash of the simulation every second. A playback must match

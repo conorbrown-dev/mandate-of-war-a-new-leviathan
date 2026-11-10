@@ -1,0 +1,28 @@
+{
+  "version": 1,
+  "about": "Presentation text for build menu hover descriptions. Units are keyed by the unit type key in data/unit_faction_stats.json; structures by structure type (0 FORWARD_OUTPOST, 1 RADAR_MAST, 2 AIRFIELD, 3 FLOODLIGHT). Rules stay native; this text describes them.",
+  "units": {
+    "ELITE_MAIN_BATTLE_TANK": "Main battle tank and the toughest Elite ground unit. Engages ground targets only, out to 115 m; it cannot fire at aircraft.",
+    "ELITE_LONG_RANGE_ARTILLERY": "Long-range artillery. Engages ground targets only, out to 195 m, the longest reach of any Elite ground unit, but less armour than the tank.",
+    "ELITE_ANTI_AIR": "Mobile anti-air vehicle. Engages aircraft only, out to 100 m; it cannot fire at ground units.",
+    "MASS_SWARM_TANK": "Light, cheap tank meant to be fielded in numbers. Engages ground targets only, out to 90 m.",
+    "MASS_ASSAULT_VEHICLE": "Assault vehicle. Engages ground targets only, out to 105 m. Paradrop capable: it can drop by parachute onto ground you can see, with no airfield.",
+    "MASS_ANTI_AIR": "Mobile anti-air vehicle. Engages aircraft only, out to 95 m; it cannot fire at ground units.",
+    "INDUSTRIAL_MBT": "Main battle tank. Engages ground targets only, out to 100 m; it cannot fire at aircraft.",
+    "INDUSTRIAL_MISSILE_PLATFORM": "Missile platform. Engages ground targets only, out to 170 m; it cannot fire at aircraft.",
+    "INDUSTRIAL_ENGINEERING": "Construction unit that builds structures and earthworks. Lightly armed: engages ground targets only, out to 50 m.",
+    "ELITE_T1_FIGHTER": "Multirole fighter. Engages both ground and air targets, out to 120 m. Needs a friendly airfield: it is ferried in and lands on the runway.",
+    "ELITE_T1_VTOL": "Vertical take-off strike aircraft. Engages both ground and air targets, out to 80 m. Needs no runway.",
+    "ELITE_SCOUT_CAR": "Fast scout car with 650 m of sight. Engages ground targets only, out to 60 m. Paradrop capable: it can drop by parachute onto ground you can see, with no airfield.",
+    "ELITE_RECON_PLANE": "Unarmed reconnaissance aircraft with 1,600 m of sight. Plot its flight on the map: it flies in from off the map, watches the area for 45 s, then leaves. Needs no airfield.",
+    "MASS_SCOUT_BIKE": "Fast scout bike with 550 m of sight. Engages ground targets only, out to 60 m. Paradrop capable: it can drop by parachute onto ground you can see, with no airfield.",
+    "MASS_RECON_PLANE": "Unarmed reconnaissance aircraft with 1,400 m of sight. Plot its flight on the map: it flies in from off the map, watches the area for 45 s, then leaves. Needs no airfield.",
+    "ELITE_PATROL_BOAT": "Naval patrol boat. Operates on water. Engages ground targets only, out to 90 m; it cannot fire at aircraft."
+  },
+  "structures": {
+    "FORWARD_OUTPOST": "Forward observation post. Gives 400 m of sight from a 20 m vantage point. It has no weapons.",
+    "RADAR_MAST": "Tall sensor mast. Gives 3,000 m of sight from 40 m up, seeing over rises that hide ground units. It has no weapons.",
+    "AIRFIELD": "Runway, hangar and tower on a 250 x 750 m site. Forces ordered from Strategic Command land beside it, fuel shipments fly in to it, and runway aircraft need it. Gives 500 m of sight.",
+    "FLOODLIGHT": "Lights the ground within 360 m by day and night, and gives 300 m of sight. It has no weapons."
+  }
+}
