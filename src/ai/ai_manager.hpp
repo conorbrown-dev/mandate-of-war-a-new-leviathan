@@ -49,6 +49,14 @@ public:
     bool is_committed(EntityId unit) const { return committed_.contains(unit); }
     int scout_count() const;
     int recon_flights_ordered() const { return recon_flights_ordered_; }
+    // Forces arrive by transport, so the AI needs its own airfield to receive
+    // them, built by its Field Engineer at the ordinary price, as the player does.
+    int airfield_orders() const { return airfield_orders_; }
+    // Fuel runs the army once ground vehicles burn it. Below this the AI asks
+    // for a shipment and looks to depots before Materials sites.
+    static constexpr float kLowFuel = 1500.0f;
+    int fuel_shipments_ordered() const { return fuel_shipments_ordered_; }
+    int paradrops_ordered() const { return paradrops_ordered_; }
 
     // Style and difficulty. Both stay in force across reset() until changed.
     void set_doctrine(const AIDoctrine& doctrine);
@@ -93,6 +101,12 @@ private:
     std::unordered_set<EntityId> arrived_scouts_;
     uint32_t next_flight_tick_ = 0;
     int recon_flights_ordered_ = 0;
+    int airfield_orders_ = 0;
+    int fuel_shipments_ordered_ = 0;
+    uint32_t next_fuel_order_tick_ = 0;
+    uint32_t next_airfield_tick_ = 0;
+    uint32_t next_paradrop_tick_ = 0;
+    int paradrops_ordered_ = 0;
     // Sites the AI cannot know about yet, and sites it has seen in enemy hands.
     bool sites_surveyed_ = false;
     std::unordered_set<EntityId> unknown_sites_;
@@ -125,6 +139,14 @@ private:
     void update_scouts();
     void update_sweep();
     void produce_for_assault(EntityId base);
+    void build_airfield(EntityId base);
+    void order_fuel(EntityId base);
+    void order_paradrop(EntityId base);
+    float own_fuel() const;
+    bool holding_for_fuel(float price) const;
+    bool find_airfield_site(EntityId base, float& site_x, float& site_y) const;
+    // False when the transport rule would refuse this unit now.
+    bool can_receive(UnitType type) const;
     size_t stalest_sector(float x, float y, EntityId scout = INVALID_ENTITY) const;
     size_t plot_recon_flight(float view_range, float base_x, float base_y);
     bool is_recon_asset(EntityId unit) const;

@@ -114,7 +114,8 @@ void order(Simulation& simulation, const std::vector<Fielded>& force, const std:
                 target_y = other->y;
             }
         }
-        const bool moving = simulation.has_move_target(id);
+        // A unit stepping aside for a neighbour is not on an order: let it finish.
+        const bool moving = simulation.has_move_target(id) && !simulation.is_making_room(id);
         if (nearest <= weapon->range * 0.92f) {
             if (moving) simulation.issue_commands({id}, faction, CommandType::STOP);
         } else if (nearest < std::numeric_limits<float>::max()) {

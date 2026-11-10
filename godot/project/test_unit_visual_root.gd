@@ -15,6 +15,7 @@ func _run() -> void:
 	assert(wrapper.get_node("ModelRoot").get_child_count() > 0)
 	wrapper.apply_simulation_transform(Transform3D(Basis.IDENTITY, Vector3(17, 2, -8)))
 	assert(wrapper.global_position == Vector3(17, 2, -8))
+	wrapper.set_gameplay_ranges(115.0, 150.0, 450.0)
 	wrapper.set_selected(true)
 	assert(wrapper.get_node("VisibilityHex").visible and wrapper.get_node("AttackHex").visible)
 	assert(wrapper.hardpoint_root().name == "OptionalHardpointMarkers")
@@ -40,5 +41,39 @@ func _run() -> void:
 	root.add_child(fallback)
 	assert(not fallback.configure(registry, "missing.visual", Color.BLUE))
 	assert(fallback.get_node("ModelRoot").get_child(0).name == "DevelopmentFallbackMesh")
-	print("UNIT_VISUAL_ROOT checks=18 failures=0")
+	# The F-15C lit black: a mirrored transform and a quarter of its triangles
+	# wound against their normals. Built through the real pipeline it must have
+	# neither, so double-sided drawing never flips a sunlit face's normal.
+	var eagle = VisualRootScript.new()
+	root.add_child(eagle)
+	assert(eagle.configure(registry, "visual.industrial.fighter.f15c.prototype", Color.BLUE))
+	var eagle_meshes: Array = eagle.get_node("ModelRoot").find_children("*", "MeshInstance3D", true, false)
+	assert(not eagle_meshes.is_empty())
+	var mirrored := 0
+	var triangles := 0
+	var against := 0
+	for mesh_instance in eagle_meshes:
+		if (mesh_instance as MeshInstance3D).transform.basis.determinant() < 0.0:
+			mirrored += 1
+		for surface in range(mesh_instance.mesh.get_surface_count()):
+			var arrays: Array = mesh_instance.mesh.surface_get_arrays(surface)
+			var vertices: PackedVector3Array = arrays[Mesh.ARRAY_VERTEX]
+			var normals: PackedVector3Array = arrays[Mesh.ARRAY_NORMAL]
+			var indices: PackedInt32Array = arrays[Mesh.ARRAY_INDEX]
+			for start in range(0, indices.size() - 2, 3):
+				var a := indices[start]
+				var b := indices[start + 1]
+				var c := indices[start + 2]
+				var facing := (vertices[c] - vertices[a]).cross(vertices[b] - vertices[a])
+				if facing.length() == 0.0:
+					continue
+				triangles += 1
+				# Edge-on triangles (normals in their own plane) face neither way;
+				# only a clear disagreement flips lighting.
+				var sum := normals[a] + normals[b] + normals[c]
+				if facing.dot(sum) < -0.01 * facing.length() * sum.length():
+					against += 1
+	assert(mirrored == 0, "the F-15C carries no mirrored transform (%d meshes do)" % mirrored)
+	assert(triangles > 3000 and against == 0, "every F-15C triangle winds with its normals (%d of %d do not)" % [against, triangles])
+	print("UNIT_VISUAL_ROOT checks=22 failures=0")
 	quit()

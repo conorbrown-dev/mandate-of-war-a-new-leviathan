@@ -21,6 +21,8 @@ var help: Label
 var result_panel: PanelContainer
 var result_label: Label
 var screenshot_saved := false
+# The last map draw's native resource records, exposed to the map contract.
+var last_resource_markers: Array[Dictionary] = []
 
 func _ready() -> void:
 	set_process(true)
@@ -146,6 +148,7 @@ func _draw() -> void:
 		var top_left := _world_to_screen(land.position.x, land.position.y)
 		var bottom_right := _world_to_screen(land.end.x, land.end.y)
 		draw_rect(Rect2(top_left, bottom_right - top_left), Color("#254b2b"), true)
+	_draw_resource_markers()
 	for projectile in state.get("projectiles", []):
 		var point := _world_to_screen(float(projectile.get("x", 0.0)), float(projectile.get("y", 0.0)))
 		draw_circle(point, 2.5, Color("#ffd166"))
@@ -167,6 +170,28 @@ func _draw() -> void:
 		draw_rect(Rect2(point + Vector2(-5, 7), Vector2(10 * health, 2)), Color("#7ad99b"), true)
 	if not load_error.is_empty():
 		draw_string(ThemeDB.fallback_font, rect.get_center(), load_error, HORIZONTAL_ALIGNMENT_CENTER, -1, 18, Color.RED)
+
+func _draw_resource_markers() -> void:
+	last_resource_markers.clear()
+	for resource: Dictionary in state.get("resources", []):
+		var kind := "materials" if int(resource.get("type", -1)) == 0 else "fuel" if int(resource.get("type", -1)) == 1 else ""
+		if kind.is_empty():
+			continue
+		var point := _world_to_screen(float(resource.get("x", 0.0)), float(resource.get("y", 0.0)))
+		var depleted := bool(resource.get("depleted", false))
+		var fill := Color("#777e82") if depleted else Color("#ffd27a")
+		if kind == "fuel":
+			draw_circle(point, 10.0, fill)
+			draw_circle(point, 10.0, Color("#17252a"), false, 1.5, true)
+			draw_colored_polygon(PackedVector2Array([point + Vector2(0, -6), point + Vector2(-4, 3), point + Vector2(4, 3)]), Color("#17252a"))
+		else:
+			draw_rect(Rect2(point - Vector2(9, 9), Vector2(18, 18)), fill, true)
+			draw_rect(Rect2(point - Vector2(9, 9), Vector2(18, 18)), Color("#17252a"), false, 1.5)
+			draw_rect(Rect2(point + Vector2(-5, 1), Vector2(10, 3)), Color("#17252a"), true)
+			draw_rect(Rect2(point + Vector2(-3, -4), Vector2(6, 3)), Color("#17252a"), true)
+		var label := ("FUEL" if kind == "fuel" else "MATERIALS") + (" EMPTY" if depleted else "")
+		draw_string(ThemeDB.fallback_font, point + Vector2(0, -14), label, HORIZONTAL_ALIGNMENT_CENTER, -1, 11, fill)
+		last_resource_markers.append({"id": int(resource.get("id", 0)), "kind": kind, "point": point, "depleted": depleted})
 
 func _unhandled_input(event: InputEvent) -> void:
 	if extension == null or not load_error.is_empty() or int(state.get("result", -1)) >= 0:

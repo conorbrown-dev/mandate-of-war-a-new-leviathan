@@ -202,6 +202,45 @@ TEST(combat_manager_opposing_units_fire_automatically) {
     }
 }
 
+TEST(airborne_fighter_fires_at_ground_and_air_targets) {
+    using namespace rts;
+    for (const bool airborne_target : {false, true}) {
+        Simulation sim;
+        sim.configure_world_size(40000.0f, 40000.0f);
+        sim.start();
+        sim.enable_ai(false);
+        const auto fighter = sim.create_unit_with_type(0.0f, 0.0f,
+            UnitType::ELITE_T1_FIGHTER, FactionId::ELITE_PRECISION);
+        const auto target = sim.create_unit_with_type(70.0f, 0.0f,
+            airborne_target ? static_cast<UnitType>(18) : UnitType::MASS_SWARM_TANK,
+            FactionId::MASS_WARFARE);
+        if (fighter == INVALID_ENTITY || target == INVALID_ENTITY)
+            throw std::runtime_error("Fighter combat fixture failed to spawn");
+        auto* fighter_aircraft = sim.component_manager().get_component<Aircraft>(fighter);
+        if (!fighter_aircraft) throw std::runtime_error("Fighter lacks aircraft state");
+        fighter_aircraft->status = Aircraft::Status::AIRBORNE;
+        auto* weapon = sim.component_manager().get_component<Weapon>(fighter);
+        if (!weapon || !weapon->hits_ground || !weapon->hits_air)
+            throw std::runtime_error("Fighter weapon is not configured for both domains");
+        weapon->cooldown_remaining = 0.0f;
+        if (airborne_target) {
+            auto* target_aircraft = sim.component_manager().get_component<Aircraft>(target);
+            if (!target_aircraft) throw std::runtime_error("Air target lacks aircraft state");
+            target_aircraft->status = Aircraft::Status::AIRBORNE;
+        }
+        auto* health = sim.component_manager().get_component<Health>(target);
+        const float before = health->current;
+        sim.combat_manager().update(50.0f, sim.spatial_grid(), sim.component_manager());
+        if (sim.combat_manager().projectile_manager().total_spawned() == 0)
+            throw std::runtime_error(airborne_target ? "Fighter did not fire at an aircraft" : "Fighter did not fire at a ground unit");
+        for (int tick = 0; tick < 20 && health->current == before; ++tick)
+            sim.combat_manager().projectile_manager().update(50.0f, sim.spatial_grid(), sim.component_manager());
+        if (health->current >= before)
+            throw std::runtime_error(airborne_target ? "Fighter did not damage an aircraft" : "Fighter did not damage a ground unit");
+        sim.stop();
+    }
+}
+
 TEST(combat_manager_empty_after_update) {
     using namespace rts;
     

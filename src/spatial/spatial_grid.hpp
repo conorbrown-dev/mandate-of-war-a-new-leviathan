@@ -34,6 +34,7 @@ struct UnitData {
     float speed;
     float view_range;
     int unit_type = -1;
+    float intel_range = 0.0f; // Unidentified contacts only; never grants sight.
 };
 
 // Lightweight deterministic ground-motion state; no rigid bodies required.
@@ -53,6 +54,31 @@ struct GroundSteering {
     // maneuvering below the speed where a driving-radius-only limit is useful.
     float maneuver_turn_rate = 0.0f;
     bool can_pivot_turn = false;
+    // Half the hull length; separation keeps centres this far plus the
+    // neighbour's radius apart.
+    float footprint_radius = 4.0f;
+    // Where the unit last finished a move. A moving unit whose destination is
+    // the same spot may stop when it touches this unit (crowded arrival).
+    bool has_settled_goal = false;
+    float settled_goal_x = 0.0f;
+    float settled_goal_y = 0.0f;
+    // A stopped unit that was overlapped drives a short way to a free spot (a
+    // real move order, so it turns and accelerates like any other drive). It
+    // is yielding until it arrives, is given another order, or times out; for
+    // a few ticks afterwards it is not asked to yield again.
+    bool yielding = false;
+    uint16_t yield_ticks_left = 0;
+    uint16_t yield_cooldown = 0;
+    // After a search for a free spot found none (a packed crowd), the unit is
+    // forced apart from its neighbours for a few ticks before searching again.
+    uint8_t yield_retry = 0;
+    // Where the unit stood when it first stepped aside. Once the way is clear
+    // it drives back, so a formation that a passing unit shouldered through
+    // closes up again. Given up after kYieldReturnWaitTicks if never clear.
+    bool yield_home_valid = false;
+    float yield_home_x = 0.0f;
+    float yield_home_y = 0.0f;
+    uint16_t yield_home_wait = 0;
 };
 
 class SpatialGrid {

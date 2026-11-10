@@ -4,6 +4,7 @@ extends Control
 
 const Tokens := preload("res://ui/theme/ui_tokens.gd")
 const MandatePanelScript := preload("res://ui/components/mandate_panel.gd")
+const KeycapScript := preload("res://ui/components/keycap.gd")
 const COLUMNS := 3
 
 var hotkey_manager: Node = null
@@ -42,7 +43,7 @@ func _build() -> void:
 		add_child(hotkey_manager)
 	_built = true
 	var backdrop := ColorRect.new()
-	backdrop.color = Color(Tokens.SURFACE_BASE, 0.55)
+	backdrop.color = Tokens.SURFACE_SCRIM
 	backdrop.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	backdrop.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(backdrop)
@@ -52,40 +53,51 @@ func _build() -> void:
 	add_child(center)
 
 	var panel: PanelContainer = MandatePanelScript.new()
-	panel.surface = "command"
+	panel.surface = "modal"
+	panel.rail_color = Tokens.ACCENT
 	panel.mouse_filter = Control.MOUSE_FILTER_STOP
 	center.add_child(panel)
 
-	var margin := MarginContainer.new()
-	for side in ["left", "right", "top", "bottom"]:
-		margin.add_theme_constant_override("margin_" + side, Tokens.SPACE_XL)
-	panel.add_child(margin)
-
 	var layout := VBoxContainer.new()
-	layout.add_theme_constant_override("separation", Tokens.SPACE_LG)
-	margin.add_child(layout)
+	layout.add_theme_constant_override("separation", 0)
+	panel.add_child(layout)
 
+	var header := _margin(Tokens.SPACE_XL, Tokens.SPACE_LG)
+	layout.add_child(header)
 	var title_row := HBoxContainer.new()
-	layout.add_child(title_row)
+	title_row.add_theme_constant_override("separation", Tokens.SPACE_SM)
+	header.add_child(title_row)
+	var titles := VBoxContainer.new()
+	titles.add_theme_constant_override("separation", 2)
+	titles.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	title_row.add_child(titles)
+	var eyebrow := Label.new()
+	eyebrow.text = "FIELD MANUAL"
+	eyebrow.theme_type_variation = "EyebrowLabel"
+	titles.add_child(eyebrow)
 	var title := Label.new()
-	title.text = "HOTKEYS"
-	title.add_theme_font_size_override("font_size", 20)
-	title.add_theme_color_override("font_color", Tokens.TEXT_PRIMARY)
-	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	title_row.add_child(title)
+	title.text = "CONTROLS"
+	title.theme_type_variation = "MajorHeading"
+	titles.add_child(title)
+	for key in ["F1", "ESC"]:
+		var cap := KeycapScript.make(key)
+		title_row.add_child(cap)
 	var hint := Label.new()
-	hint.text = "F1 OR ESC TO CLOSE"
-	hint.add_theme_font_size_override("font_size", 12)
-	hint.add_theme_color_override("font_color", Tokens.TEXT_MUTED)
+	hint.text = "CLOSE"
+	hint.theme_type_variation = "MutedLabel"
+	hint.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	title_row.add_child(hint)
+	layout.add_child(HSeparator.new())
 
+	var body := _margin(Tokens.SPACE_XL, Tokens.SPACE_LG)
+	layout.add_child(body)
 	var columns := HBoxContainer.new()
-	columns.add_theme_constant_override("separation", Tokens.SPACE_2XL)
-	layout.add_child(columns)
+	columns.add_theme_constant_override("separation", Tokens.SPACE_2XL + Tokens.SPACE_SM)
+	body.add_child(columns)
 	var column_boxes: Array[VBoxContainer] = []
 	for _index in range(COLUMNS):
 		var column := VBoxContainer.new()
-		column.add_theme_constant_override("separation", Tokens.SPACE_LG)
+		column.add_theme_constant_override("separation", Tokens.SPACE_XL)
 		column.alignment = BoxContainer.ALIGNMENT_BEGIN
 		columns.add_child(column)
 		column_boxes.append(column)
@@ -100,29 +112,60 @@ func _build() -> void:
 		heights[target] += section.hotkeys.size() + 2
 
 
+func _margin(horizontal: int, vertical: int) -> MarginContainer:
+	var margin := MarginContainer.new()
+	for side in ["left", "right"]:
+		margin.add_theme_constant_override("margin_" + side, horizontal)
+	for side in ["top", "bottom"]:
+		margin.add_theme_constant_override("margin_" + side, vertical)
+	return margin
+
+
+## The key column: each key or mouse button as its own cap, joined by + / or.
+func _keys(label: String) -> Control:
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", Tokens.SPACE_XS)
+	row.custom_minimum_size.x = 176
+	var alternatives := label.split(" / ")
+	for alt_index in range(alternatives.size()):
+		if alt_index > 0:
+			row.add_child(_joiner("/"))
+		var parts := alternatives[alt_index].split(" + ")
+		for part_index in range(parts.size()):
+			if part_index > 0:
+				row.add_child(_joiner("+"))
+			row.add_child(KeycapScript.make(parts[part_index].strip_edges().to_upper()))
+	return row
+
+
+func _joiner(text: String) -> Label:
+	var joiner := Label.new()
+	joiner.text = text
+	joiner.theme_type_variation = "MutedLabel"
+	joiner.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	return joiner
+
+
 func _section(category: String, hotkeys: Array) -> Control:
 	var box := VBoxContainer.new()
-	box.add_theme_constant_override("separation", Tokens.SPACE_XS)
+	box.add_theme_constant_override("separation", Tokens.SPACE_SM)
 	var heading := Label.new()
 	heading.text = category.to_upper()
-	heading.add_theme_font_size_override("font_size", 12)
-	heading.add_theme_color_override("font_color", Tokens.ACCENT)
+	heading.theme_type_variation = "EyebrowLabel"
 	box.add_child(heading)
 	var grid := GridContainer.new()
 	grid.columns = 2
 	grid.add_theme_constant_override("h_separation", Tokens.SPACE_MD)
-	grid.add_theme_constant_override("v_separation", Tokens.SPACE_XS)
+	grid.add_theme_constant_override("v_separation", Tokens.SPACE_SM)
 	box.add_child(grid)
 	for hotkey in hotkeys:
-		var key := Label.new()
-		key.text = String(hotkey.get("label", String(hotkey.get("key", "")).trim_prefix("KEY_")))
-		key.add_theme_font_size_override("font_size", 14)
-		key.add_theme_color_override("font_color", Tokens.TEXT_PRIMARY)
-		key.custom_minimum_size.x = 132
-		grid.add_child(key)
+		grid.add_child(_keys(String(hotkey.get("label", String(hotkey.get("key", "")).trim_prefix("KEY_")))))
 		var description := Label.new()
 		description.text = String(hotkey.get("description", ""))
-		description.add_theme_font_size_override("font_size", 14)
+		description.add_theme_font_size_override("font_size", Tokens.FONT_SM + 1)
 		description.add_theme_color_override("font_color", Tokens.TEXT_SECONDARY)
+		description.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+		description.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		description.custom_minimum_size.x = 300
 		grid.add_child(description)
 	return box

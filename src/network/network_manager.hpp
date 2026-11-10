@@ -59,6 +59,7 @@ public:
      bool listen(uint16_t port = TCP_PORT);
      bool accept();
      bool is_connected() const { return tcp_transport_.is_connected(); }
+     bool is_multiplayer_session() const { return multiplayer_session_; }
      
      void send_handshake(const ConnectionHandshake& handshake);
      bool receive_handshake(ConnectionHandshake& handshake);
@@ -82,6 +83,8 @@ public:
 
 private:
     Simulation* simulation_{nullptr};
+    // Remains a multiplayer session across transport disconnects, until reset.
+    bool multiplayer_session_ = false;
     uint32_t current_tick_{0};
     
     InputBuffer input_buffer_;

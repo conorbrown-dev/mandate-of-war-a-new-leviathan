@@ -262,6 +262,43 @@ TEST(a_slow_commander_orders_only_so_many_units_at_a_time) {
     verify(moving() == 6, "the rest are reached in later decisions");
 }
 
+TEST(the_ai_orders_a_paid_paradrop_only_onto_ground_it_currently_watches) {
+    Front front;
+    front.simulation.set_forces_by_transport(true);
+    front.ai().configure_assault(-2000.0f, -1000.0f, 2000.0f, 4000.0f, 100, 4, 200);
+    front.fund(20000.0f);
+    front.run(20);
+    verify(front.ai().paradrops_ordered() == 0, "no blind paradrop before contact");
+
+    const EntityId target = front.simulation.create_unit_with_type(0.0f, 750.0f,
+        static_cast<UnitType>(13), FactionId::ELITE_PRECISION);
+    const EntityId spotter = front.simulation.create_unit_with_type(0.0f, 1050.0f,
+        static_cast<UnitType>(15), FactionId::MASS_WARFARE);
+    front.simulation.stop_unit(target);
+    front.simulation.stop_unit(spotter);
+    front.fund(0.0f);
+    front.run(20);
+    verify(front.ai().paradrops_ordered() == 0, "visible contact cannot waive the Materials cost");
+    front.fund(20000.0f);
+    front.run(40);
+    verify(front.ai().paradrops_ordered() == 1, "AI orders one scout paradrop after seeing a forward contact");
+    const auto& commands = front.simulation.command_log();
+    const auto order = std::find_if(commands.begin(), commands.end(), [](const InputCommand& command) {
+        return command.player_id == static_cast<uint8_t>(FactionId::MASS_WARFARE) &&
+               (command.extra & Simulation::PARADROP_ORDER_FLAG) != 0;
+    });
+    verify(order != commands.end(), "the AI uses the recorded player paradrop command");
+    verify(front.simulation.can_see(FactionId::MASS_WARFARE, order->target_x, order->target_y),
+           "the selected flank point is currently watched");
+    verify(front.simulation.inbound_count(FactionId::MASS_WARFARE) == 1 &&
+           std::any_of(front.simulation.inbound_forces().begin(), front.simulation.inbound_forces().end(),
+               [](const Simulation::InboundForce& force) {
+                   return force.faction == FactionId::MASS_WARFARE && force.airdrop && force.type == static_cast<UnitType>(15);
+               }), "the paid scout is in the shared cargo delivery pipeline");
+    front.run(20 * 5);
+    verify(front.ai().paradrops_ordered() == 1, "contact does not trigger a drop every decision");
+}
+
 namespace {
 // The real battlefield and the real starting positions, with a few units on
 // each side so there is fighting, scouting and production to record.
@@ -271,7 +308,9 @@ struct RecordedBattle {
     EntityId enemy_post = INVALID_ENTITY;
     std::vector<EntityId> player_tanks;
 
-    explicit RecordedBattle(bool ai_on) {
+    // With forces_by_transport, ground forces arrive only at an airfield and
+    // each side has a Field Engineer, as on Broken Strait.
+    explicit RecordedBattle(bool ai_on, bool forces_by_transport = false) {
         simulation.configure_world_size(40000.0f, 40000.0f);
         simulation.terrain().load_from_file("godot/project/scenarios/terrain.json");
         simulation.terrain().set_world_bounds(40000.0f, 40000.0f);
@@ -285,6 +324,12 @@ struct RecordedBattle {
         for (int unit = 0; unit < 6; ++unit) {
             player_tanks.push_back(simulation.create_unit_with_type(-12500.0f + unit * 30.0f, -400.0f, UnitType::ELITE_MAIN_BATTLE_TANK, FactionId::ELITE_PRECISION));
             simulation.create_unit_with_type(-15000.0f + unit * 30.0f, -6200.0f, UnitType::MASS_SWARM_TANK, FactionId::MASS_WARFARE);
+        }
+        if (forces_by_transport) {
+            simulation.set_forces_by_transport(true);
+            simulation.set_reinforcement_resources(FactionId::MASS_WARFARE, 5000.0f, 5000.0f);
+            const EntityId engineer = simulation.create_unit_with_type(-14900.0f, -6300.0f, UnitType::INDUSTRIAL_ENGINEERING, FactionId::MASS_WARFARE);
+            simulation.stop_unit(engineer);
         }
     }
     ~RecordedBattle() { simulation.stop(); }
@@ -368,4 +413,26 @@ TEST(a_recorded_match_plays_back_exactly_with_the_ai_switched_off) {
     verify(first_difference == expected.size(), "the playback matches the original at every hash");
     verify(replay.simulation.match_record().commands().size() == original.simulation.match_record().commands().size(),
            "the playback ran exactly the recorded orders");
+}
+
+TEST(an_ai_built_airfield_plays_back_from_the_record) {
+    RecordedBattle original(true, true);
+    original.play(20 * 180, true);
+    const auto& territory = original.simulation.territorial_control_manager();
+    verify(original.simulation.ai_manager().airfield_orders() == 1, "the AI orders one airfield on the real terrain");
+    verify(territory.has_active_installation(FactionId::MASS_WARFARE, InstallationType::AIRFIELD), "and it is finished within three minutes");
+    const auto& commands = original.simulation.match_record().commands();
+    verify(std::any_of(commands.begin(), commands.end(), [](const InputCommand& command) {
+        return command.player_id == static_cast<uint8_t>(FactionId::MASS_WARFARE) &&
+               command.cmd_type == static_cast<uint8_t>(CommandType::BUILD) && (command.extra & Simulation::STRUCTURE_ORDER_FLAG) != 0;
+    }), "the airfield order is in the record like any other order");
+    std::vector<InputCommand> orders;
+    verify(MatchRecord::commands_from_json(original.simulation.match_record().to_json(), orders), "the record reads back");
+    RecordedBattle replay(false, true);
+    replay.simulation.play_back_commands(orders);
+    replay.play(20 * 180, false);
+    verify(replay.simulation.territorial_control_manager().has_active_installation(FactionId::MASS_WARFARE, InstallationType::AIRFIELD),
+           "the playback builds the same airfield with the AI switched off");
+    verify(replay.simulation.match_record().hashes() == original.simulation.match_record().hashes(),
+           "and matches the original at every hash");
 }

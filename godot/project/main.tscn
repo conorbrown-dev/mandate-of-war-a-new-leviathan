@@ -1,4 +1,4 @@
-[gd_scene load_steps=19 format=3]
+[gd_scene load_steps=20 format=3]
 
 [ext_resource type="Script" path="res://main.gd" id="1_main"]
 [ext_resource type="Shader" path="res://terrain.gdshader" id="2_terrain_shader"]
@@ -13,6 +13,7 @@
 [ext_resource type="Script" path="res://strategic_icon_overlay.gd" id="11_strategic_overlay"]
 [ext_resource type="Environment" path="res://default_env.tres" id="12_battlefield_environment"]
 [ext_resource type="Theme" path="res://ui/theme/mandate_theme.tres" id="13_mandate_theme"]
+[ext_resource type="Script" path="res://ui/components/mandate_panel.gd" id="14_mandate_panel"]
 
 [sub_resource type="ShaderMaterial" id="TerrainShaderMaterial"]
 shader = ExtResource("2_terrain_shader")
@@ -210,60 +211,161 @@ anchor_right = 1.0
 anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
-color = Color(0.012, 0.02, 0.035, 0.94)
+color = Color(0.016, 0.024, 0.02, 0.84)
 
 [node name="Panel" type="PanelContainer" parent="HUD/UIRoot/StartupOverlay"]
+custom_minimum_size = Vector2(820, 0)
 layout_mode = 1
 anchors_preset = 8
 anchor_left = 0.5
 anchor_top = 0.5
 anchor_right = 0.5
 anchor_bottom = 0.5
-offset_left = -310.0
-offset_top = -190.0
-offset_right = 310.0
-offset_bottom = 190.0
+offset_left = -410.0
+offset_top = -10.0
+offset_right = 410.0
+offset_bottom = 10.0
 grow_horizontal = 2
 grow_vertical = 2
+script = ExtResource("14_mandate_panel")
+surface = "modal"
+rail_color = Color(0.239, 0.863, 1, 1)
 
 [node name="VBox" type="VBoxContainer" parent="HUD/UIRoot/StartupOverlay/Panel"]
 layout_mode = 2
-theme_override_constants/separation = 18
-alignment = 1
+theme_override_constants/separation = 0
 
-[node name="GameTitle" type="Label" parent="HUD/UIRoot/StartupOverlay/Panel/VBox"]
+[node name="Header" type="MarginContainer" parent="HUD/UIRoot/StartupOverlay/Panel/VBox"]
 layout_mode = 2
-theme_override_font_sizes/font_size = 30
-text = "NEAR-FUTURE RTS"
-horizontal_alignment = 1
+theme_override_constants/margin_left = 40
+theme_override_constants/margin_top = 32
+theme_override_constants/margin_right = 40
+theme_override_constants/margin_bottom = 24
 
-[node name="ScenarioTitle" type="Label" parent="HUD/UIRoot/StartupOverlay/Panel/VBox"]
+[node name="HeaderBox" type="VBoxContainer" parent="HUD/UIRoot/StartupOverlay/Panel/VBox/Header"]
 layout_mode = 2
-theme_override_font_sizes/font_size = 22
-text = "Loading scenario..."
-horizontal_alignment = 1
+theme_override_constants/separation = 6
 
-[node name="ScenarioDescription" type="Label" parent="HUD/UIRoot/StartupOverlay/Panel/VBox"]
+[node name="GameTitle" type="Label" parent="HUD/UIRoot/StartupOverlay/Panel/VBox/Header/HeaderBox"]
 layout_mode = 2
-text = "Validating the skirmish definition."
-horizontal_alignment = 1
-autowrap_mode = 2
+theme_type_variation = &"EyebrowLabel"
+text = "MANDATE OF WAR  //  OPERATION BRIEFING"
 
-[node name="ScenarioStatus" type="Label" parent="HUD/UIRoot/StartupOverlay/Panel/VBox"]
+[node name="ScenarioTitle" type="Label" parent="HUD/UIRoot/StartupOverlay/Panel/VBox/Header/HeaderBox"]
+unique_name_in_owner = true
 layout_mode = 2
+theme_type_variation = &"DisplayHeading"
+text = "LOADING SCENARIO"
+
+[node name="ScenarioFactions" type="Label" parent="HUD/UIRoot/StartupOverlay/Panel/VBox/Header/HeaderBox"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_type_variation = &"MutedLabel"
+theme_override_font_sizes/font_size = 13
 text = ""
-horizontal_alignment = 1
-autowrap_mode = 2
 
-[node name="StartButton" type="Button" parent="HUD/UIRoot/StartupOverlay/Panel/VBox"]
-custom_minimum_size = Vector2(0, 52)
+[node name="HeaderRule" type="HSeparator" parent="HUD/UIRoot/StartupOverlay/Panel/VBox"]
 layout_mode = 2
-text = "OPEN PRESENTATION LAB"
 
-[node name="NativeSkirmishButton" type="Button" parent="HUD/UIRoot/StartupOverlay/Panel/VBox"]
-custom_minimum_size = Vector2(0, 52)
+[node name="Body" type="MarginContainer" parent="HUD/UIRoot/StartupOverlay/Panel/VBox"]
 layout_mode = 2
-text = "START SKIRMISH"
+theme_override_constants/margin_left = 40
+theme_override_constants/margin_top = 24
+theme_override_constants/margin_right = 40
+theme_override_constants/margin_bottom = 28
+
+[node name="BodyBox" type="VBoxContainer" parent="HUD/UIRoot/StartupOverlay/Panel/VBox/Body"]
+layout_mode = 2
+theme_override_constants/separation = 22
+
+[node name="Situation" type="VBoxContainer" parent="HUD/UIRoot/StartupOverlay/Panel/VBox/Body/BodyBox"]
+layout_mode = 2
+theme_override_constants/separation = 6
+
+[node name="SituationHeading" type="Label" parent="HUD/UIRoot/StartupOverlay/Panel/VBox/Body/BodyBox/Situation"]
+layout_mode = 2
+theme_type_variation = &"EyebrowLabel"
+text = "SITUATION"
+
+[node name="ScenarioDescription" type="Label" parent="HUD/UIRoot/StartupOverlay/Panel/VBox/Body/BodyBox/Situation"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(740, 0)
+layout_mode = 2
+theme_type_variation = &"BodyLabel"
+text = "Validating the skirmish definition."
+autowrap_mode = 3
+
+[node name="Objective" type="VBoxContainer" parent="HUD/UIRoot/StartupOverlay/Panel/VBox/Body/BodyBox"]
+layout_mode = 2
+theme_override_constants/separation = 6
+
+[node name="ObjectiveHeading" type="Label" parent="HUD/UIRoot/StartupOverlay/Panel/VBox/Body/BodyBox/Objective"]
+layout_mode = 2
+theme_type_variation = &"EyebrowLabel"
+text = "OBJECTIVE"
+
+[node name="ScenarioObjective" type="Label" parent="HUD/UIRoot/StartupOverlay/Panel/VBox/Body/BodyBox/Objective"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_type_variation = &"SectionHeading"
+text = ""
+autowrap_mode = 3
+
+[node name="Orders" type="VBoxContainer" parent="HUD/UIRoot/StartupOverlay/Panel/VBox/Body/BodyBox"]
+layout_mode = 2
+theme_override_constants/separation = 6
+
+[node name="OrdersHeading" type="Label" parent="HUD/UIRoot/StartupOverlay/Panel/VBox/Body/BodyBox/Orders"]
+layout_mode = 2
+theme_type_variation = &"EyebrowLabel"
+text = "FIRST ORDERS"
+
+[node name="ScenarioStatus" type="Label" parent="HUD/UIRoot/StartupOverlay/Panel/VBox/Body/BodyBox/Orders"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(740, 0)
+layout_mode = 2
+theme_type_variation = &"BodyLabel"
+text = ""
+autowrap_mode = 3
+
+[node name="FooterRule" type="HSeparator" parent="HUD/UIRoot/StartupOverlay/Panel/VBox"]
+layout_mode = 2
+
+[node name="Footer" type="MarginContainer" parent="HUD/UIRoot/StartupOverlay/Panel/VBox"]
+layout_mode = 2
+theme_override_constants/margin_left = 40
+theme_override_constants/margin_top = 20
+theme_override_constants/margin_right = 40
+theme_override_constants/margin_bottom = 24
+
+[node name="FooterRow" type="HBoxContainer" parent="HUD/UIRoot/StartupOverlay/Panel/VBox/Footer"]
+layout_mode = 2
+theme_override_constants/separation = 12
+
+[node name="ControlsHint" type="Label" parent="HUD/UIRoot/StartupOverlay/Panel/VBox/Footer/FooterRow"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_type_variation = &"MutedLabel"
+text = "PRESS F1 IN THE FIELD FOR ALL CONTROLS"
+vertical_alignment = 1
+
+[node name="NativeSkirmishButton" type="Button" parent="HUD/UIRoot/StartupOverlay/Panel/VBox/Footer/FooterRow"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 48)
+layout_mode = 2
+tooltip_text = "Open the deterministic 2D skirmish used to verify the native match controller."
+mouse_default_cursor_shape = 2
+theme_type_variation = &"GhostButton"
+text = "DETERMINISTIC TEST"
+
+[node name="StartButton" type="Button" parent="HUD/UIRoot/StartupOverlay/Panel/VBox/Footer/FooterRow"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(240, 48)
+layout_mode = 2
+tooltip_text = "Start the match.  [Enter]"
+mouse_default_cursor_shape = 2
+theme_type_variation = &"PrimaryButton"
+text = "BEGIN OPERATION"
 
 [node name="TerritoryDebugLabel" type="Label" parent="HUD/UIRoot"]
 visible = false

@@ -61,15 +61,21 @@ public:
     std::vector<EntityId> damaged_entities() const { return damaged_entities_; }
     
     void reset();
+    void set_event_sink(CombatEventSink sink) {
+        event_sink_ = std::move(sink);
+        projectile_manager_.set_event_sink(event_sink_);
+    }
     
 private:
     SightCheck sight_check_;
+    CombatEventSink event_sink_;
     // Live targets for one fire pass, laid out by cell so a volley does not pay
     // a spatial-grid query plus component lookups for every nearby unit.
     struct TargetCandidate {
         EntityId id;
         float x, y;
         FactionId faction;
+        bool in_air = false;
     };
     void build_target_index(const std::vector<EntityId>& entities, ComponentManager& component_manager);
     std::vector<TargetCandidate> target_candidates_;
@@ -94,7 +100,9 @@ public:
     FireSolution find_target(
         float shooter_x, float shooter_y, float view_range, FactionId faction,
         ComponentManager& component_manager,
-        EntityId explicit_target = 0
+        EntityId explicit_target = 0,
+        bool hits_ground = true,
+        bool hits_air = false
     );
     
     FireSolution calculate_fire_solution(

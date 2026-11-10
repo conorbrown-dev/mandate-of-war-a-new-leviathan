@@ -195,6 +195,14 @@ InstallationState TerritorialControlManager::get_installation_at(float x, float 
     return InstallationState{};
 }
 
+std::vector<TerritorialControlManager::ActiveInstallation> TerritorialControlManager::active_installations() const {
+    std::vector<ActiveInstallation> result;
+    for (const auto& inst : installations_) {
+        if (!inst.constructing) result.push_back({inst.x, inst.y, inst.type, inst.faction});
+    }
+    return result;
+}
+
 bool TerritorialControlManager::has_active_installation(FactionId faction, InstallationType type) const {
     for (const auto& inst : installations_) {
         if (inst.faction == faction && inst.type == type && !inst.constructing) return true;

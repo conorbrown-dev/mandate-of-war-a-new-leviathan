@@ -11,8 +11,10 @@ const SCENARIO_DESCRIPTIONS := {
 	"oak_grove_showcase": "Frame the imported oak forest at tactical and strategic distances while proving variant, cluster, and terrain-grounding contracts.",
 	"airfield_fighter_ferry": "Construct an airfield, request a runway fighter, and verify its paid off-map airborne ingress.",
 	"road_construction": "Place a road through the engineer input path, reject water, pay costs and complete a visible persistent segment.",
+	"ground_transport_routes": "Order a road convoy and a rail train, then inspect their marked corridors and moving transport models.",
 	"ui_design_system_showcase": "Render the reusable Strategic Command UI at the requested desktop resolution.",
-	"queued_waypoint_move": "Right-click one destination, Shift + right-click two more, check held Shift draws all three legs, watch the vehicle visit them in order, then queue again and clear it with X."
+	"queued_waypoint_move": "Right-click one destination, Shift + right-click two more, check held Shift draws all three legs, watch the vehicle visit them in order, then queue again and clear it with X.",
+	"civilian_building_models": "Inspect imported civilian architecture and water towers in a seeded neighborhood."
 }
 
 var _scenario := ""
@@ -72,10 +74,14 @@ func _run() -> void:
 			await _scenario_airfield_fighter_ferry()
 		"road_construction":
 			await _scenario_road_construction()
+		"ground_transport_routes":
+			await _scenario_ground_transport_routes()
 		"ui_design_system_showcase":
 			await _scenario_ui_design_system_showcase()
 		"queued_waypoint_move":
 			await _scenario_queued_waypoint_move()
+		"civilian_building_models":
+			await _scenario_civilian_building_models()
 		_:
 			_check(false, "scenario.known", "Unknown validation scenario", {"scenario": _scenario})
 	_check(_has_check("scenario.completed"), "framework.scenario_returned", "The scenario reached its explicit completion sentinel")
@@ -103,6 +109,61 @@ func _destroy_skirmish(view: Node) -> void:
 	if is_instance_valid(view):
 		view.queue_free()
 		await process_frame
+
+
+func _scenario_ground_transport_routes() -> void:
+	var view := await _create_skirmish()
+	view.extension.call("skirmish_set_ai_enabled", false)
+	_check(view.transport_corridor_views.size() == 4, "transport.four_corridors", "Both sides have road and rail corridors")
+	var road: Node3D = view.transport_corridor_views.get("0:1")
+	var rail: Node3D = view.transport_corridor_views.get("0:2")
+	_check(road != null and rail != null and rail.get_child_count() == 5,
+		"transport.route_models", "The roadbed, sleepers and two-rail track are present")
+	_focus_camera_on_position(view, Vector2(-12575.0, 2100.0), 1200.0)
+	await _capture_checkpoint(view, "road_and_rail_corridors")
+	view._on_strategic_command_order_unit(0, 1)
+	view._on_strategic_command_order_unit(0, 2)
+	for _tick in range(500):
+		view.extension.call("update_simulation", 50.0)
+	view._sync_ground_transport_presentation()
+	var train_visible := false
+	var truck_visible := false
+	var convoy_focus := Vector2(-13000.0, 3500.0)
+	for convoy in view.ground_transport_views.values():
+		train_visible = train_visible or convoy.name == "RailConvoy"
+		truck_visible = truck_visible or convoy.name == "RoadConvoy"
+		if convoy.name == "RailConvoy":
+			convoy_focus = Vector2(convoy.position.x, convoy.position.z)
+	_check(train_visible and truck_visible, "transport.moving_convoys", "A train and truck move along the separate corridors")
+	_focus_camera_on_position(view, convoy_focus, 180.0)
+	await _capture_checkpoint(view, "moving_convoys")
+	_check(true, "scenario.completed", "Ground transport routes scenario completed")
+	await _destroy_skirmish(view)
+
+
+func _scenario_civilian_building_models() -> void:
+	var view := await _create_skirmish()
+	var model_counts := {}
+	for building in view.civilian_buildings.get_children():
+		for model_type in ["residential", "warehouse", "office_tower", "water_tower"]:
+			if building.name.begins_with("Civilian_%s_" % model_type):
+				model_counts[model_type] = int(model_counts.get(model_type, 0)) + 1
+				_check(building.get_child_count() == 1 and building.get_child(0) is Node3D,
+					"civilian.%s_imported" % building.name, "Placed building contains its imported scene")
+	for model_type in ["residential", "warehouse", "office_tower", "water_tower"]:
+		_check(int(model_counts.get(model_type, 0)) > 0, "civilian.%s_present" % model_type,
+			"Seeded map places at least one %s" % model_type, {"count": model_counts.get(model_type, 0)})
+	_metrics["model_counts"] = model_counts
+	_focus_camera_on_position(view, Vector2(-14500.0, -11200.0), 1900.0)
+	await _capture_checkpoint(view, "civilian_neighborhood")
+	for model_type in ["residential", "warehouse", "office_tower", "water_tower"]:
+		for building in view.civilian_buildings.get_children():
+			if building.name.begins_with("Civilian_%s_" % model_type):
+				_focus_camera_on_position(view, Vector2(building.position.x, building.position.z), 280.0)
+				await _capture_checkpoint(view, model_type)
+				break
+	_check(true, "scenario.completed", "Imported civilian architecture scenario completed")
+	await _destroy_skirmish(view)
 
 
 func _scenario_ui_design_system_showcase() -> void:
@@ -248,10 +309,18 @@ func _scenario_vehicle_movement_smoke() -> void:
 	var hull_alignment_samples := 0
 	var marker_persisted_after_duration := false
 	var settled := false
+	# The formation slots the simulation handed out, read once the order has run.
+	var slots := {}
 	for tick in range(2200):
 		extension.call("update_simulation", 50.0)
 		view.call("_sync_unit_transforms")
 		view.call("_update_command_feedback", 0.0)
+		if tick == 1:
+			var waypoints: Array = extension.call("get_unit_waypoints", group_ids, 0)
+			for index in range(group_ids.size()):
+				var legs: PackedVector2Array = waypoints[index] if index < waypoints.size() else PackedVector2Array()
+				if not legs.is_empty():
+					slots[group_ids[index]] = legs[legs.size() - 1]
 		for vehicle_id in group_ids:
 			var current_position := _entity_position(view, vehicle_id)
 			var motion: Vector2 = current_position - start_positions[vehicle_id]
@@ -286,11 +355,20 @@ func _scenario_vehicle_movement_smoke() -> void:
 	_check(hull_alignment_samples > 0 and minimum_hull_alignment >= 0.98, "vehicle.rendered_hulls_follow_motion", "Rendered hull forward vectors remain aligned with authoritative travel", {"minimum_alignment": minimum_hull_alignment, "samples": hull_alignment_samples})
 	_check(marker_persisted_after_duration, "vehicle.command_feedback_persists", "Destination feedback remains visible beyond the legacy four-second timeout while units are moving")
 	_check(settled, "vehicle.arrives_and_settles", "All vehicles stop without sustained arrival jitter", {"tick_limit": 2200})
+	# Slots are a grid at least a hull length apart, so how far from the click the
+	# group ends up follows from that grid. Each vehicle must end on its own slot.
 	var mean_distance := 0.0
+	var mean_slot_distance := 0.0
+	var furthest_from_slot := 0.0
 	for vehicle_id in group_ids:
-		mean_distance += _entity_position(view, vehicle_id).distance_to(destination)
+		var final_position := _entity_position(view, vehicle_id)
+		mean_distance += final_position.distance_to(destination)
+		if slots.has(vehicle_id):
+			mean_slot_distance += (slots[vehicle_id] as Vector2).distance_to(destination)
+			furthest_from_slot = maxf(furthest_from_slot, final_position.distance_to(slots[vehicle_id]))
 	mean_distance /= float(group_ids.size())
-	_check(mean_distance <= 12.0, "vehicle.formation_arrives", "Formation slots arrive around the ordered destination", {"mean_distance_m": mean_distance})
+	mean_slot_distance /= float(group_ids.size())
+	_check(slots.size() == group_ids.size() and mean_distance <= mean_slot_distance + 1.0 and furthest_from_slot <= 3.0, "vehicle.formation_arrives", "Formation slots arrive around the ordered destination", {"mean_distance_m": mean_distance, "mean_slot_distance_m": mean_slot_distance, "furthest_from_own_slot_m": furthest_from_slot, "slots": slots.size()})
 	_check(marker == null or not marker.visible, "vehicle.command_feedback_clears_on_arrival", "Destination feedback clears once every commanded unit has arrived")
 	_focus_camera_on_position(view, destination, 35.0)
 	await _capture_checkpoint(view, "vehicles_arrived")
@@ -506,7 +584,7 @@ func _scenario_reinforcement_delivery_smoke() -> void:
 	delivery = extension.call("reinforcement_delivery_state")
 	_check(Vector2(float(delivery.get("delivery_x", 0.0)), float(delivery.get("delivery_y", 0.0))).distance_to(airfield_position) <= 0.01, "reinforcement.delivery_uses_selected_airfield", "Delivery retains the auto-selected airfield anchor")
 	var parked_f15: Node3D = delivery_presentation.get("transport") if delivery_presentation != null else null
-	_check(parked_f15 != null and parked_f15.visible and parked_f15.position.distance_to(Vector3(airfield_position.x, float(view.call("_terrain_height_at", airfield_position.x, airfield_position.y)) + 0.15, airfield_position.y)) <= 0.01 and is_equal_approx(absf(parked_f15.rotation_degrees.y), 90.0), "reinforcement.f15c_parks_on_airfield", "The F-15C remains parked on the airfield, along its north-south runway, after delivery")
+	_check(parked_f15 != null and parked_f15.visible and parked_f15.position.distance_to(Vector3(airfield_position.x - 55.0, float(view.call("_terrain_height_at", airfield_position.x - 55.0, airfield_position.y)) + 0.15, airfield_position.y)) <= 0.01 and is_equal_approx(absf(parked_f15.rotation_degrees.y), 90.0), "reinforcement.f15c_parks_on_airfield", "The F-15C remains parked on the airfield, along its north-south runway, after delivery")
 	var delivered_id := -1
 	for entity_id_value in view.get("player_entity_ids"):
 		var entity_id := int(entity_id_value)
@@ -522,6 +600,9 @@ func _scenario_reinforcement_delivery_smoke() -> void:
 		view.call("_sync_unit_transforms")
 		_check(true, "reinforcement.controllable", "Delivered unit is active and commandable only after completion")
 	view.call("_update_hud")
+	if view.get_node_or_null("Built_Airfield") == null:
+		view.call("_spawn_completed_structure_view", 2, airfield_position)
+	_focus_camera_on_position(view, airfield_position, 650.0)
 	await _capture_checkpoint(view, "reinforcement_active")
 	await _destroy_skirmish(view)
 	_check(true, "scenario.completed", "Reinforcement delivery smoke scenario completed")
@@ -550,7 +631,8 @@ func _scenario_strategic_zoom_transition() -> void:
 		await _advance_camera(view, 80)
 	view.call("_sync_unit_transforms")
 	_check(float(view.get("camera_distance")) >= 600.0, "zoom.reaches_strategic_distance", "Mouse-wheel input reaches strategic zoom", {"camera_distance": view.get("camera_distance")})
-	_check(model_root != null and not model_root.visible, "zoom.strategic_icon_replaces_model", "The tactical model is replaced at strategic zoom")
+	# The main view leaves the model out (the magnifier may still draw it).
+	_check(model_root != null and not wrapper.model_drawn_by(view.get("camera")), "zoom.strategic_icon_replaces_model", "The tactical model is replaced at strategic zoom")
 	var selected = view.get("selected_ids")
 	_check(selected.has(engineer_id), "zoom.selection_persists", "Selection persists across the strategic transition", {"selected_ids": selected})
 	await _capture_checkpoint(view, "strategic_icon")
@@ -719,6 +801,9 @@ func _scenario_airfield_fighter_ferry() -> void:
 			await process_frame
 	_check(fighter_id > 0, "air.fighter_arrives", "A fighter entity arrives within the bounded tick budget", {"ticks": ferry_ticks, "tick_limit": 700})
 	if fighter_id > 0:
+		view.call("_clear_selection")
+		view.call("_set_selected", fighter_id, true)
+		view.call("_update_hud")
 		var fighter_view: Node = view.get("prototype_visual_views").get(fighter_id)
 		var fighter_definition: Dictionary = fighter_view.get("_definition") if fighter_view != null else {}
 		var player_owned: bool = view.get("player_entity_ids").has(fighter_id)
@@ -744,10 +829,91 @@ func _scenario_airfield_fighter_ferry() -> void:
 		var drawn_height := flying_view.global_position.y if flying_view != null else -INF
 		_check(flags.size() == 1 and flags[0] == 1, "air.fighter_reports_airborne", "The native view reports the ferried fighter as airborne", {"flags": Array(flags)})
 		_check(drawn_height >= surface + 100.0, "air.fighter_drawn_at_altitude", "The flying fighter is drawn at altitude above the land or sea", {"drawn_height_m": drawn_height, "surface_m": surface})
+		var icon_placement: Dictionary = view.get("strategic_icon_overlay").marker_placement(fighter_id, view.get("camera"))
+		_check(flying_view != null and (icon_placement.world as Vector3).is_equal_approx(flying_view.global_position+Vector3.UP*5) and (icon_placement.icon_center as Vector2).y < (icon_placement.anchor as Vector2).y, "air.icon_above_aircraft", "The real fighter icon follows its drawn flight height and sits above it")
+		var native_ranges: PackedFloat32Array = extension.call("get_unit_range_profile", fighter_id)
+		var rings_follow_flight := flying_view != null
+		if flying_view != null:
+			for spec: Dictionary in flying_view.get("_range_overlays"):
+				var ring := spec.node as MeshInstance3D
+				var range_index := 0 if ring.name == "AttackHex" else (1 if ring.name == "VisibilityHex" else 2)
+				rings_follow_flight = rings_follow_flight and ring.visible and absf(ring.global_position.y-flying_view.global_position.y-0.12)<0.01 and ring.global_basis.is_equal_approx(Basis.IDENTITY) and is_equal_approx(spec.radius,native_ranges[range_index])
+		_check(rings_follow_flight, "air.hexes_follow_aircraft", "Attack, view and intel hexes follow flight height at their native radii")
+
 		var engineer_flags: PackedByteArray = extension.call("get_airborne_flags", PackedInt32Array([int(view.call("_player_engineer_id"))]))
 		_check(engineer_flags.size() == 1 and engineer_flags[0] == 0, "air.ground_unit_not_airborne", "A ground unit is never reported airborne", {"flags": Array(engineer_flags)})
-		_focus_camera_on(view, fighter_id, 800.0)
+		_focus_camera_on_aircraft(view, fighter_id, 800.0)
 		await _capture_checkpoint(view, "fighter_ingress")
+		# Exercise the real native fighter all the way through descent/rollout.
+		# The old scenario stopped at the map edge and missed the VTOL/snap bug.
+		var previous_position := inside_position
+		var previous_heading := float((extension.call("get_unit_transforms", PackedInt32Array([fighter_id])) as PackedFloat32Array)[2])
+		var max_step := 0.0
+		var max_turn := 0.0
+		var min_flying_step := INF
+		var runway_aligned := true
+		var presentation_matches := true
+		var saw_descent := false
+		var saw_rollout := false
+		var captured_turn := false
+		var captured_threshold := false
+		var landed := false
+		var approach_ticks := 0
+		while approach_ticks < 4000 and not landed:
+			extension.call("update_simulation", 50.0)
+			view.call("_sync_new_entities")
+			view.call("_sync_unit_transforms")
+			var position := _entity_position(view, fighter_id)
+			var transform: PackedFloat32Array = extension.call("get_unit_transforms", PackedInt32Array([fighter_id]))
+			var approach: PackedFloat32Array = extension.call("get_aircraft_approach_poses", PackedInt32Array([fighter_id]))
+			if transform.size() != 3 or approach.size() != 3 or approach[0] < 0.0:
+				break
+			if not captured_turn and absf(wrapf(transform[2]-PI*0.5, -PI, PI)) > PI*0.25:
+				captured_turn = true
+				_focus_camera_on_aircraft(view, fighter_id, 500.0)
+				await _capture_checkpoint(view, "fighter_banked_turn")
+			if not captured_threshold and approach[0] < 8.0 and approach[0] > 0.1:
+				captured_threshold = true
+				_focus_camera_on_aircraft(view, fighter_id, 500.0)
+				await _capture_checkpoint(view, "fighter_runway_threshold")
+			var step := position.distance_to(previous_position)
+			max_step = maxf(max_step, step)
+			max_turn = maxf(max_turn, absf(wrapf(transform[2]-previous_heading, -PI, PI)))
+			if approach[0] > 0.1:
+				min_flying_step = minf(min_flying_step, step)
+			if approach[0] < 150.0 and approach[0] > 1.0:
+				runway_aligned = runway_aligned and absf(position.x - (build_position.x - 55.0)) < 0.01 and absf(sin(transform[2])) < 0.001
+				var fighter_node := view.get("prototype_visual_views").get(fighter_id) as Node3D
+				var expected_height := float(view.call("_terrain_height_at", position.x, position.y)) + approach[0] + 1.2
+				presentation_matches = presentation_matches and fighter_node != null and absf(fighter_node.position.y-expected_height) < 2.0
+				if not saw_descent:
+					_focus_camera_on_aircraft(view, fighter_id, 600.0)
+					await _capture_checkpoint(view, "fighter_final_approach")
+				saw_descent = true
+			if is_zero_approx(approach[0]) and step > 0.1:
+				saw_rollout = true
+			flags = extension.call("get_airborne_flags", PackedInt32Array([fighter_id]))
+			landed = flags.size() == 1 and flags[0] == 0
+			previous_position = position
+			previous_heading = transform[2]
+			approach_ticks += 1
+			if _record and approach_ticks % 2 == 0:
+				await process_frame
+		_check(landed and saw_descent and saw_rollout, "air.fighter_completes_conventional_landing", "The real fighter descends in forward flight, rolls along the runway and stops", {"ticks": approach_ticks})
+		_check(max_step <= 6.1 and max_turn < 0.01 and min_flying_step >= 3.3, "air.fighter_no_teleport_pivot_or_hover", "Every native tick preserves forward airspeed and gradual turning", {"max_step_m": max_step, "max_turn_deg": rad_to_deg(max_turn), "min_flying_step_m": min_flying_step})
+		_check(runway_aligned and presentation_matches, "air.fighter_descends_on_main_runway", "Native and drawn descent align with the large runway rather than the parallel taxiway")
+		var parked := _entity_position(view, fighter_id)
+		_check(parked.distance_to(build_position+Vector2(-55.0,0.0)) < 0.02, "air.fighter_parks_on_main_runway", "The fighter rolls to rest on the main runway centre")
+		var parked_node := view.get("prototype_visual_views").get(fighter_id) as Node3D
+		var parked_height := parked_node.position.y if parked_node != null else -INF
+		for i in range(20):
+			extension.call("update_simulation", 50.0)
+			view.call("_sync_unit_transforms")
+		_check(parked_node != null and absf(parked_node.position.y-parked_height) < 0.1, "air.fighter_no_vertical_drop_after_stop", "The parked fighter has no VTOL descent after rollout")
+		_focus_camera_on_position(view, build_position, 350.0)
+		view.call("_sync_unit_transforms")
+		await _capture_checkpoint(view, "fighter_parked_on_runway")
+
 	_metrics["airfield_completion_ticks"] = airfield_ticks
 	_metrics["fighter_delivery_ticks"] = ferry_ticks
 	await _destroy_skirmish(view)
@@ -937,6 +1103,20 @@ func _set_shift(pressed: bool) -> void:
 	event.pressed = pressed
 	Input.parse_input_event(event)
 	Input.flush_buffered_events()
+
+
+func _focus_camera_on_aircraft(view: Node, entity_id: int, distance: float) -> void:
+	# Centre the model at flight height, and refresh its LOD after changing zoom.
+	# Otherwise the first checkpoint can still have the previous map-scale LOD.
+	var aircraft := view.get("prototype_visual_views").get(entity_id) as Node3D
+	if aircraft == null:
+		_focus_camera_on(view, entity_id, distance)
+		return
+	view.set("camera_target", aircraft.global_position)
+	view.set("camera_distance", distance)
+	view.set("target_camera_distance", distance)
+	view.call("_update_camera", 1.0)
+	view.call("_sync_unit_transforms")
 
 
 func _focus_camera_on(view: Node, entity_id: int, distance: float) -> void:

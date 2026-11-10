@@ -3,19 +3,19 @@ extends RefCounted
 
 const UnitCatalog := preload("res://unit_catalog.gd")
 
-## NATO symbology for strategic icons. Each unit type is represented by a
-## standardized symbol following APP-115 (NATO symbology standards).
+## Hidden 3D fallback marker for strategic zoom. The visible map-scale APP-6
+## symbols are drawn in screen space by nato_map_symbol.gd.
 
 static func mesh_for(unit_type: int) -> Mesh:
 	var size := Vector3(1.4, 0.16, 1.4)
 	match UnitCatalog.strategic_icon(unit_type):
-		"mbt", "swarm", "assault": return _square(size)
-		"artillery", "engineer": return _diamond(size)
+		"armour", "recon": return _square(size)
+		"sp_artillery", "engineer": return _diamond(size)
 		"air_defense": return _circle(8, size)
 		"missile": return _lozenge(size)
-		"fighter": return _triangle(3, size)
-		"vtol": return _triangle(4, size)
-		"boat": return _ellipse(8, size)
+		"fighter", "recon_aircraft", "cargo_aircraft": return _triangle(3, size)
+		"attack_helicopter": return _triangle(4, size)
+		"naval_surface": return _ellipse(8, size)
 		"command": return _hexagon(size)
 		_: return _circle(8, size)
 

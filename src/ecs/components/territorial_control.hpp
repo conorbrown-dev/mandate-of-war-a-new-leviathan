@@ -109,6 +109,13 @@ public:
     bool get_active_installation_position(FactionId faction, InstallationType type, float& x, float& y) const;
     size_t active_installation_count(FactionId faction, InstallationType type) const;
     bool get_active_installation_position_near(FactionId faction, InstallationType type, float query_x, float query_y, float max_distance, float& x, float& y) const;
+    struct ActiveInstallation {
+        float x, y;
+        InstallationType type;
+        FactionId faction;
+    };
+    // Every finished installation, in the order they were added.
+    std::vector<ActiveInstallation> active_installations() const;
     
     // Unit capabilities
     bool has_capability(Entity entity, SeizureCapability capability) const;

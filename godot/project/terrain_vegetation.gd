@@ -19,6 +19,9 @@ extends Node3D
 ## so a tree dissolves from one form into the other without a pop.
 
 const CHUNKS_PER_AXIS := 14
+# Placement pauses for a frame once it has used this much of one, so the forest
+# fills in without long frames. A chunk took 100-240 ms in one go on an M1 Pro.
+const BUILD_BUDGET_USEC := 4000
 const MASK_SIZE := 640
 const NEAR_RANGE := 3600.0
 const FAR_RANGE := 13000.0
@@ -71,6 +74,10 @@ var _world_height := 40000.0
 var _height_at := Callable()
 var _material: StandardMaterial3D
 var _build_run := 0
+var _frame_started_usec := 0
+# The build that is placing now. Batches and tree records from an abandoned
+# build are dropped, because a rebuild or clear can happen while it is paused.
+var _placing_run := 0
 # Each: {kind, key, height, material}. Empty when the baked atlases are missing.
 var _impostors: Array[Dictionary] = []
 var _impostor_quad: QuadMesh
@@ -124,18 +131,29 @@ func rebuild(masks: PackedByteArray, world_width: float, world_height: float, he
 			areas.append(Rect2(origin, chunk_size))
 	areas.sort_custom(func(first: Rect2, second: Rect2) -> bool:
 		return first.get_center().distance_squared_to(focus) < second.get_center().distance_squared_to(focus))
+	_frame_started_usec = Time.get_ticks_usec()
+	_placing_run = run
 	for area in areas:
-		_place_trees(area, int(square_km * NEAR_TREES_PER_KM2), conifer_near, broadleaf_near, NEAR_RANGE, 1.0, rng)
-		_place_trees(area, int(square_km * FAR_TREES_PER_KM2), conifer_far, broadleaf_far, FAR_RANGE, 1.5, rng)
-		_place_shrubs(area, shrub, rng)
-		_place_rocks(area, rock, rng)
+		await _place_trees(area, int(square_km * NEAR_TREES_PER_KM2), conifer_near, broadleaf_near, NEAR_RANGE, 1.0, rng, run)
+		await _place_trees(area, int(square_km * FAR_TREES_PER_KM2), conifer_far, broadleaf_far, FAR_RANGE, 1.5, rng, run)
+		await _place_shrubs(area, shrub, rng, run)
+		await _place_rocks(area, rock, rng, run)
+		if run != _build_run:
+			return
 		_near_ring_dirty = true
-		if is_inside_tree():
-			await get_tree().process_frame
+		await _yield_if_over_budget()
 		if run != _build_run:
 			return
 	building = false
 	finished.emit()
+
+
+# Lets the frame end if placement has used its share of it. The placement order
+# and random draws are unchanged, so the forest is the same either way.
+func _yield_if_over_budget() -> void:
+	if is_inside_tree() and Time.get_ticks_usec() - _frame_started_usec > BUILD_BUDGET_USEC:
+		await get_tree().process_frame
+		_frame_started_usec = Time.get_ticks_usec()
 
 
 func clear() -> void:
@@ -267,6 +285,8 @@ func _tree_cell(x: float, z: float) -> Vector2i:
 
 
 func _record_tree(variant: int, position: Vector2, height: float, scale: float, width: float, yaw: float, tint: Color) -> void:
+	if _placing_run != _build_run:
+		return
 	var cell := _tree_cell(position.x, position.y)
 	if not _tree_cells.has(cell):
 		_tree_cells[cell] = PackedFloat32Array()
@@ -366,7 +386,7 @@ func _impostor_indices(kind: String) -> Array[int]:
 
 
 # One batch per impostor variant, since each has its own atlas.
-func _place_impostor_trees(area: Rect2, attempts: int, view_range: float, size_factor: float, rng: RandomNumberGenerator) -> void:
+func _place_impostor_trees(area: Rect2, attempts: int, view_range: float, size_factor: float, rng: RandomNumberGenerator, run := -1) -> void:
 	var pools := {}
 	for kind in ["conifer", "broadleaf", "sapling"]:
 		pools[kind] = _impostor_indices(kind)
@@ -378,6 +398,10 @@ func _place_impostor_trees(area: Rect2, attempts: int, view_range: float, size_f
 		buffers.append(buffer)
 		counts.append(0)
 	for _attempt in range(attempts):
+		if _attempt % 256 == 0:
+			await _yield_if_over_budget()
+			if run >= 0 and run != _build_run:
+				return
 		var position := _random_point(area, rng)
 		var forest := _mask_value(position.x, position.y, 1)
 		if forest < 24 or rng.randi_range(0, 255) > forest:
@@ -438,9 +462,9 @@ func _foliage_tint(kind: String, rng: RandomNumberGenerator) -> Color:
 			return Color(shade, shade * 0.98, shade * 0.95)
 
 
-func _place_trees(area: Rect2, attempts: int, conifer: Mesh, broadleaf: Mesh, view_range: float, size_factor: float, rng: RandomNumberGenerator) -> void:
+func _place_trees(area: Rect2, attempts: int, conifer: Mesh, broadleaf: Mesh, view_range: float, size_factor: float, rng: RandomNumberGenerator, run := -1) -> void:
 	if not _impostors.is_empty():
-		_place_impostor_trees(area, attempts, view_range, size_factor, rng)
+		await _place_impostor_trees(area, attempts, view_range, size_factor, rng, run)
 		return
 	var conifers := PackedFloat32Array()
 	var broadleaves := PackedFloat32Array()
@@ -449,6 +473,10 @@ func _place_trees(area: Rect2, attempts: int, conifer: Mesh, broadleaf: Mesh, vi
 	var conifer_count := 0
 	var broadleaf_count := 0
 	for _attempt in range(attempts):
+		if _attempt % 256 == 0:
+			await _yield_if_over_budget()
+			if run >= 0 and run != _build_run:
+				return
 		var position := _random_point(area, rng)
 		var forest := _mask_value(position.x, position.y, 1)
 		if forest < 24 or rng.randi_range(0, 255) > forest:
@@ -470,7 +498,7 @@ func _place_trees(area: Rect2, attempts: int, conifer: Mesh, broadleaf: Mesh, vi
 	_add_batch(broadleaf, broadleaves, broadleaf_count, area, view_range)
 
 
-func _place_shrubs(area: Rect2, mesh: Mesh, rng: RandomNumberGenerator) -> void:
+func _place_shrubs(area: Rect2, mesh: Mesh, rng: RandomNumberGenerator, run := -1) -> void:
 	# Real shrub species when the impostors are available, else a blob shape.
 	var bushes := _impostor_indices("shrub")
 	if bushes.is_empty():
@@ -483,6 +511,10 @@ func _place_shrubs(area: Rect2, mesh: Mesh, rng: RandomNumberGenerator) -> void:
 		buffers.append(buffer)
 		counts.append(0)
 	for _attempt in range(SHRUBS_PER_CHUNK):
+		if _attempt % 256 == 0:
+			await _yield_if_over_budget()
+			if run >= 0 and run != _build_run:
+				return
 		var position := _random_point(area, rng)
 		var river := _mask_value(position.x, position.y, 0)
 		var variation := _mask_value(position.x, position.y, 3)
@@ -511,11 +543,15 @@ func _place_shrubs(area: Rect2, mesh: Mesh, rng: RandomNumberGenerator) -> void:
 		_add_batch(_impostor_quad, buffers[slot], counts[slot], area, NEAR_RANGE, _impostors[bushes[slot]].material)
 
 
-func _place_rocks(area: Rect2, mesh: Mesh, rng: RandomNumberGenerator) -> void:
+func _place_rocks(area: Rect2, mesh: Mesh, rng: RandomNumberGenerator, run := -1) -> void:
 	var rocks := PackedFloat32Array()
 	rocks.resize(ROCKS_PER_CHUNK * INSTANCE_FLOATS)
 	var count := 0
 	for _attempt in range(ROCKS_PER_CHUNK):
+		if _attempt % 256 == 0:
+			await _yield_if_over_budget()
+			if run >= 0 and run != _build_run:
+				return
 		var position := _random_point(area, rng)
 		var height: float = _height_at.call(position.x, position.y)
 		var uphill: float = _height_at.call(position.x + 60.0, position.y + 60.0)
@@ -554,7 +590,7 @@ func _write_instance(buffer: PackedFloat32Array, index: int, position: Vector2, 
 
 
 func _add_batch(mesh: Mesh, buffer: PackedFloat32Array, count: int, area: Rect2, view_range: float, material: Material = null) -> void:
-	if count == 0:
+	if count == 0 or _placing_run != _build_run:
 		return
 	buffer.resize(count * INSTANCE_FLOATS)
 	# Bounds that hug where this batch stands, so culling and visibility range

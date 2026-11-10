@@ -10,7 +10,7 @@ func _ready() -> void:
 ## "key" and "action" drive main.gd's _handle_hotkey; entries with no action are
 ## handled elsewhere in main.gd and are listed here so the sheet is complete.
 ## "label" is what the sheet shows and "category" groups it.
-const CATEGORY_ORDER := ["Camera", "Selection and orders", "Building", "Logistics", "Interface"]
+const CATEGORY_ORDER := ["Camera", "Selection and orders", "Building", "Logistics", "Game speed", "Interface"]
 
 var _order: Array[String] = []
 
@@ -24,6 +24,10 @@ func _load_default_hotkeys() -> void:
 		{"key": "KEY_QE", "label": "Q / E", "category": "Camera", "action": "", "description": "Rotate camera"},
 		{"key": "KEY_WHEEL_UP", "label": "Wheel up", "category": "Camera", "action": "zoom_in", "description": "Zoom in toward the cursor"},
 		{"key": "KEY_WHEEL_DOWN", "label": "Wheel down", "category": "Camera", "action": "zoom_out", "description": "Zoom out"},
+		{"key": "KEY_SLASH", "label": "/ (Numpad divide)", "category": "Camera", "action": "", "description": "Cycle zoom levels; wraps from full map to close-up"},
+		{"key": "KEY_PLUS", "label": "+ / = / Numpad +", "category": "Game speed", "action": "", "description": "Increase speed by 25% (maximum 175%, non-multiplayer)"},
+		{"key": "KEY_MINUS", "label": "- / Numpad -", "category": "Game speed", "action": "", "description": "Decrease speed by 25% (minimum 25%, non-multiplayer)"},
+		{"key": "TRACKPAD_PINCH", "label": "Trackpad pinch", "category": "Camera", "action": "", "description": "Spread fingers to zoom in; pinch to zoom out"},
 		{"key": "KEY_MIDDLE", "label": "Middle drag", "category": "Camera", "action": "pan_camera", "description": "Pan camera"},
 		{"key": "KEY_SPACE", "label": "Hold Space", "category": "Camera", "action": "free_camera", "description": "Free camera; drag to look around"},
 
@@ -49,7 +53,10 @@ func _load_default_hotkeys() -> void:
 		{"key": "KEY_D", "label": "D", "category": "Logistics", "action": "reinforcement_select", "description": "Choose reinforcement delivery zone"},
 		{"key": "KEY_F", "label": "F", "category": "Logistics", "action": "reinforcement_request", "description": "Request reinforcement package"},
 
+		{"key": "KEY_F2", "label": "F2", "category": "Interface", "action": "", "description": "Audio levels and sound credits (match keeps running)"},
 		{"key": "KEY_F1", "label": "F1", "category": "Interface", "action": "", "description": "Show or hide this hotkey sheet"},
+		{"key": "KEY_M", "label": "M", "category": "Interface", "action": "", "description": "Show or hide the magnifier inset (close-up under the cursor)"},
+		{"key": "KEY_BRACKETS", "label": "[ / ]", "category": "Interface", "action": "", "description": "Magnifier zoom 8x, 16x or 32x (8x is the widest)"},
 		{"key": "KEY_F8", "label": "F8", "category": "Interface", "action": "toggle_debug", "description": "Debug panel"},
 		{"key": "KEY_ESCAPE", "label": "Esc", "category": "Interface", "action": "quit_or_cancel", "description": "Close panel or cancel; quits when nothing is open"},
 	]

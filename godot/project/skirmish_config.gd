@@ -102,10 +102,18 @@ static func validate_definition(definition: Dictionary, terrain_path: String = "
 	if typeof(definition.victory) != TYPE_DICTIONARY:
 		return "Scenario victory must be an object"
 	var victory: Dictionary = definition.victory
-	if victory.get("type", "") not in ["last_faction_standing", "command_center"]:
+	if victory.get("type", "") not in ["last_faction_standing", "command_center", "command_center_or_key_sites"]:
 		return "Unsupported victory rule"
 	if not _is_nonempty_string(victory.get("description", "")):
 		return "Scenario victory description must be a non-empty string"
+	if victory.get("type", "") == "command_center_or_key_sites":
+		var key_sites: Variant = victory.get("key_sites", null)
+		if typeof(key_sites) != TYPE_ARRAY or key_sites.is_empty():
+			return "Key-site victory needs a non-empty site list"
+		if int(victory.get("required", 0)) < 1 or int(victory.get("required", 0)) > key_sites.size():
+			return "Key-site victory required count is invalid"
+		if int(victory.get("hold_seconds", 0)) < 1:
+			return "Key-site victory hold duration must be positive"
 
 	return ""
 
