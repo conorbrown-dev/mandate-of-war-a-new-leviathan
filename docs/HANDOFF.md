@@ -203,6 +203,18 @@ Release build and four CTest programs pass, but the full Godot sweep is not
 green. See STATUS.md for the failing scenarios; keep this package open until
 they are resolved or triaged with evidence.
 
+## Radio callouts (issue #3, 2026-11-10)
+
+Slices A to C of the issue are implemented: native radio reports, a JSON alert
+catalog, the announcer with subtitles and an F3 log, and the offline ElevenLabs
+generator. Three alerts are live (hostile aircraft, fuel depot secured, fuel depot
+lost) and are text-only until clips are generated. See STATUS.md "Radio callouts"
+and `docs/adr/0001-radio-callouts.md`. To add speech: put voice ids in the catalog
+(or `ELEVENLABS_VOICE_<SET>`), set `ELEVENLABS_API_KEY`, run
+`tools/generate_radio_voice.py --generate`, listen, then `--approve-all`. Check
+the plan's commercial rights first and add the voices to the F2 credits. Slices D
+(more alerts) and E (mod loading, replay) are open.
+
 ## Suggested next steps
 
 1. Play a match by hand against the AI. Every slice so far is proven only by

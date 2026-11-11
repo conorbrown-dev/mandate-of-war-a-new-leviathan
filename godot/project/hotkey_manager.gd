@@ -54,6 +54,7 @@ func _load_default_hotkeys() -> void:
 		{"key": "KEY_F", "label": "F", "category": "Logistics", "action": "reinforcement_request", "description": "Request reinforcement package"},
 
 		{"key": "KEY_F2", "label": "F2", "category": "Interface", "action": "", "description": "Audio levels and sound credits (match keeps running)"},
+		{"key": "KEY_F3", "label": "F3", "category": "Interface", "action": "", "description": "Radio log: recent reports; click one to view its location"},
 		{"key": "KEY_F1", "label": "F1", "category": "Interface", "action": "", "description": "Show or hide this hotkey sheet"},
 		{"key": "KEY_M", "label": "M", "category": "Interface", "action": "", "description": "Show or hide the magnifier inset (close-up under the cursor)"},
 		{"key": "KEY_BRACKETS", "label": "[ / ]", "category": "Interface", "action": "", "description": "Magnifier zoom 8x, 16x or 32x (8x is the widest)"},

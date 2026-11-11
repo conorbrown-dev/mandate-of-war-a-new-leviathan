@@ -102,3 +102,17 @@ candidate and averaged 17 ms on the skirmish fixture; reserving spots in the sam
 kind of grid as the hulls, one request per unit, no trigonometry per candidate and
 an 8-tick backoff for packed crowds brought it to the numbers above. These are
 isolated native timings, not a rendered frame-rate claim.
+
+## Radio callouts (2026-11-10, Apple M1 Pro, Release)
+
+Simulation and presentation measured separately; neither is a frame-rate claim.
+
+- Simulation: `./build/rts_skirmish_benchmark 1950 400` (3,951 units) averages
+  4.00 ms per tick (p95 12.8, max 20.5), unchanged from the 4.0 ms recorded
+  before radio reports. The air check runs on the vision refresh over aircraft
+  only; depot reports are raised only where a capture completes. A native test
+  holds 1,500 hostile aircraft in sight for 200 ticks and gets one report.
+- Presentation (headless Godot, GDScript): the announcer takes 7.9 ms to accept
+  one packet of 2,000 synthetic reports and ends with at most six queued. The
+  bridge can deliver at most 64 per side, so a real packet costs about 0.25 ms.
+  An idle or speaking announcer costs about 2 microseconds a frame.

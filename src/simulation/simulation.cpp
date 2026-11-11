@@ -49,6 +49,8 @@ void Simulation::start() {
     // Reset simulation state for fresh world
     clear_entities();
     combat_events_.clear();
+    for (auto& events : radio_events_) events.clear();
+    air_threats_ = {};
     running_ = true;
     tick_ = 0;
     elapsed_ms_ = 0.0f;
@@ -2215,6 +2217,68 @@ std::vector<CombatPresentationEvent> Simulation::combat_events_after(uint64_t cu
     return result;
 }
 
+void Simulation::record_radio_event(RadioEventKind kind, FactionId listener, float x, float y,
+                                    int count, EntityId subject) {
+    const auto index = static_cast<size_t>(listener);
+    if (index >= FACTION_COUNT) return;
+    RadioEvent event{++radio_event_sequences_[index], tick_, kind, listener, x, y};
+    for (const EntityId post : {match_player_post_, match_enemy_post_}) {
+        const auto* owner = component_manager_.get_component<Faction>(post);
+        const auto* position = component_manager_.get_component<Position>(post);
+        if (!owner || !position || owner->faction_id != listener) continue;
+        event.has_reference = true;
+        event.reference_x = position->x;
+        event.reference_y = position->y;
+    }
+    event.count = count;
+    event.subject = subject;
+    auto& events = radio_events_[index];
+    if (events.size() == MAX_RADIO_EVENTS) events.pop_front();
+    events.push_back(event);
+}
+
+std::vector<RadioEvent> Simulation::radio_events_after(uint64_t cursor, FactionId listener) const {
+    std::vector<RadioEvent> result;
+    const auto index = static_cast<size_t>(listener);
+    if (index >= FACTION_COUNT) return result;
+    for (const auto& event : radio_events_[index]) {
+        if (event.sequence > cursor) result.push_back(event);
+    }
+    return result;
+}
+
+// Runs on the vision refresh, over aircraft only. A side is told once when
+// hostile aircraft enter its own sight, however many there are.
+void Simulation::update_air_threat_reports() {
+    std::array<int, FACTION_COUNT> counts{};
+    std::array<float, FACTION_COUNT> sum_x{}, sum_y{};
+    for (const auto entity : component_manager_.entities_with<Aircraft, Position, Faction>(entity_manager_.get_entities())) {
+        if (!is_airborne(entity) || get_unit_is_dead(entity)) continue;
+        const auto* position = component_manager_.get_component<Position>(entity);
+        const auto owner = component_manager_.get_component<Faction>(entity)->faction_id;
+        for (size_t side = 0; side < FACTION_COUNT; ++side) {
+            const auto viewer = static_cast<FactionId>(side);
+            if (viewer == owner || !vision_map_.visible_in_sky(viewer, position->x, position->y)) continue;
+            ++counts[side];
+            sum_x[side] += position->x;
+            sum_y[side] += position->y;
+        }
+    }
+    for (size_t side = 0; side < FACTION_COUNT; ++side) {
+        auto& threat = air_threats_[side];
+        if (counts[side] > 0) {
+            if (!threat.active) {
+                record_radio_event(RadioEventKind::AIR_HOSTILE_INBOUND, static_cast<FactionId>(side),
+                                   sum_x[side] / counts[side], sum_y[side] / counts[side], counts[side]);
+            }
+            threat.active = true;
+            threat.last_seen_tick = tick_;
+        } else if (threat.active && tick_ - threat.last_seen_tick >= kAirThreatClearTicks) {
+            threat.active = false;
+        }
+    }
+}
+
 void Simulation::combat_phase(float delta_ms) {
     if (!vision_active_) {
         for (auto& observers : combat_observers_) observers.clear();
@@ -2811,6 +2875,7 @@ void Simulation::refresh_vision() {
         }
         for (const auto& [x,y] : cells) contacts.push_back({x*100.0f+50.0f, y*100.0f+50.0f});
     }
+    update_air_threat_reports();
     ++vision_revision_;
 }
 
@@ -2975,6 +3040,17 @@ void Simulation::update_fuel_supply(float delta_ms) {
         const float depot_x = depot->second.x;
         const float depot_y = depot->second.y;
         if (std::hypot(position->x - depot_x, position->y - depot_y) <= kFuelDepotCaptureRadius) {
+            // Both sides know this without sight: one is standing on the depot
+            // and the other has just stopped receiving its fuel.
+            const EntityId previous = production_manager_.fuel_depot_holder(capture.depot);
+            if (previous != production_manager_.faction_storage(faction->faction_id)) {
+                record_radio_event(RadioEventKind::FUEL_DEPOT_SECURED, faction->faction_id, depot_x, depot_y, 1, capture.depot);
+                for (size_t side = 0; side < FACTION_COUNT && previous != INVALID_ENTITY; ++side) {
+                    if (production_manager_.faction_storage(static_cast<FactionId>(side)) == previous) {
+                        record_radio_event(RadioEventKind::FUEL_DEPOT_LOST, static_cast<FactionId>(side), depot_x, depot_y, 1, capture.depot);
+                    }
+                }
+            }
             production_manager_.assign_fuel_depot(capture.depot, production_manager_.faction_storage(faction->faction_id), true);
             return true;
         }

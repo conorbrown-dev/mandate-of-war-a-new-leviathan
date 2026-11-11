@@ -1620,3 +1620,56 @@ rendered `ground_transport_routes` report resources still in use at exit;
 `vehicle_movement_smoke` fails hull-alignment and formation-arrival assertions.
 The stale fighter hover description was corrected and `build_menu_hover` now
 passes 81/81. This package remains open pending those failures.
+
+## Radio callouts and command voice alerts (2026-11-10, issue #3)
+
+Design and rules: [adr/0001-radio-callouts.md](adr/0001-radio-callouts.md).
+
+Three alerts work end to end: `air.hostile_inbound`, `objective.fuel_depot_secured`
+and `objective.fuel_depot_lost`. **No voice clips exist yet**, so every alert is
+text with a short attention tone. Generating speech needs an ElevenLabs key.
+
+- Native: `Simulation::record_radio_event` raises a report for one side. A depot
+  capture tells the captor and the previous holder once each. Hostile aircraft in
+  a side's own sky sight raise one report; another needs the sky clear of them for
+  30 s (`kAirThreatClearTicks`). Reports are outside the state hash, the match
+  record and the AI. Bridge: `get_radio_events(after_sequence, faction_id)`.
+- Catalog: `godot/project/audio/radio/radio_catalog.json`. Eight further alerts
+  are listed as parked with the system each one needs.
+- `audio/radio/radio_announcer.gd` plays one line at a time on the new Voice bus,
+  ordered by severity; critical cuts in. Repeats fold together, the queue holds
+  six, and stale reports are dropped. `radio_location.gd` makes bearing, compass
+  point, clock direction, range and grid words.
+- UI: the line appears top-centre with category, severity and a location detail;
+  clicking it moves the camera there. F3 opens the radio log (last eight). F2 has
+  a Voice slider, spoken alerts on/off, alert text on/off and a switch per
+  category, saved in `user://audio.cfg`.
+- `tools/generate_radio_voice.py`: dry run by default (30 lines, 2,484 characters
+  today). `--generate` renders missing lines to `audio/radio/audition/`, keeping
+  clean masters in `audio/radio/masters/`; `--approve-all` moves them into the
+  game and lists them in `voice_manifest.json`. Cached by text and settings hash,
+  with a character budget, selection by event or voice set, and retry on rate
+  limits. The key is read from `ELEVENLABS_API_KEY` or the ignored `.env`.
+
+Evidence (Apple M1 Pro, macOS arm64, Release):
+
+- Native: six `radio_*` tests in `tests/test_radio_events.cpp`. Removing the raid
+  memory, the sight check or the previous-holder check fails 1, 1 and 4 of them.
+- Godot: `python3 tools/validate.py radio_callouts` passes 86 checks headless and
+  rendered, including a real capture, a real loss and an enemy paradrop flight
+  seen by the player's units. Removing dedupe, preemption or the main-loop read
+  fails 4, 4 and 5 checks. Screenshot:
+  `validation/artifacts/radio_callouts/rendered/radio_feed.png`.
+- Tool: `python3 -m unittest discover -s tools/tests` runs 10 generator tests with
+  a fake transport (no network).
+
+- Regression: CTest passes 4 programs (318 integration tests). The contract sweep
+  passes except `skirmish_presentation`, which was already failing (HANDOFF
+  "Known failing contracts"); `build_menu_hover` failed one hover-tick check in
+  the sweep and passed twice alone. Three `test_validation.py` tool tests error on
+  a missing `resolution` argument, unrelated to this work. Cost: PERFORMANCE.md.
+
+Known gaps: no recorded speech and no human listening; ElevenLabs commercial
+rights not yet checked; voice ids in the catalog are empty; the catalog cannot be
+replaced by a mod without code; replays do not replay radio; the AI side's
+reports are produced but nothing presents them.

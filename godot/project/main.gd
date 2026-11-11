@@ -103,6 +103,8 @@ const UiAudioScript := preload("res://audio/ui_audio.gd")
 const AudioMixScript := preload("res://audio/audio_mix.gd")
 const AudioSettingsScript := preload("res://ui/components/audio_settings.gd")
 const EngineAudioScript := preload("res://audio/engine_audio.gd")
+const RadioAnnouncerScript := preload("res://audio/radio/radio_announcer.gd")
+const RadioFeedScript := preload("res://ui/components/radio_feed.gd")
 const StrategicCommandPanelScript := preload("res://ui/components/strategic_command_panel.gd")
 const CommandPostModel := preload("res://structures/command_post_model.gd")
 const CommandPostPanelScript := preload("res://ui/components/command_post_panel.gd")
@@ -158,6 +160,8 @@ var combat_effects: Node3D
 var ui_audio: Node
 var engine_audio: Node3D
 var audio_settings: Control
+var radio_announcer: Node
+var radio_feed: Control
 var magnifier_view: Control
 var range_envelope_renderer: Node3D
 var unit_route_refresh_seconds := 0.0
@@ -455,6 +459,7 @@ func _ready() -> void:
 	ui_audio = UiAudioScript.new()
 	ui_audio.name = "UiAudio"
 	add_child(ui_audio)
+	_setup_radio()
 	_setup_command_post_panel()
 	_setup_strategic_command_view()
 	_setup_magnifier_view()
@@ -617,6 +622,26 @@ func _activate_reinforcement_delivery_from_airfield() -> void:
 		_update_reinforcement_presentation()
 	else:
 		reinforcement_delivery_status = String(extension.call("reinforcement_delivery_state").get("reason", "AIRFIELD REQUIRED FOR REINFORCEMENTS"))
+
+
+## The command network: native reports in, one spoken line and its text out.
+func _setup_radio() -> void:
+	radio_announcer = RadioAnnouncerScript.new()
+	radio_announcer.name = "RadioAnnouncer"
+	radio_announcer.listener_faction = HUMAN_PLAYER_ID
+	radio_announcer.prefs.load_saved()
+	add_child(radio_announcer)
+	radio_feed = RadioFeedScript.new()
+	radio_feed.name = "RadioFeed"
+	ui_root.add_child(radio_feed)
+	radio_feed.attach(radio_announcer)
+	radio_feed.focus_requested.connect(_focus_camera_on_report)
+	if audio_settings != null:
+		audio_settings.attach_radio(radio_announcer)
+
+
+func _focus_camera_on_report(spot: Vector2) -> void:
+	camera_target = Vector3(spot.x, _terrain_height_at(spot.x, spot.y), spot.y)
 
 
 func _setup_audio_settings() -> void:
@@ -1217,6 +1242,8 @@ func _start_scale_profile() -> void:
 		combat_effects.clear()
 	if engine_audio != null:
 		engine_audio.clear()
+	if radio_announcer != null:
+		radio_announcer.clear()
 	if magnifier_view != null:
 		magnifier_view.set_enabled(true)
 	var unit_count := _get_visible_unit_count()
@@ -1251,6 +1278,8 @@ func _on_start_skirmish_pressed() -> void:
 		combat_effects.clear()
 	if engine_audio != null:
 		engine_audio.clear()
+	if radio_announcer != null:
+		radio_announcer.clear()
 	if magnifier_view != null:
 		magnifier_view.set_enabled(true)
 	_setup_economy_for_player_1()
@@ -1383,6 +1412,8 @@ func _process(delta: float) -> void:
 	_process_pending_build_order()
 	var simulation_call_ms := float(Time.get_ticks_usec() - simulation_start_us) / 1000.0
 	combat_effects.consume(extension.call("get_combat_events", combat_effects.cursor, HUMAN_PLAYER_ID))
+	radio_announcer.map_rect = Rect2(-terrain_world_width * 0.5, -terrain_world_height * 0.5, terrain_world_width, terrain_world_height)
+	radio_announcer.consume(extension.call("get_radio_events", radio_announcer.cursor, HUMAN_PLAYER_ID))
 	_sync_new_entities()
 	_sync_completed_roads()
 	_update_keyboard_pan(delta)
@@ -1544,6 +1575,10 @@ func _unhandled_input(event: InputEvent) -> void:
 				get_viewport().set_input_as_handled()
 				return
 
+	if event is InputEventKey and event.pressed and not event.echo and event.keycode == KEY_F3 and radio_feed != null:
+		radio_feed.toggle_log()
+		get_viewport().set_input_as_handled()
+		return
 	if event is InputEventKey and event.pressed and not event.echo and event.keycode == KEY_F1:
 		if hotkey_display != null:
 			hotkey_display.toggle()

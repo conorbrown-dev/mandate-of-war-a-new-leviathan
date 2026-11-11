@@ -102,3 +102,34 @@ Each finished match is written as JSON to `user://match_records/` (or
 - `samples`: every 10 seconds, each faction's units, fighting units, materials
   and army centre.
 - the result, match length and the tick each side first sighted the enemy.
+
+## Radio alerts
+
+`godot/project/audio/radio/radio_catalog.json` (`schema_version` 1) defines what
+the command network says. The game reads it at start; a catalog with another
+schema version is refused and the built-in one kept.
+
+- `voice_sets`: one per faction voice. `faction` is the faction id, `direction`
+  is a note for whoever picks the voice, and `elevenlabs` (voice id, model,
+  settings) is used only by `tools/generate_radio_voice.py`.
+- `severities`: `rank` (0 is most important), `max_age_seconds` (older reports
+  are dropped) and `preempts` (may cut in on a lower line).
+- `categories`: id to display name. Players can switch each one off.
+- `grid.cell_m`: size of a grid cell for `{grid}`.
+- `events`: each has a stable `id`, `category`, `severity` and:
+  - `status`: `active`, or `parked` with a `needs` note for alerts whose game
+    system does not exist. Parked alerts have no `native_kind`.
+  - `native_kind`: the `RadioEventKind` number it presents.
+  - `cooldown_seconds` and `dedupe` (`event`, or `sector` for one per grid cell).
+  - `lines`: voice set to a list of variants. A spoken line may use only
+    `{cardinal}`.
+  - `fallback`: text for a faction with no line. `plain`: text when the report
+    has no reference point, so no direction can be given.
+  - `detail`: a second text line; may use `{bearing}`, `{range_km}`, `{grid}`
+    and `{cardinal}`. It is dropped when any of them is unknown.
+  - `focus`: whether clicking the report moves the camera to it.
+
+Recorded lines are listed in `voice_manifest.json` beside the catalog, written
+by the generator: clip id (`<voice_set>/<event>.v<variant>[.<compass code>]`),
+resource path, text, voice id, model, settings, hashes and processing steps. A
+line with no entry there is shown as text.
