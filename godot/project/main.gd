@@ -2700,7 +2700,32 @@ func _update_range_envelopes() -> void:
 			if not hexes_by_key.has(key):
 				hexes_by_key[key] = []
 			hexes_by_key[key].append({"center": center, "radius": envelope.radius, "dash_phase": envelope.dash_phase})
+	# Units without a prototype model (the Command Walker) draw their ranges too.
+	for entity_id in demo_unit_views:
+		var demo_root: Node3D = demo_unit_views[entity_id]
+		if not is_instance_valid(demo_root) or not demo_root.visible:
+			continue
+		var side := HUMAN_PLAYER_ID if player_ids.has(entity_id) else 1
+		var center := Vector2(demo_root.global_position.x, demo_root.global_position.z)
+		var ranges: PackedFloat32Array = extension.call("get_unit_range_profile", entity_id)
+		if ranges.size() != 3:
+			continue
+		for envelope in _demo_range_envelopes(ranges[0], ranges[1], ranges[2]):
+			var key := "%d:%s" % [side, envelope.kind]
+			if not hexes_by_key.has(key):
+				hexes_by_key[key] = []
+			hexes_by_key[key].append({"center": center, "radius": envelope.radius, "dash_phase": envelope.dash_phase})
 	range_envelope_renderer.update_envelopes(hexes_by_key, func(x: float, z: float): return _terrain_height_at(x, z))
+
+
+# Same kinds and dash rule as UnitVisualRoot.set_gameplay_ranges.
+func _demo_range_envelopes(attack: float, view_range: float, intel: float) -> Array:
+	var envelopes: Array = []
+	var matched := attack > 0.0 and is_equal_approx(attack, view_range)
+	for spec in [["VisibilityHex", view_range, 1 if matched else -1], ["RadarHex", intel, -1], ["AttackHex", attack, 0 if matched else -1]]:
+		if is_finite(spec[1]) and spec[1] > 0.0:
+			envelopes.append({"kind": spec[0], "radius": spec[1], "dash_phase": spec[2]})
+	return envelopes
 
 
 func _configure_unit_ranges(wrapper: Node3D, entity_id: int) -> void:
@@ -3887,33 +3912,7 @@ func _create_demo_unit(entity_id: int, unit_type: int, faction_color: Color, wor
 	strategic_stem.material_override = StrategicUnitIconScript.material_for(faction_color)
 	strategic_stem.visible = false
 	root.add_child(strategic_stem)
-	# SupCom-style strategic range overlays, intentionally faceted into six
-	# straight segments so intelligence and weapon envelopes read as hexes.
-	_add_hex_range_ring(root, "VisibilityHex", 15.0, 0.13, Color("#123a72"))
-	_add_hex_range_ring(root, "RadarHex", 22.0, 0.18, Color("#8c3cc7"))
-	_add_hex_range_ring(root, "AttackHex", 10.0, 0.23, Color("#d83b3b"))
-
-func _add_hex_range_ring(root: Node3D, ring_name: String, world_radius: float, height: float, color: Color) -> void:
-	var ring := MeshInstance3D.new()
-	ring.name = ring_name
-	ring.top_level = true
-	var material := _demo_material(color, 2.2)
-	material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	var lines := ImmediateMesh.new()
-	lines.surface_begin(Mesh.PRIMITIVE_LINES)
-	for side in range(6):
-		var a := TAU * float(side) / 6.0 + PI / 6.0
-		var b := TAU * float(side + 1) / 6.0 + PI / 6.0
-		var start := Vector3(root.global_position.x + cos(a) * world_radius, _terrain_height_at(root.global_position.x + cos(a) * world_radius, root.global_position.z + sin(a) * world_radius) + height, root.global_position.z + sin(a) * world_radius)
-		var finish := Vector3(root.global_position.x + cos(b) * world_radius, _terrain_height_at(root.global_position.x + cos(b) * world_radius, root.global_position.z + sin(b) * world_radius) + height, root.global_position.z + sin(b) * world_radius)
-		lines.surface_add_vertex(start)
-		lines.surface_add_vertex(finish)
-	lines.surface_end()
-	lines.surface_set_material(0, material)
-	ring.mesh = lines
-	ring.material_override = material
-	ring.visible = true
-	root.add_child(ring)
+	# Range outlines for these units come from _update_range_envelopes.
 
 func _set_unit_lod(root: Node3D) -> void:
 	var strategic := camera_distance > 500.0
