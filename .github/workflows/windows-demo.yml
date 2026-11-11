@@ -1,6 +1,9 @@
 name: Windows Demo Package
 
 on:
+  push:
+    branches:
+      - codex/windows-demo-build
   workflow_dispatch:
 
 jobs:
