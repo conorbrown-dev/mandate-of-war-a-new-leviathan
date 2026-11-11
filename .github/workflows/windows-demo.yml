@@ -42,7 +42,7 @@ jobs:
           $package = Join-Path $env:RUNNER_TEMP "MandateOfWarDemo"
           New-Item -ItemType Directory -Force -Path $package | Out-Null
           New-Item -ItemType Directory -Force -Path (Join-Path $package "godot") | Out-Null
-          Copy-Item -Path "godot/project" -Destination (Join-Path $package "godot/project") -Recurse
+          Copy-Item -Path "godot/project" -Destination (Join-Path $package "godot/project") -Recurse -Force
           Copy-Item -Path $env:GODOT_EXE -Destination (Join-Path $package "GodotRuntime.exe")
           $launcher = Join-Path $env:WINDIR "Microsoft.NET/Framework64/v4.0.30319/csc.exe"
           if (-not (Test-Path $launcher)) { throw "The .NET Framework C# compiler was not found on the Windows runner." }
@@ -50,6 +50,9 @@ jobs:
           & $launcher /nologo /target:winexe /reference:System.Windows.Forms.dll /out:"$(Join-Path $package 'MandateOfWar.exe')" $launcherSource
           if ($LASTEXITCODE -ne 0) { throw "Compiling the demo launcher failed." }
           if (-not (Test-Path (Join-Path $package "godot/project/bin/rts_gdextension.dll"))) { throw "The Windows game extension was not copied into the package." }
+          $importedAssets = Get-ChildItem -Path (Join-Path $package "godot/project/.godot/imported") -File -Recurse -Force
+          if ($importedAssets.Count -eq 0) { throw "Godot's imported assets are missing from the packaged project." }
+          Write-Host "Packaged $($importedAssets.Count) imported Godot assets."
           & (Join-Path $package "GodotRuntime.exe") --headless --path (Join-Path $package "godot/project") --quit-after 120
           if ($LASTEXITCODE -ne 0) { throw "The packaged project failed its headless startup check." }
           @'
@@ -60,7 +63,8 @@ jobs:
           This is a demo build for Windows x86_64. It includes the game project, Godot runtime, and native game extension.
           '@ | Set-Content -Path (Join-Path $package "README.txt") -Encoding utf8
           $archive = Join-Path $env:RUNNER_TEMP "MandateOfWarDemo-Windows-x86_64.zip"
-          Compress-Archive -Path (Join-Path $package "*") -DestinationPath $archive -CompressionLevel Optimal
+          Add-Type -AssemblyName System.IO.Compression.FileSystem
+          [System.IO.Compression.ZipFile]::CreateFromDirectory($package, $archive, [System.IO.Compression.CompressionLevel]::Optimal, $false)
           "DEMO_ARCHIVE=$archive" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
 
       - name: Upload Windows demo
