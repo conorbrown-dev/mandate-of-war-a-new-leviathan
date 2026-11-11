@@ -65,6 +65,7 @@ CONTRACT_SCENARIOS = {
     "range_envelopes": ("test_range_envelopes.gd", "RANGE_ENVELOPES checks="),
     "landing_approach": ("test_landing_approach.gd", "LANDING_APPROACH checks="),
     "game_speed": ("test_game_speed.gd", "GAME_SPEED checks="),
+    "exit_confirmation": ("test_exit_confirmation.gd", "EXIT_CONFIRMATION checks="),
     "camera_zoom_input": ("test_camera_zoom_input.gd", "CAMERA_ZOOM_INPUT checks="),
     "combat_effects": ("test_combat_effects.gd", "COMBAT_EFFECTS checks="),
     "slice4_audio": ("test_slice4_audio.gd", "SLICE4_AUDIO checks="),

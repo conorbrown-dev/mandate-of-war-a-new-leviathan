@@ -84,6 +84,7 @@ const FUEL_STATUS_SECONDS := 8.0
 const RECON_PLANE_UNIT_TYPE := 14
 const FogShader := preload("res://fog_of_war.gdshader")
 const MatchEndPanelScript := preload("res://ui/components/match_end_panel.gd")
+const ExitConfirmScript := preload("res://ui/components/exit_confirm.gd")
 const MandateTokens := preload("res://ui/theme/ui_tokens.gd")
 const TerrainVegetation := preload("res://terrain_vegetation.gd")
 const UnitCatalog := preload("res://unit_catalog.gd")
@@ -410,6 +411,7 @@ var panning := false
 var selection_start := Vector2.ZERO
 var selection_end := Vector2.ZERO
 var hud_elapsed := 0.0
+var exit_confirm: ExitConfirm
 var profile_target_frames := 0
 var profile_warmup_frames := 60
 var profile_seen_frames := 0
@@ -1534,6 +1536,11 @@ func _update_territory() -> void:
 
 
 func _unhandled_input(event: InputEvent) -> void:
+	if exit_confirm != null and exit_confirm.visible:
+		if event is InputEventKey and event.pressed and not event.echo and event.keycode == KEY_ESCAPE:
+			exit_confirm.hide()
+		get_viewport().set_input_as_handled()
+		return
 	if audio_settings != null and audio_settings.visible:
 		get_viewport().set_input_as_handled()
 		return
@@ -1592,7 +1599,7 @@ func _unhandled_input(event: InputEvent) -> void:
 		if build_mode_type >= 0 or fob_build_mode or material_order_mode != 0 or recon_targeting or paradrop_targeting_type >= 0:
 			_cancel_tactical_modes()
 			return
-		get_tree().quit()
+		_show_exit_confirm()
 		return
 	if event is InputEventKey and event.keycode == KEY_SPACE:
 		if not event.echo:
@@ -3061,10 +3068,23 @@ func _enforce_game_speed_policy() -> void:
 func _change_game_speed(direction: int) -> void:
 	if _can_change_game_speed():
 		var current := float(extension.call("get_game_speed"))
-		extension.call("set_game_speed", clampf(current + 0.25 * direction, 0.25, 1.75))
+		var next := clampf(current + 0.25 * direction, 0.25, 1.75)
+		if next != current:
+			extension.call("set_game_speed", next)
+			ui_audio.play_cue("speed_step")
 	else:
 		_enforce_game_speed_policy()
 	_update_hud()
+
+
+func _show_exit_confirm() -> void:
+	if exit_confirm == null:
+		exit_confirm = ExitConfirmScript.new()
+		exit_confirm.name = "ExitConfirm"
+		exit_confirm.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+		exit_confirm.exit_requested.connect(func(): get_tree().quit())
+		ui_root.add_child(exit_confirm)
+	exit_confirm.show()
 
 
 func _zoom_toward_cursor(screen_position: Vector2, multiplier: float) -> void:
@@ -4456,7 +4476,7 @@ func _handle_hotkey(keycode: Key, event: InputEventKey) -> bool:
 			if build_mode_type >= 0 or fob_build_mode or material_order_mode != 0:
 				_cancel_tactical_modes()
 				return true
-			get_tree().quit()
+			_show_exit_confirm()
 			return true
 		"toggle_debug":
 			debug_panel.visible = not debug_panel.visible
@@ -5142,6 +5162,7 @@ func _update_hud() -> void:
 		pending_completed_structures.clear()
 	command_hud.refresh({
 		"scenario": scenario_name,
+		"match_seconds": float(extension.call("match_state").get("seconds", 0.0)),
 		"game_speed": roundi(float(extension.call("get_game_speed")) * 100.0),
 		"speed_locked": not _can_change_game_speed(),
 		"friendly": player_entity_ids.size(),

@@ -6,6 +6,9 @@ match. The focused Godot contract passes 34/34 checks.
 Airfield ghost alignment and command-post exclusion now pass focused native and
 Godot checks. Hand-check the updated airfield boundary at several zoom levels.
 
+GitHub issues #11–#13 are implemented and passed focused automated checks; the
+user also verified them in manual play. See STATUS.md for details.
+
 Follow the slice plan in [HANDOFF.md](HANDOFF.md).
 
 Power grid (issue #4, 2026-11-10) is implemented and assertion-backed: stations,
