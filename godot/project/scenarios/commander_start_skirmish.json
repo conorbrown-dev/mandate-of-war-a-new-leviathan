@@ -21,5 +21,6 @@
     {"faction_id": 1, "road": {"entry": [-18000, -11000], "terminal": [-18000, -7400]}, "rail": {"entry": [-18500, -11000], "terminal": [-18500, -7400]}}
   ],
   "ground_vehicles_burn_fuel": true,
+  "power_grid": "res://scenarios/power_grid.json",
   "victory": {"type": "command_center_or_key_sites", "description": "Destroy the enemy command post, or hold two of three key sites for two minutes.", "key_sites": [900, 903, 913], "required": 2, "hold_seconds": 120}
 }

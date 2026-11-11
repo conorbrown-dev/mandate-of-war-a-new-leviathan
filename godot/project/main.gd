@@ -107,6 +107,7 @@ const RadioAnnouncerScript := preload("res://audio/radio/radio_announcer.gd")
 const RadioFeedScript := preload("res://ui/components/radio_feed.gd")
 const StrategicCommandPanelScript := preload("res://ui/components/strategic_command_panel.gd")
 const CommandPostModel := preload("res://structures/command_post_model.gd")
+const PowerGridViewScript := preload("res://power_grid_view.gd")
 const CommandPostPanelScript := preload("res://ui/components/command_post_panel.gd")
 const MagnifierViewScript := preload("res://ui/components/magnifier_view.gd")
 const ArmorTexture := preload("res://assets/units/near_future_armor_tile_v1.png")
@@ -311,6 +312,7 @@ var queued_build_orders: Array[Dictionary] = []
 var queued_build_markers: Node3D
 var material_site_state: Dictionary = {}
 var fuel_depot_state: Dictionary = {}
+var power_grid_view: Node3D
 var fuel_supply_status := ""
 var fuel_supply_reason_seen := ""
 var fuel_supply_status_expires_msec := 0
@@ -1342,6 +1344,7 @@ func _on_start_skirmish_pressed() -> void:
 		SKIRMISH_PRESENTATION_STARTING_MATERIALS, SKIRMISH_PRESENTATION_STARTING_FUEL)
 	_spawn_material_sites()
 	_spawn_fuel_depots()
+	_spawn_power_grid()
 	_spawn_civilian_buildings()
 	_begin_battle()
 	_set_selected(_player_engineer_id(), true)
@@ -1941,6 +1944,34 @@ func _spawn_fuel_depots() -> void:
 	_rebuild_material_site_views()
 
 
+# Stations, pylons and poles. The simulation decides who each line powers;
+# power_grid_view.gd draws what the player's side knows of it.
+func _spawn_power_grid() -> void:
+	if power_grid_view == null:
+		power_grid_view = PowerGridViewScript.new()
+		power_grid_view.name = "PowerGrid"
+		power_grid_view.friendly_color = PLAYER_FACTION_COLOR
+		power_grid_view.hostile_color = AI_FACTION_COLOR
+		add_child(power_grid_view)
+	power_grid_view.setup(extension, HUMAN_PLAYER_ID, _terrain_height_at,
+		func(x: float, y: float) -> bool: return bool(extension.call("can_see", HUMAN_PLAYER_ID, x, y)))
+	var path := String(scenario_definition.get("power_grid", ""))
+	if path.is_empty():
+		power_grid_view.clear()
+		return
+	if not power_grid_view.load_grid(path):
+		push_warning("Power grid data is unavailable: %s" % path)
+
+
+func _sync_power_grid() -> void:
+	if power_grid_view == null or not power_grid_view.active:
+		return
+	power_grid_view.sync()
+	var notice := String(power_grid_view.take_notice())
+	if not notice.is_empty():
+		_announce_intel(notice)
+
+
 func _begin_battle() -> void:
 	_apply_ai_style()
 	extension.call("match_begin", int(commander_ids.get(HUMAN_PLAYER_ID, -1)), int(commander_ids.get(1, -1)))
@@ -2200,6 +2231,7 @@ func _refresh_site_intel() -> void:
 		if not enemy_airfield_views.has(key):
 			enemy_airfield_views[key] = _add_enemy_airfield_view(position)
 			_announce_intel("ENEMY AIRFIELD LOCATED")
+	_sync_power_grid()
 
 
 func _add_enemy_airfield_view(position: Vector2) -> Node3D:
@@ -2533,9 +2565,21 @@ func _issue_material_site_order(screen_position: Vector2) -> void:
 		if distance <= nearest_distance:
 			nearest_distance = distance
 			selected_site = site
-	if selected_site.is_empty():
-		return
 	var commander_id := _player_engineer_id()
+	if selected_site.is_empty():
+		# Nothing of the Materials or fuel economy there: a power station or line?
+		if power_grid_view != null and power_grid_view.active:
+			var worker := commander_id
+			for id in selected_ids:
+				if player_entity_ids.has(id):
+					worker = id
+					break
+			var result: Dictionary = power_grid_view.order_at(target, _click_tolerance_meters(), material_order_mode, worker, commander_id)
+			if bool(result.handled):
+				_announce_intel(String(result.message))
+				material_order_mode = 0
+				_update_hud()
+		return
 	var site_position: Vector2 = selected_site.position
 	if fuel_depot_state.has(int(selected_site.id)):
 		# Any friendly unit can take a depot; the slow engineer is only the fallback.
@@ -3267,6 +3311,11 @@ func _update_hover_context(pointer := Vector2.INF) -> void:
 					"detail": "FUEL STOCK %.0f / %.0f  //  2 THEN RIGHT-CLICK TO CAPTURE" % [float(site.stock), float(site.capacity)],
 					"accent": Color("#7ad99b") if owner == HUMAN_PLAYER_ID else Color("#ff6d65") if owner >= 0 else Color("#ffbd52"),
 				}
+	if next_context.is_empty() and match_started and power_grid_view != null and power_grid_view.active:
+		var ground := _screen_ground_point(pointer)
+		if ground != Vector2.INF:
+			var meters_per_pixel := 2.0 * camera_distance * tan(deg_to_rad(camera.fov) * 0.5) / maxf(get_viewport().get_visible_rect().size.y, 1.0)
+			next_context = power_grid_view.hover_context(ground, maxf(12.0, meters_per_pixel * 14.0))
 	# Command posts: our own always, the enemy's only once discovered. Its
 	# integrity shows only while it is in sight; otherwise the last fix.
 	if next_context.is_empty() and match_started:
@@ -4994,6 +5043,7 @@ func _update_hud() -> void:
 	if extension != null and match_started:
 		_sync_terrain_edits()
 		_sync_fuel_supply()
+		_sync_power_grid()
 		_sync_strategic_command()
 		_sync_paradrop_markers()
 	_activate_reinforcement_delivery_from_airfield()
@@ -5018,9 +5068,9 @@ func _update_hud() -> void:
 	var tactical_resources: Array = hud_state.get("tactical_resources", [])
 	var selection_detail := "Drag-select a force to inspect it."
 	if material_order_mode == 1:
-		selection_detail = "CLAIM MODE  •  RIGHT-CLICK A MATERIAL FACILITY OR FUEL DEPOT"
+		selection_detail = "CLAIM MODE  •  RIGHT-CLICK A MATERIAL FACILITY, FUEL DEPOT, POWER STATION OR POWER LINE"
 	elif material_order_mode == 2:
-		selection_detail = "DEMOLISH MODE  •  RIGHT-CLICK A MATERIAL FACILITY OR FUEL DEPOT"
+		selection_detail = "DEMOLISH MODE  •  RIGHT-CLICK A MATERIAL FACILITY, FUEL DEPOT OR POWER LINE"
 	elif fob_build_mode:
 		selection_detail = "FOB PLACEMENT  •  LEFT-CLICK TERRAIN"
 	var selected_unit: Dictionary = {}

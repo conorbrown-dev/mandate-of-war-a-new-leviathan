@@ -19,6 +19,7 @@ var match_view: Node3D
 # What the last _draw put on screen, for contracts: one entry per marker.
 var last_unit_symbols: Array[Dictionary] = []
 var last_resource_markers: Array[Dictionary] = []
+var last_power_markers: Array[Dictionary] = []
 
 
 func _ready() -> void:
@@ -37,6 +38,8 @@ func _draw() -> void:
 	last_unit_symbols.clear()
 	last_resource_markers.clear()
 	_draw_resource_markers(camera, viewport_bounds)
+	last_power_markers.clear()
+	_draw_power_markers(camera, viewport_bounds)
 	_draw_last_known(camera, viewport_bounds)
 	_draw_radar_contacts(camera, viewport_bounds)
 	if match_view.camera_distance < STRATEGIC_ZOOM_DISTANCE:
@@ -200,6 +203,50 @@ func _draw_resource_markers(camera: Camera3D, viewport_bounds: Rect2) -> void:
 		draw_string_outline(font, text_at, label, HORIZONTAL_ALIGNMENT_LEFT, -1, 10, 3, Color(0.0, 0.0, 0.0, 0.8))
 		draw_string(font, text_at, label, HORIZONTAL_ALIGNMENT_LEFT, -1, 10, fill)
 		last_resource_markers.append(marker)
+
+
+## Power stations the player's side knows of, with the holder last seen.
+func power_markers(camera: Camera3D, viewport_bounds: Rect2) -> Array[Dictionary]:
+	var markers: Array[Dictionary] = []
+	var grid: Node3D = match_view.power_grid_view
+	if grid == null or not grid.active:
+		return markers
+	for node: Dictionary in grid.nodes.values():
+		if int(node.kind) != 0 or not bool(node.discovered):
+			continue
+		_append_resource_marker(markers, {"id": int(node.id), "position": node.position, "kind": "power_station",
+			"known_owner": int(node.known_owner)}, "power", camera, viewport_bounds)
+	return markers
+
+
+func _draw_power_markers(camera: Camera3D, viewport_bounds: Rect2) -> void:
+	var font: Font = preload("res://ui/theme/mandate_fonts.gd").label()
+	for marker in power_markers(camera, viewport_bounds):
+		var anchor: Vector2 = marker.anchor
+		var center: Vector2 = marker.center
+		var fill: Color = RESOURCE_UNCLAIMED_FILL
+		if marker.affiliation == "friendly":
+			fill = NatoMapSymbolScript.FRIENDLY_FILL
+		elif marker.affiliation == "hostile":
+			fill = NatoMapSymbolScript.HOSTILE_FILL
+		var ink := NatoMapSymbolScript.LINE_COLOR
+		draw_line(anchor, center + Vector2(0.0, 11.0), Color(0.0, 0.0, 0.0, 0.7), 1.5, true)
+		draw_circle(anchor, 2.5, fill)
+		# Diamond badge with a lightning bolt.
+		var outline := _regular_points(center, 12.0, 4)
+		draw_colored_polygon(outline, fill)
+		draw_colored_polygon(PackedVector2Array([
+			center + Vector2(1.8, -7.0), center + Vector2(-3.6, 1.0), center + Vector2(-0.4, 1.0),
+			center + Vector2(-1.8, 7.0), center + Vector2(3.6, -1.2), center + Vector2(0.4, -1.2)]), ink)
+		outline.append(outline[0])
+		draw_polyline(outline, Color(0.0, 0.0, 0.0, 0.55), 3.2, true)
+		draw_polyline(outline, ink, 1.6, true)
+		var label := "POWER"
+		var extent := font.get_string_size(label, HORIZONTAL_ALIGNMENT_LEFT, -1, 10)
+		var text_at := center + Vector2(-extent.x * 0.5, -16.0)
+		draw_string_outline(font, text_at, label, HORIZONTAL_ALIGNMENT_LEFT, -1, 10, 3, Color(0.0, 0.0, 0.0, 0.8))
+		draw_string(font, text_at, label, HORIZONTAL_ALIGNMENT_LEFT, -1, 10, fill)
+		last_power_markers.append(marker)
 
 
 func _draw_polygon(points: PackedVector2Array, fill: Color, outline: Color) -> void:

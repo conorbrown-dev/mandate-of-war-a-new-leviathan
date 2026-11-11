@@ -84,6 +84,9 @@ void Simulation::start() {
     paradrop_sequence_ = 0;
     paradrops_lost_.fill(0);
     road_network_.reset();
+    power_grid_.reset();
+    power_tasks_.clear();
+    power_notices_.fill({});
     site_claims_.clear();
     fuel_captures_.clear();
     site_captures_.clear();
@@ -1197,7 +1200,9 @@ bool Simulation::validate_command(const InputCommand& cmd, uint32_t execution_ti
         return false;
     }
     if (cmd.cmd_type == static_cast<uint8_t>(CommandType::HARVEST)) {
-        return cmd.extra == 0;
+        if ((cmd.extra & POWER_ORDER_FLAG) == 0) return cmd.extra == 0;
+        return (cmd.extra & ~(POWER_ORDER_FLAG | 0x00FFFFFFu)) == 0 &&
+            power_order_refusal(cmd.entity_id, static_cast<PowerOrder>((cmd.extra >> 16) & 0xFFu), cmd.extra & 0xFFFFu).empty();
     }
     const auto type = static_cast<CommandType>(cmd.cmd_type);
     // BUILD carries the player-selected rally/output target. It is not a
@@ -2376,6 +2381,8 @@ void Simulation::economy_phase(float delta_ms) {
 			pathfinding_.block_world_rectangle(comp.x, comp.y, half_width, half_height);
 			evict_ground_units(comp.x, comp.y, half_width, half_height);
 			vision_sources_.push_back({comp.faction_id, comp.x, comp.y, structure_view_range(comp.structure_type), structure_eye_height(comp.structure_type)});
+			if (power_grid_.active())
+				power_grid_.add_structure_demand(static_cast<int>(comp.faction_id), structure_power_demand(comp.structure_type));
             if (comp.structure_type == 2)
                 territorial_control_.add_installation(comp.x, comp.y, InstallationType::AIRFIELD, comp.faction_id);
             continue;
@@ -2493,6 +2500,7 @@ void Simulation::environment_phase(float delta_ms) {
         create_unit_with_type(deploy_x, deploy_y, package.unit_type, reinforcement_delivery_.owner());
     }
     update_fuel_supply(delta_ms);
+    update_power_grid(delta_ms);
     update_recon_flights(delta_ms);
     update_ferry_flights(delta_ms);
     update_air_discipline();
@@ -2943,6 +2951,16 @@ uint64_t Simulation::state_hash() const {
             mix(&resources->fuel.current, sizeof(resources->fuel.current));
         }
     }
+    for (const auto& [id, node] : power_grid_.nodes()) {
+        mix(&id, sizeof(id));
+        mix(&node.owner, sizeof(node.owner));
+    }
+    for (const auto& [id, line] : power_grid_.lines()) {
+        mix(&id, sizeof(id));
+        mix(&line.owner, sizeof(line.owner));
+        mix(&line.intact, sizeof(line.intact));
+        mix(&line.repair_remaining_ms, sizeof(line.repair_remaining_ms));
+    }
     mix(&match_result_, sizeof(match_result_));
     mix(&match_victory_reason_, sizeof(match_victory_reason_));
     for (const auto held : key_sites_held_) mix(&held, sizeof(held));
@@ -3137,6 +3155,156 @@ const FuelShipment* Simulation::fuel_shipment(FactionId faction) const {
         if (shipment.faction == faction) return &shipment;
     }
     return nullptr;
+}
+
+// Where a unit goes to work on a station or line: the station itself, or the
+// nearest stretch of the line it can stand on.
+bool Simulation::power_work_point(EntityId unit, PowerOrder order, uint32_t target, float& x, float& y) const {
+    const auto* position = component_manager_.get_component<Position>(unit);
+    if (!position) return false;
+    const auto& navigation = navigation_for(unit);
+    const auto reachable = [&](float px, float py) {
+        return navigation.is_walkable(navigation.to_grid_x(px), navigation.to_grid_y(py)) &&
+            (!theater_water_rules_enabled_ || is_land_position(px, py));
+    };
+    if (order == PowerOrder::CAPTURE_STATION) {
+        const PowerNode* node = power_grid_.node(target);
+        if (!node) return false;
+        if (reachable(node->x, node->y)) { x = node->x; y = node->y; return true; }
+        // A station's own ground may be blocked; stop beside it.
+        for (const float ring : {15.0f, 30.0f}) {
+            for (int step = 0; step < 8; ++step) {
+                const float angle = static_cast<float>(step) * 0.78539816f;
+                const float px = node->x + std::cos(angle) * ring;
+                const float py = node->y + std::sin(angle) * ring;
+                if (reachable(px, py)) { x = px; y = py; return true; }
+            }
+        }
+        return false;
+    }
+    // A repair is done at the break; other work anywhere along the line.
+    const PowerLine* line = power_grid_.line(target);
+    if (!line) return false;
+    const bool at_break = order == PowerOrder::REPAIR_LINE;
+    const float from_x = at_break ? line->cut_x : position->x;
+    const float from_y = at_break ? line->cut_y : position->y;
+    float best = std::numeric_limits<float>::infinity();
+    for (const auto& point : power_grid_.sample_line(target, 20.0f)) {
+        const float distance = std::hypot(point[0] - from_x, point[1] - from_y);
+        if (distance >= best || !reachable(point[0], point[1])) continue;
+        best = distance;
+        x = point[0];
+        y = point[1];
+    }
+    return std::isfinite(best);
+}
+
+std::string Simulation::power_order_refusal(EntityId unit, PowerOrder order, uint32_t target) const {
+    const auto* faction = component_manager_.get_component<Faction>(unit);
+    const auto* health = component_manager_.get_component<Health>(unit);
+    if (!faction || !health || health->is_dead) return "NO UNIT TO SEND";
+    if (component_manager_.get_component<Aircraft>(unit) || component_manager_.get_component<NavalVessel>(unit))
+        return "GROUND UNIT REQUIRED";
+    const int side = static_cast<int>(faction->faction_id);
+    if (order == PowerOrder::CAPTURE_STATION) {
+        const PowerNode* node = power_grid_.node(target);
+        if (!node || node->kind != PowerNodeKind::STATION) return "NO POWER STATION THERE";
+        if (node->owner == side) return "POWER STATION ALREADY HELD";
+    } else {
+        const PowerLine* line = power_grid_.line(target);
+        if (!line) return "NO POWER LINE THERE";
+        switch (order) {
+            case PowerOrder::CAPTURE_LINE:
+                if (!line->intact) return "POWER LINE IS DOWN // ENGINEER MUST REPAIR IT";
+                if (line->owner == side) return "POWER LINE ALREADY HELD";
+                break;
+            case PowerOrder::SEVER_LINE:
+                if (!line->intact) return "POWER LINE ALREADY DOWN";
+                break;
+            case PowerOrder::REPAIR_LINE: {
+                if (line->intact) return "POWER LINE IS INTACT";
+                if (line->repair_remaining_ms > 0.0f) return "POWER LINE REPAIR UNDER WAY";
+                if (!is_construction_unit(unit)) return "ENGINEER REQUIRED TO REPAIR POWER LINES";
+                const auto* funds = production_manager_.tactical_resources(production_manager_.faction_storage(faction->faction_id));
+                if (!funds || funds->materials.current < power_grid_.repair_cost(target)) return "INSUFFICIENT MATERIALS";
+                break;
+            }
+            default:
+                return "UNKNOWN POWER ORDER";
+        }
+    }
+    float x = 0.0f;
+    float y = 0.0f;
+    if (!power_work_point(unit, order, target, x, y)) return "NO GROUND ROUTE TO IT";
+    return {};
+}
+
+size_t Simulation::issue_power_command(EntityId unit, FactionId faction, PowerOrder order, uint32_t target) {
+    if (!power_order_refusal(unit, order, target).empty()) return 0;
+    return issue_commands({unit}, faction, CommandType::HARVEST, 0.0f, 0.0f, power_order_extra(order, target));
+}
+
+void Simulation::order_power_work(EntityId unit, uint32_t extra) {
+    const auto order = static_cast<PowerOrder>((extra >> 16) & 0xFFu);
+    const uint32_t target = extra & 0xFFFFu;
+    float x = 0.0f;
+    float y = 0.0f;
+    if (!power_order_refusal(unit, order, target).empty() || !power_work_point(unit, order, target, x, y)) return;
+    // One errand at a time: a new one replaces any capture the unit was on.
+    std::erase_if(fuel_captures_, [unit](const FuelCapture& capture) { return capture.unit == unit; });
+    std::erase_if(site_captures_, [unit](const SiteCapture& capture) { return capture.unit == unit; });
+    std::erase_if(power_tasks_, [unit](const PowerTask& task) { return task.unit == unit; });
+    power_tasks_.push_back({unit, order, target, x, y});
+    move_unit(unit, x, y);
+}
+
+void Simulation::update_power_grid(float delta_ms) {
+    if (!power_grid_.active()) return;
+    std::erase_if(power_tasks_, [this](const PowerTask& task) {
+        const auto* position = component_manager_.get_component<Position>(task.unit);
+        const auto* faction = component_manager_.get_component<Faction>(task.unit);
+        const auto* health = component_manager_.get_component<Health>(task.unit);
+        if (!position || !faction || (health && health->is_dead)) return true;
+        const int side = static_cast<int>(faction->faction_id);
+        const PowerNode* station = task.order == PowerOrder::CAPTURE_STATION ? power_grid_.node(task.target) : nullptr;
+        const float distance = station
+            ? std::min(std::hypot(position->x - station->x, position->y - station->y),
+                       std::hypot(position->x - task.x, position->y - task.y))
+            : task.order == PowerOrder::REPAIR_LINE
+                ? std::hypot(position->x - task.x, position->y - task.y)
+                : power_grid_.distance_to_line(task.target, position->x, position->y);
+        if (distance <= kPowerWorkRadius) {
+            switch (task.order) {
+                case PowerOrder::CAPTURE_STATION: power_grid_.capture_station(task.target, side); break;
+                case PowerOrder::CAPTURE_LINE: power_grid_.capture_line(task.target, side); break;
+                case PowerOrder::SEVER_LINE: power_grid_.sever_line(task.target, position->x, position->y); break;
+                case PowerOrder::REPAIR_LINE: {
+                    const PowerLine* line = power_grid_.line(task.target);
+                    if (!line || line->intact || line->repair_remaining_ms > 0.0f) break;
+                    // Paid when the work starts, like any construction.
+                    if (!production_manager_.deduct_faction_resources(faction->faction_id, power_grid_.repair_cost(task.target), 0.0f)) {
+                        power_notices_[static_cast<size_t>(side)] = "POWER LINE REPAIR REFUSED // INSUFFICIENT MATERIALS";
+                        break;
+                    }
+                    power_grid_.begin_repair(task.target, side);
+                    power_notices_[static_cast<size_t>(side)].clear();
+                    break;
+                }
+            }
+            return true;
+        }
+        // A unit sent elsewhere, or one that has stopped short, gives up.
+        const auto target = move_targets_.find(task.unit);
+        return target == move_targets_.end() ||
+            std::hypot(target->second.arrival.x - task.x, target->second.arrival.y - task.y) > kPowerWorkRadius;
+    });
+    power_grid_.update(delta_ms);
+    for (size_t side = 0; side < FACTION_COUNT; ++side) {
+        const EntityId storage = production_manager_.faction_storage(static_cast<FactionId>(side));
+        if (storage == INVALID_ENTITY) continue;
+        const PowerSupply supply = power_grid_.supply(static_cast<int>(side));
+        production_manager_.set_tactical_power(storage, supply.generation_mw, supply.demand_mw);
+    }
 }
 
 const std::string& Simulation::fuel_supply_reason(FactionId faction) const {
@@ -4645,7 +4813,8 @@ void rts::Simulation::process_command_internal(const InputCommand& cmd) {
         case static_cast<uint8_t>(CommandType::HARVEST): {
             const float harvest_x = static_cast<float>(cmd.target_x) / command_position_scale_;
             const float harvest_y = static_cast<float>(cmd.target_y) / command_position_scale_;
-            harvest_resource(static_cast<EntityId>(cmd.entity_id), harvest_x, harvest_y);
+            if ((cmd.extra & POWER_ORDER_FLAG) != 0) order_power_work(static_cast<EntityId>(cmd.entity_id), cmd.extra);
+            else harvest_resource(static_cast<EntityId>(cmd.entity_id), harvest_x, harvest_y);
             break;
         }
         case static_cast<uint8_t>(CommandType::RETURN): {
