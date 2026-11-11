@@ -34,7 +34,7 @@ jobs:
 
       - name: Import project assets
         shell: pwsh
-        run: '& "$env:GODOT_EXE" --headless --editor --path godot/project --import --quit'
+        run: '& "$env:GODOT_EXE" --headless --path godot/project --import'
 
       - name: Assemble portable demo folder
         shell: pwsh
@@ -50,8 +50,10 @@ jobs:
           & $launcher /nologo /target:winexe /reference:System.Windows.Forms.dll /out:"$(Join-Path $package 'MandateOfWar.exe')" $launcherSource
           if ($LASTEXITCODE -ne 0) { throw "Compiling the demo launcher failed." }
           if (-not (Test-Path (Join-Path $package "godot/project/bin/rts_gdextension.dll"))) { throw "The Windows game extension was not copied into the package." }
+          $sourceImports = Get-ChildItem -Path "godot/project/.godot/imported" -File -Recurse -Force
+          if ($sourceImports.Count -eq 0) { throw "Godot did not generate imported assets for the Windows project." }
           $importedAssets = Get-ChildItem -Path (Join-Path $package "godot/project/.godot/imported") -File -Recurse -Force
-          if ($importedAssets.Count -eq 0) { throw "Godot's imported assets are missing from the packaged project." }
+          if ($importedAssets.Count -ne $sourceImports.Count) { throw "Some Godot imported assets were omitted from the packaged project." }
           Write-Host "Packaged $($importedAssets.Count) imported Godot assets."
           & (Join-Path $package "GodotRuntime.exe") --headless --path (Join-Path $package "godot/project") --quit-after 120
           if ($LASTEXITCODE -ne 0) { throw "The packaged project failed its headless startup check." }
