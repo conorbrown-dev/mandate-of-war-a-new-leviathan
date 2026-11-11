@@ -46,6 +46,17 @@ constexpr float structure_view_range(uint8_t structure_type) {
     }
 }
 
+// What a finished structure draws from its side's power grid, in megawatts.
+constexpr float structure_power_demand(uint8_t structure_type) {
+    switch (structure_type) {
+        case 0: return 5.0f;  // outpost
+        case 1: return 15.0f; // radar
+        case 2: return 25.0f; // airfield
+        case 3: return 2.0f;  // floodlight
+        default: return 0.0f;
+    }
+}
+
 inline constexpr float kCommandPostViewRange = 400.0f;
 
 // How far above the ground each kind of observer looks from, so a tall mast sees

@@ -1621,6 +1621,71 @@ rendered `ground_transport_routes` report resources still in use at exit;
 The stale fighter hover description was corrected and `build_menu_hover` now
 passes 81/81. This package remains open pending those failures.
 
+## Power grid and power lines (2026-11-10, issue #4)
+
+Power is now carried by lines, not simply granted. `src/simulation/power_grid.hpp`
+holds the rules and `godot/project/scenarios/power_grid.json` places the grid.
+
+- **Stations, loads and lines.** A power station has an output in megawatts. A
+  load is a side's command post, with a demand (40 MW). A side's Power state is
+  the output of every station joined to one of its loads by an unbroken chain of
+  lines it may use. Lines always draw from a station: a line joined to none
+  carries nothing. Finished structures add demand wherever they stand (outpost
+  5 MW, radar 15, airfield 25, floodlight 2), but only in a match that has a
+  grid. A match with no grid (every native test and the other scenarios) leaves
+  Power untouched.
+- **Who may use what.** A civilian station or line (no owner) serves any side
+  joined to it. A side's own line carries power for that side only, and power
+  does not pass through a station the other side holds.
+- **Capture.** Any ground unit takes a station or an intact line when it comes
+  within 40 m of it. Capturing a line denies it to the side that held it.
+- **Cutting.** Any ground unit within 40 m of a line can cut it. The line then
+  carries nothing, so a side whose only feed is cut loses all its power income.
+- **Repair.** Only an engineer repairs a line, at the break. The price is paid
+  in Materials when it arrives: wooden lines 30 plus 0.01 per metre and 8 s plus
+  1 s per 500 m, steel lines 90 plus 0.03 per metre and 15 s plus 1 s per 300 m.
+  The player's 3.9 km wooden feed costs 72 Materials and takes 16 s. Whoever
+  repairs a line then holds it.
+- **Orders.** Grid work is a HARVEST command with `POWER_ORDER_FLAG`, the kind
+  of work and the target id in `extra`, so it is recorded and plays back. The
+  unit drives to the target and acts on arrival; a redirected or dead unit
+  gives up. The bridge call `power_order` answers at once with why not.
+- **Wood or steel.** Broken Strait has three stations and ten lines. Steel
+  pylons leave each station, run to the two west-shore cities and cross the
+  strait from the Eastern Hydro Plant, standing in the water on the way. Wooden
+  poles follow each side's supply road to its command post and run across open
+  ground to two small works. The player starts with 320 MW against 40 MW.
+- **What the player sees.** `power_grid_view.gd` draws stations, poles, pylons
+  and conductors. The player starts knowing its own line, the trunk and the
+  station that feed it. Everything else is drawn once seen and then shows the
+  holder and condition it had when last seen; a side is told at once when its
+  own line is cut or taken. Conductors take the holder's colour. A cut line is
+  drawn dashed with a gap at the break, a `LINE DOWN` label and sparks that
+  repeat every 2.4 s until a repair starts. Stations get a map marker (a
+  diamond with a lightning bolt) coloured by last-seen holder. Hovering names
+  the line, its holder and the repair price.
+- **Controls.** `2` then right-click captures a station or line, or sends the
+  engineer to repair a line that is down. `3` then right-click cuts a line.
+  These are the existing claim and demolish modes.
+- **Models.** Three original generated models; see
+  [POWER_ASSETS.md](POWER_ASSETS.md).
+
+Evidence (2026-11-10, Apple M1 Pro, macOS arm64, Release): 12 native tests in
+`tests/test_power_grid.cpp` cover supply, cutting on arrival, repair by an
+engineer for Materials, wood cheaper than steel, capture of lines and stations,
+"no station, no power", abandoned work, structure demand and playback from the
+command log. Eight rules were removed in turn and each made at least one test
+fail. The Godot contract `tools/validate.py power_grid` passes 42 checks
+through the real match scene. Rendered screenshots were inspected:
+`validation/artifacts/power_grid/rendered/`.
+
+Known gaps: a power deficit is shown in the HUD but changes nothing else yet.
+The AI never captures, cuts or repairs lines, so in a match against the AI the
+player's grid is not attacked. Lines cannot be shot: only a unit standing at a
+line cuts it. Engineers repair lines but cannot lay new ones. Poles and pylons
+are scenery: units drive through them, structures can be placed on them, and
+they are not in network snapshots. Not hand-played.
+
 ## Radio callouts and command voice alerts (2026-11-10, issue #3)
 
 Design and rules: [adr/0001-radio-callouts.md](adr/0001-radio-callouts.md).

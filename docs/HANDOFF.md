@@ -203,6 +203,16 @@ Release build and four CTest programs pass, but the full Godot sweep is not
 green. See STATUS.md for the failing scenarios; keep this package open until
 they are resolved or triaged with evidence.
 
+## Power grid (issue #4, 2026-11-10)
+
+Broken Strait has a power grid: three stations, steel pylons and wooden poles,
+drawn with generated models. Lines can be captured (`2` then right-click), cut
+(`3` then right-click) and repaired by the engineer for Materials. A side's
+Power in the HUD is what the grid delivers to its command post. See STATUS.md
+"Power grid and power lines" and `docs/POWER_ASSETS.md`. Open decisions for the
+user: what a power deficit should do, whether the AI should raid lines, and
+whether engineers should lay new lines.
+
 ## Radio callouts (issue #3, 2026-11-10)
 
 Slices A to C of the issue are implemented: native radio reports, a JSON alert

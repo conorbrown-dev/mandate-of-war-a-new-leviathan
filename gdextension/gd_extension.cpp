@@ -315,6 +315,10 @@ protected:
         ClassDB::bind_method(D_METHOD("fuel_shipment_request", "faction_id"), &RtsExtension::fuel_shipment_request);
         ClassDB::bind_method(D_METHOD("fuel_supply_state", "faction_id"), &RtsExtension::fuel_supply_state);
         ClassDB::bind_method(D_METHOD("economy_assign_fuel_depot", "depot_id", "faction_id"), &RtsExtension::economy_assign_fuel_depot);
+        ClassDB::bind_method(D_METHOD("power_add_node", "id", "kind", "x", "y", "owner", "output_mw", "demand_mw"), &RtsExtension::power_add_node);
+        ClassDB::bind_method(D_METHOD("power_add_line", "id", "from", "to", "kind", "owner", "via"), &RtsExtension::power_add_line);
+        ClassDB::bind_method(D_METHOD("power_grid_state", "faction_id"), &RtsExtension::power_grid_state);
+        ClassDB::bind_method(D_METHOD("power_order", "entity_id", "faction_id", "order", "target"), &RtsExtension::power_order);
         ClassDB::bind_method(D_METHOD("economy_assign_material_site", "site_id", "faction_id"), &RtsExtension::economy_assign_material_site);
         ClassDB::bind_method(D_METHOD("get_build_catalog", "faction_id"), &RtsExtension::get_build_catalog);
         ClassDB::bind_method(D_METHOD("queue_faction_structure", "faction_id", "structure_type", "x", "y"), &RtsExtension::queue_faction_structure);
@@ -647,6 +651,112 @@ protected:
         record_action("economy_assign_fuel_depot", {static_cast<double>(depot_id), static_cast<double>(faction_id)});
         return rts::runtime_simulation()->assign_fuel_depot(
             static_cast<rts::EntityId>(depot_id), static_cast<rts::FactionId>(faction_id));
+    }
+
+    // Scenario setup for the power grid: stations (kind 0), junctions (1) and
+    // loads (2), then the lines that join them. `via` is x,y pairs.
+    bool power_add_node(int64_t id, int64_t kind, double x, double y, int64_t owner, double output_mw, double demand_mw) const {
+        if (id <= 0 || id > 0xFFFF || kind < 0 || kind > 2 || owner < -1 || owner > 2) return false;
+        record_action("power_add_node", {static_cast<double>(id), static_cast<double>(kind), x, y,
+            static_cast<double>(owner), output_mw, demand_mw});
+        rts::PowerNode node;
+        node.id = static_cast<uint32_t>(id);
+        node.kind = static_cast<rts::PowerNodeKind>(kind);
+        node.x = static_cast<float>(x);
+        node.y = static_cast<float>(y);
+        node.owner = static_cast<int>(owner);
+        node.output_mw = static_cast<float>(output_mw);
+        node.demand_mw = static_cast<float>(demand_mw);
+        return rts::runtime_simulation()->power_grid().add_node(node);
+    }
+
+    bool power_add_line(int64_t id, int64_t from, int64_t to, int64_t kind, int64_t owner, const PackedFloat32Array& via) const {
+        if (id <= 0 || id > 0xFFFF || from <= 0 || to <= 0 || kind < 0 || kind > 1 || owner < -1 || owner > 2 ||
+            via.size() % 2 != 0) return false;
+        std::vector<double> args{static_cast<double>(id), static_cast<double>(from), static_cast<double>(to),
+            static_cast<double>(kind), static_cast<double>(owner)};
+        std::vector<std::array<float, 2>> points;
+        for (int64_t index = 0; index + 1 < via.size(); index += 2) {
+            points.push_back({via[index], via[index + 1]});
+            args.push_back(via[index]);
+            args.push_back(via[index + 1]);
+        }
+        record_action("power_add_line", std::move(args));
+        return rts::runtime_simulation()->power_grid().add_line(static_cast<uint32_t>(id), static_cast<uint32_t>(from),
+            static_cast<uint32_t>(to), static_cast<rts::PowerLineKind>(kind), static_cast<int>(owner), points);
+    }
+
+    // Sends a unit to work on the grid: 1 capture station, 2 capture line,
+    // 3 cut line, 4 repair line. Answers at once with why not, or "" when the
+    // recorded order went out.
+    String power_order(int64_t entity_id, int64_t faction_id, int64_t order, int64_t target) const {
+        if (entity_id <= 0 || faction_id < 0 || faction_id > 2 || order < 1 || order > 4 || target <= 0 || target > 0xFFFF)
+            return "INVALID POWER ORDER";
+        auto* simulation = rts::runtime_simulation();
+        rts::FactionId owner = rts::FactionId::ELITE_PRECISION;
+        if (!simulation->get_unit_faction_id(static_cast<rts::EntityId>(entity_id), owner) ||
+            static_cast<int64_t>(owner) != faction_id) return "NO UNIT TO SEND";
+        const auto work = static_cast<rts::Simulation::PowerOrder>(order);
+        const std::string refusal = simulation->power_order_refusal(static_cast<rts::EntityId>(entity_id), work, static_cast<uint32_t>(target));
+        if (!refusal.empty()) return String(refusal.c_str());
+        return simulation->issue_power_command(static_cast<rts::EntityId>(entity_id), owner, work, static_cast<uint32_t>(target)) == 1
+            ? String() : String("POWER ORDER REFUSED");
+    }
+
+    Dictionary power_grid_state(int64_t faction_id) const {
+        Dictionary state;
+        if (faction_id < 0 || faction_id > 2) return state;
+        const auto* simulation = rts::runtime_simulation();
+        const rts::PowerGrid& grid = simulation->power_grid();
+        const rts::PowerSupply supply = grid.supply(static_cast<int>(faction_id));
+        state["active"] = grid.active();
+        state["generation_mw"] = supply.generation_mw;
+        state["demand_mw"] = supply.demand_mw;
+        state["notice"] = String(simulation->power_notice(static_cast<rts::FactionId>(faction_id)).c_str());
+        Array nodes;
+        for (const auto& [id, node] : grid.nodes()) {
+            Dictionary entry;
+            entry["id"] = static_cast<int64_t>(id);
+            entry["kind"] = static_cast<int>(node.kind);
+            entry["x"] = node.x;
+            entry["y"] = node.y;
+            entry["owner"] = node.owner;
+            entry["output_mw"] = node.output_mw;
+            entry["demand_mw"] = node.demand_mw;
+            entry["powered"] = node.kind == rts::PowerNodeKind::LOAD && grid.load_powered(id);
+            nodes.append(entry);
+        }
+        state["nodes"] = nodes;
+        Array lines;
+        for (const auto& [id, line] : grid.lines()) {
+            Dictionary entry;
+            entry["id"] = static_cast<int64_t>(id);
+            entry["from"] = static_cast<int64_t>(line.from);
+            entry["to"] = static_cast<int64_t>(line.to);
+            entry["kind"] = static_cast<int>(line.kind);
+            entry["owner"] = line.owner;
+            entry["intact"] = line.intact;
+            entry["length"] = line.length;
+            entry["cut_x"] = line.cut_x;
+            entry["cut_y"] = line.cut_y;
+            entry["repairing"] = line.repair_remaining_ms > 0.0f;
+            entry["repair_remaining_ms"] = line.repair_remaining_ms;
+            entry["repair_cost"] = grid.repair_cost(id);
+            entry["repair_seconds"] = grid.repair_seconds(id);
+            // Only this side's own errands: the enemy's moves are not shown.
+            int work = 0;
+            for (const auto& task : simulation->power_tasks()) {
+                rts::FactionId owner = rts::FactionId::ELITE_PRECISION;
+                if (task.target != id || task.order == rts::Simulation::PowerOrder::CAPTURE_STATION ||
+                    !rts::runtime_simulation()->get_unit_faction_id(task.unit, owner) ||
+                    static_cast<int64_t>(owner) != faction_id) continue;
+                work = static_cast<int>(task.order);
+            }
+            entry["work"] = work;
+            lines.append(entry);
+        }
+        state["lines"] = lines;
+        return state;
     }
 
     Dictionary fuel_supply_state(int64_t faction_id) const {

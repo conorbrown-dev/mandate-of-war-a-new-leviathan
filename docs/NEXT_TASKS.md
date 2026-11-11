@@ -2,6 +2,14 @@
 
 Follow the slice plan in [HANDOFF.md](HANDOFF.md).
 
+Power grid (issue #4, 2026-11-10) is implemented and assertion-backed: stations,
+steel and wooden lines, capture, cutting and engineer repair, with 12 native
+tests and a 42-check Godot contract. Next, in the order the user chooses: give
+a power deficit an effect, teach the AI to cut, take and repair lines under the
+player's limits, let engineers lay new lines, and let weapons damage lines.
+Hand-play: cut and repair the supply-road line, and judge the pylons, wires and
+sparks at tactical and strategic zoom.
+
 Resource-map verification (2026-11-09) is complete. The 2026-11-10 scouting
 change now hides every Materials/Fuel site until discovered, then remembers
 its marker and last-seen owner. The separate

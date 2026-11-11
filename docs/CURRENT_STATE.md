@@ -1,6 +1,12 @@
 # Current state
 
 Read [HANDOFF.md](HANDOFF.md), then [STATUS.md](STATUS.md) for authoritative scope.
+Issue #4 (2026-11-10) adds a native power grid to Broken Strait: three power
+stations, steel pylons and wooden poles, with lines that any ground unit can
+capture or cut and that an engineer repairs for Materials. A side's Power is
+what the grid delivers to its command post. Native tests (12) and the
+`power_grid` Godot contract (42 checks) pass; the AI does not use the grid and
+a deficit has no effect yet.
 Slice 3 is implemented and assertion-covered, but has not been hand-played.
 Slice 4 implementation is complete (2026-11-09): distinct weapon cues, bounded
 moving-vehicle/aircraft loops, persistent F2 audio controls and sound credits,

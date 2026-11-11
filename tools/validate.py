@@ -74,6 +74,7 @@ CONTRACT_SCENARIOS = {
     "build_menu_hover": ("test_build_menu_hover.gd", "BUILD_MENU_HOVER checks="),
     "queued_builds": ("test_queued_builds.gd", "QUEUED_BUILDS checks="),
     "ground_transport": ("test_ground_transport.gd", "GROUND_TRANSPORT checks="),
+    "power_grid": ("test_power_grid.gd", "POWER_GRID checks="),
     "slice4_briefing": ("test_slice4_briefing.gd", "SLICE4_BRIEFING checks="),
     "magnifier": ("test_magnifier.gd", "magnifier checks="),
     "unit_visual_root": ("test_unit_visual_root.gd", "UNIT_VISUAL_ROOT"),
