@@ -33,8 +33,16 @@ jobs:
           $project = Join-Path $PWD "godot/project"
           if (-not (Test-Path (Join-Path $project "project.godot"))) { throw "The expected Godot project was not found at $project" }
           Write-Host "Project path: $project"
-          & "$env:GODOT_EXE" --headless --editor --path $project --verbose --import
-          if ($LASTEXITCODE -ne 0) { throw "Godot's Windows import command failed." }
+          $extensionDescriptor = Join-Path $project "rts.gdextension"
+          $disabledDescriptor = "$extensionDescriptor.diagnostic-disabled"
+          Move-Item -LiteralPath $extensionDescriptor -Destination $disabledDescriptor
+          try {
+            & "$env:GODOT_EXE" --headless --editor --path $project --verbose --import
+            if ($LASTEXITCODE -ne 0) { throw "Godot's Windows import command failed." }
+          }
+          finally {
+            Move-Item -LiteralPath $disabledDescriptor -Destination $extensionDescriptor
+          }
           $importedDir = Join-Path $project ".godot/imported"
           Get-ChildItem -Path (Join-Path $project ".godot") -Force -Recurse
           $files = Get-ChildItem -Path $importedDir -File -Recurse -Force -ErrorAction SilentlyContinue
