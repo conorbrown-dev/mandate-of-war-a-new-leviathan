@@ -59,7 +59,7 @@ func _load_default_hotkeys() -> void:
 		{"key": "KEY_M", "label": "M", "category": "Interface", "action": "", "description": "Show or hide the magnifier inset (close-up under the cursor)"},
 		{"key": "KEY_BRACKETS", "label": "[ / ]", "category": "Interface", "action": "", "description": "Magnifier zoom 8x, 16x or 32x (8x is the widest)"},
 		{"key": "KEY_F8", "label": "F8", "category": "Interface", "action": "toggle_debug", "description": "Debug panel"},
-		{"key": "KEY_ESCAPE", "label": "Esc", "category": "Interface", "action": "quit_or_cancel", "description": "Close panel or cancel; quits when nothing is open"},
+		{"key": "KEY_ESCAPE", "label": "Esc", "category": "Interface", "action": "quit_or_cancel", "description": "Close panel or cancel; confirm exit when nothing is open"},
 	]
 
 	for hotkey in default_hotkeys:

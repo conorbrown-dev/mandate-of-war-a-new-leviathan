@@ -142,10 +142,12 @@ func _status_color(text: String) -> Color:
 # --- HUD sections -------------------------------------------------------------
 
 func _draw_operation(w: float) -> void:
-	var rect := Rect2(EDGE, EDGE, 300, 64)
+	var rect := Rect2(EDGE, EDGE, 300, 84)
 	_panel(rect, CYAN)
 	_caption(rect.position + Vector2(14, 20), "OPERATION", CYAN)
 	_text(rect.position + Vector2(14, 47), String(snapshot.get("scenario", "SKIRMISH")).to_upper(), MandateTokens.FONT_XL, INK)
+	var seconds := maxi(0, int(float(snapshot.get("match_seconds", 0.0))))
+	_caption(rect.position + Vector2(14, 70), "MATCH %02d:%02d" % [seconds / 60, seconds % 60], MUTED)
 	# Game speed as a compact readout with its keys.
 	var speed := "%d%%" % int(snapshot.get("game_speed", 100))
 	var right := rect.end.x - 14

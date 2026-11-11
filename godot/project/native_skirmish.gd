@@ -120,7 +120,9 @@ func _update_hud() -> void:
 			naval_stranded += 1
 	var logistics := "AIR %s  //  RECOVERY Q %d/%d  //  NAVAL STRANDED %d  //  INTEL %d CURRENT / %d STALE / %d VISIBLE" % [
 		", ".join(aircraft) if not aircraft.is_empty() else "NONE", int(state.get("takeoff_queue", 0)), int(state.get("landing_queue", 0)), naval_stranded, intel_current, intel_stale, visible_enemy]
-	telemetry.text = "MATERIALS %.0f / %.0f    FUEL %.0f / %.0f    POWER %.0f MW / %.0f MW  RESERVE %+.0f MW    TICK %d    %s\n%s" % [
+	var elapsed_seconds := maxi(0, int(state.get("tick", 0)) / 20)
+	telemetry.text = "MATCH %02d:%02d    MATERIALS %.0f / %.0f    FUEL %.0f / %.0f    POWER %.0f MW / %.0f MW  RESERVE %+.0f MW    TICK %d    %s\n%s" % [
+		elapsed_seconds / 60, elapsed_seconds % 60,
 		float(state.get("materials", 0.0)), float(state.get("materials_capacity", 0.0)),
 		float(state.get("fuel", 0.0)), float(state.get("fuel_capacity", 0.0)),
 		float(state.get("power_generation_mw", 0.0)), float(state.get("power_demand_mw", 0.0)), float(state.get("power_reserve_mw", 0.0)),

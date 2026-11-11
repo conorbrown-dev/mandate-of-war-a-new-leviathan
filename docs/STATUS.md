@@ -1,5 +1,36 @@
 # Current Status
 
+## GitHub issues #11–#13 (2026-11-10)
+
+Esc now opens a themed confirmation with Stay in Match focused by default and
+Exit to Desktop as an explicit action. Esc dismisses the confirmation. While it
+is visible, match hotkeys are blocked. Existing Esc behavior still closes open
+panels or cancels placement first.
+
+The 3D HUD reads the native `match_state.seconds` value and shows `MATCH MM:SS`
+under the operation name. The deterministic 2D battle map shows the same format
+from its authoritative 20 Hz tick. These clocks track simulated match time,
+including game-speed changes and pauses, rather than wall time. The +/- speed
+keys play a short UI-bus cue only when the requested step changes the speed;
+clamped keys and multiplayer-locked speed stay silent.
+
+Validation (Apple M1 Pro, macOS arm64, Release): build passes. Focused Godot
+contracts pass: `exit_confirmation` 6/6, `game_speed` 31/31,
+`native_skirmish_match_to_result` 25/25, and `hotkey_sheet` 41/41. The game-speed
+checks confirm native simulation time advances at each speed and the HUD clock
+tracks it; the 2D scenario checks 00:00 then 00:03 after 60 native ticks.
+`git diff --check` passes.
+
+CTest discovers four programs. Two network-dependent CTest programs could not
+bind loopback TCP in the sandbox: `rts_tests` (18 pass, 2 loopback checks fail)
+and `rts_integration_tests` (317 pass, 1 loopback check fail); portable snapshot
+and faction balance pass. An attempted outside-sandbox rerun was rejected by
+automatic approval because its usage limit had been reached, so those two
+loopback checks remain unverified in this session. The sandboxed Godot harnesses
+also log a macOS certificate-access error after their assertions; focused runs
+were rerun outside the sandbox and passed. No rendered screenshot or hand-play
+acceptance was performed.
+
 ## Core design rules
 
 - **Research happens outside the skirmish.** It is not done in a warzone.

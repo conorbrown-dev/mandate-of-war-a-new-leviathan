@@ -1,5 +1,10 @@
 # Current state
 
+GitHub issues #11–#13 are implemented in the `codex/issues-11-13` worktree:
+Esc opens an exit confirmation; the 3D and deterministic 2D battle maps show
+simulated elapsed match time; and +/- plays a UI cue only when speed changes.
+Validation evidence is in STATUS.md under "GitHub issues #11–#13".
+
 Read [HANDOFF.md](HANDOFF.md), then [STATUS.md](STATUS.md) for authoritative scope.
 Issue #4 (2026-11-10) adds a native power grid to Broken Strait: three power
 stations, steel pylons and wooden poles, with lines that any ground unit can

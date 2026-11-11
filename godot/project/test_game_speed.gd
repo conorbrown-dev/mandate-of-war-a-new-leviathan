@@ -34,12 +34,18 @@ func _run() -> void:
 	view.set_process(false)
 	var extension: Object = view.extension
 	check(extension.call("get_game_speed")==1.0, "a new match starts at 100 percent")
+	check(view.command_hud.snapshot.match_seconds == 0.0, "match clock starts at zero")
 	var camera_before: float = view.target_camera_distance
+	var cue_start: int = view.ui_audio._next_voice
+	var first_voice: AudioStreamPlayer = view.ui_audio._voices[cue_start]
 	for code in [KEY_PLUS,KEY_EQUAL,KEY_KP_ADD]:
 		await key(code)
 	check(extension.call("get_game_speed")==1.75, "all plus aliases step up to 175 percent")
+	var cue_after_changes: int = (cue_start + 3) % view.ui_audio._voices.size()
+	check(first_voice.stream == view.ui_audio._streams["speed_step"] and view.ui_audio._next_voice == cue_after_changes, "speed changes use the UI sound pool")
 	await key(KEY_PLUS)
 	check(extension.call("get_game_speed")==1.75, "speed clamps at 175 percent")
+	check(view.ui_audio._next_voice == cue_after_changes, "clamped speed key does not replay the cue")
 	for i in range(6): await key(KEY_MINUS)
 	check(extension.call("get_game_speed")==0.25, "minus reaches 25 percent")
 	await key(KEY_KP_SUBTRACT)
@@ -62,6 +68,7 @@ func _run() -> void:
 	var before_process: float = extension.call("get_tick_clock")[0]
 	for i in range(4): view._process(0.25)
 	check(extension.call("get_tick_clock")[0]-before_process==35, "the real game loop uses the native speed setting")
+	check(float(view.command_hud.snapshot.match_seconds) >= 8.0, "HUD clock follows simulated time at changed speed")
 	var peer := ENetMultiplayerPeer.new()
 	peer.set_bind_ip("127.0.0.1")
 	var opened := peer.create_server(0)

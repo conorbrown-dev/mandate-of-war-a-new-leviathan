@@ -3465,7 +3465,8 @@
     "panel_open": "res://audio/kenney_interface/open_001.ogg",
     "panel_close": "res://audio/kenney_interface/close_001.ogg",
     "order_accepted": "res://audio/kenney_interface/confirmation_001.ogg",
-    "order_refused": "res://audio/kenney_interface/error_001.ogg"
+    "order_refused": "res://audio/kenney_interface/error_001.ogg",
+    "speed_step": "res://audio/kenney_interface/click_003.ogg"
   },
   "hover": {
     "path": "res://audio/kenney_interface/tick_002.ogg",

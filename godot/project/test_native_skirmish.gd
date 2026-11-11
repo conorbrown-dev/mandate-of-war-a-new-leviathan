@@ -17,6 +17,9 @@ func _run() -> void:
 	root.add_child(view)
 	await process_frame
 	check(view.load_error.is_empty(), "native route loads the validated deterministic scenario")
+	view._update_hud()
+	check(view.telemetry.text.contains("MATCH 00:00"), "native battle map shows a zeroed match clock")
+	view.set_process(false)
 	print("native state units=%d result=%d" % [view.state.get("units", []).size(), int(view.state.get("result", -2))])
 	check(int(view.state.get("result", -2)) == -1 and view.state.get("units", []).size() >= 24, "native route enters the authored two-landmass match with fog-limited state")
 	check(view.state.has("materials") and view.state.has("fuel") and view.state.has("power_reserve_mw") and not view.state.has("research"), "native route exposes canonical tactical Materials, Fuel, and Power without a Research balance")
@@ -66,6 +69,9 @@ func _run() -> void:
 	check(int(view.extension.call("skirmish_command", 0, PackedInt32Array([aircraft_id]), -80.0, 0.0, 0)) == 1, "native route accepts a conventional aircraft sortie order")
 	for _tick in range(60):
 		view.extension.call("skirmish_update", 50.0)
+	view.state = view.extension.call("skirmish_state")
+	view._update_hud()
+	check(view.telemetry.text.contains("MATCH 00:03"), "native battle map clock follows three simulated seconds")
 	var aircraft_state: Dictionary = {}
 	for unit in view.extension.call("skirmish_state").get("units", []):
 		if int(unit.get("id", 0)) == aircraft_id:
