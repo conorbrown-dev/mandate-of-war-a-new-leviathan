@@ -84,7 +84,11 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw "Godot Windows release export failed." }
           if (-not (Test-Path $gameExe)) { throw "Godot did not produce the game executable." }
 
+          $extensionSource = "godot/project/bin/rts_gdextension.dll"
+          if (-not (Test-Path $extensionSource)) { throw "The Windows game extension was not built." }
           $extension = Join-Path $outputDir "bin/rts_gdextension.dll"
+          New-Item -ItemType Directory -Force -Path (Split-Path $extension) | Out-Null
+          Copy-Item -Path $extensionSource -Destination $extension -Force
           if (-not (Test-Path $extension)) { throw "Godot did not package the Windows GDExtension DLL." }
           if ((Get-Item $gameExe).Length -lt 100MB) { throw "The exported executable is unexpectedly small; embedded game resources may be missing." }
           & $gameExe --headless --quit-after 120
