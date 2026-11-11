@@ -1,0 +1,68 @@
+name: Windows Demo Package
+
+on:
+  push:
+    branches:
+      - codex/windows-demo-build
+  workflow_dispatch:
+
+jobs:
+  package-windows-demo:
+    runs-on: windows-2025
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: ilammy/msvc-dev-cmd@v1
+
+      - name: Build native game extension
+        run: |
+          cmake -S . -B build/windows -G Ninja -DCMAKE_BUILD_TYPE=Release
+          cmake --build build/windows --parallel 8
+
+      - name: Download Godot Windows runtime
+        shell: pwsh
+        run: |
+          $version = "4.7.2"
+          $archive = Join-Path $env:RUNNER_TEMP "godot-win64.zip"
+          Invoke-WebRequest -Uri "https://github.com/godotengine/godot-builds/releases/download/${version}-stable/Godot_v${version}-stable_win64.exe.zip" -OutFile $archive
+          $runtimeDir = Join-Path $env:RUNNER_TEMP "godot-runtime"
+          Expand-Archive -Path $archive -DestinationPath $runtimeDir -Force
+          $godot = Get-ChildItem $runtimeDir -Filter "Godot_v${version}-stable_win64.exe" -Recurse | Select-Object -First 1
+          if (-not $godot) { throw "Godot Windows runtime was not found in the release archive." }
+          "GODOT_EXE=$($godot.FullName)" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
+      - name: Import project assets
+        shell: pwsh
+        run: '& "$env:GODOT_EXE" --headless --editor --path godot/project --import --quit'
+
+      - name: Assemble portable demo folder
+        shell: pwsh
+        run: |
+          $package = Join-Path $env:RUNNER_TEMP "MandateOfWarDemo"
+          New-Item -ItemType Directory -Force -Path $package | Out-Null
+          New-Item -ItemType Directory -Force -Path (Join-Path $package "godot") | Out-Null
+          Copy-Item -Path "godot/project" -Destination (Join-Path $package "godot/project") -Recurse
+          Copy-Item -Path $env:GODOT_EXE -Destination (Join-Path $package "GodotRuntime.exe")
+          $launcher = Join-Path $env:WINDIR "Microsoft.NET/Framework64/v4.0.30319/csc.exe"
+          if (-not (Test-Path $launcher)) { throw "The .NET Framework C# compiler was not found on the Windows runner." }
+          & $launcher /nologo /target:winexe /reference:System.Windows.Forms.dll /out:"$(Join-Path $package 'MandateOfWar.exe')" tools/windows-demo/launcher.cs
+          if ($LASTEXITCODE -ne 0) { throw "Compiling the demo launcher failed." }
+          @'
+          Mandate of War — Windows Demo
+
+          Run MandateOfWar.exe to start the game. The first launch may take a little longer while Godot prepares imported assets.
+
+          This is a demo build for Windows x86_64. It includes the game project, Godot runtime, and native game extension.
+          '@ | Set-Content -Path (Join-Path $package "README.txt") -Encoding utf8
+          $archive = Join-Path $env:RUNNER_TEMP "MandateOfWarDemo-Windows-x86_64.zip"
+          Compress-Archive -Path (Join-Path $package "*") -DestinationPath $archive -CompressionLevel Optimal
+          "DEMO_ARCHIVE=$archive" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
+      - name: Upload Windows demo
+        uses: actions/upload-artifact@v4
+        with:
+          name: MandateOfWarDemo-Windows-x86_64
+          path: ${{ runner.temp }}/MandateOfWarDemo-Windows-x86_64.zip
+          if-no-files-found: error
+          retention-days: 14
