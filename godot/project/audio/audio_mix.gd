@@ -2,8 +2,8 @@ extends RefCounted
 ## Presentation preferences only. No Engine.time_scale or native state changes.
 
 const SETTINGS_PATH := "user://audio.cfg"
-const BUSES := ["Master", "UI", "Combat", "Engines"]
-const DEFAULTS := {"Master": 0.8, "UI": 0.8, "Combat": 0.8, "Engines": 0.6}
+const BUSES := ["Master", "UI", "Combat", "Engines", "Voice"]
+const DEFAULTS := {"Master": 0.8, "UI": 0.8, "Combat": 0.8, "Engines": 0.6, "Voice": 0.8}
 
 func setup() -> void:
 	for bus: String in BUSES:
@@ -44,6 +44,8 @@ func set_level(bus: String, value: float) -> void:
 
 func save() -> Error:
 	var config := ConfigFile.new()
+	# Other sections (radio preferences) share this file; keep them.
+	config.load(SETTINGS_PATH)
 	for bus: String in BUSES:
 		config.set_value("volume", bus, level(bus))
 	return config.save(SETTINGS_PATH)

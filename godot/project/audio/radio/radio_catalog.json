@@ -1,0 +1,130 @@
+{
+  "schema_version": 1,
+  "catalog_id": "mandate.radio.core",
+  "attention_cue": "res://audio/kenney_interface/bong_001.ogg",
+  "grid": {"cell_m": 2000.0},
+  "faction_voice_sets": {"0": "elite_command", "1": "mass_command", "2": "industrial_command"},
+  "voice_sets": {
+    "elite_command": {
+      "faction": 0,
+      "role": "command",
+      "direction": "Calm, precise, sensor-focused. Level delivery, no shouting.",
+      "elevenlabs": {"voice_id": "", "model_id": "eleven_multilingual_v2",
+        "voice_settings": {"stability": 0.6, "similarity_boost": 0.75, "style": 0.0, "use_speaker_boost": true, "speed": 1.0}}
+    },
+    "mass_command": {
+      "faction": 1,
+      "role": "command",
+      "direction": "Terse, urgent, aggressive. Clipped sentences.",
+      "elevenlabs": {"voice_id": "", "model_id": "eleven_multilingual_v2",
+        "voice_settings": {"stability": 0.4, "similarity_boost": 0.75, "style": 0.2, "use_speaker_boost": true, "speed": 1.08}}
+    },
+    "industrial_command": {
+      "faction": 2,
+      "role": "command",
+      "direction": "Technical, logistics- and infrastructure-focused. Measured.",
+      "elevenlabs": {"voice_id": "", "model_id": "eleven_multilingual_v2",
+        "voice_settings": {"stability": 0.65, "similarity_boost": 0.75, "style": 0.0, "use_speaker_boost": true, "speed": 0.98}}
+    }
+  },
+  "severities": {
+    "critical": {"rank": 0, "max_age_seconds": 20.0, "preempts": true},
+    "urgent": {"rank": 1, "max_age_seconds": 30.0, "preempts": false},
+    "operational": {"rank": 2, "max_age_seconds": 45.0, "preempts": false},
+    "routine": {"rank": 3, "max_age_seconds": 60.0, "preempts": false}
+  },
+  "categories": {
+    "air_defense": "AIR DEFENSE",
+    "objectives": "OBJECTIVES",
+    "logistics": "LOGISTICS",
+    "ground": "GROUND COMBAT",
+    "naval": "NAVAL",
+    "intel": "RECON"
+  },
+  "events": [
+    {
+      "id": "air.hostile_inbound",
+      "status": "active",
+      "native_kind": 2,
+      "category": "air_defense",
+      "severity": "critical",
+      "cooldown_seconds": 45.0,
+      "dedupe": "event",
+      "focus": true,
+      "detail": "Bearing {bearing} from command, range {range_km} kilometers. Grid {grid}.",
+      "fallback": "Hostile aircraft inbound from the {cardinal}.",
+      "plain": "Hostile aircraft inbound.",
+      "lines": {
+        "elite_command": ["Overwatch has bandits confirmed, {cardinal} of command. All air-defense stations, stand by."],
+        "mass_command": ["Break, break! Bandits inbound from the {cardinal}. All air-defense stations, stand by."],
+        "industrial_command": ["Sensor net confirms hostile aircraft, {cardinal} of command. Air-defense batteries to ready state."]
+      }
+    },
+    {
+      "id": "objective.fuel_depot_secured",
+      "status": "active",
+      "native_kind": 0,
+      "category": "objectives",
+      "severity": "operational",
+      "cooldown_seconds": 20.0,
+      "dedupe": "sector",
+      "focus": true,
+      "detail": "Grid {grid}, bearing {bearing} from command.",
+      "fallback": "Fuel depot secured.",
+      "lines": {
+        "elite_command": ["Command, fuel depot secured. Logistics personnel moving in."],
+        "mass_command": ["Command, depot is ours. Start pumping."],
+        "industrial_command": ["Command, fuel depot secured. Transfer lines connecting now."]
+      }
+    },
+    {
+      "id": "objective.fuel_depot_lost",
+      "status": "active",
+      "native_kind": 1,
+      "category": "objectives",
+      "severity": "urgent",
+      "cooldown_seconds": 20.0,
+      "dedupe": "sector",
+      "focus": true,
+      "detail": "Grid {grid}, bearing {bearing} from command.",
+      "fallback": "Fuel depot lost.",
+      "lines": {
+        "elite_command": ["Command, we've lost the fuel depot. Hostile forces control the installation."],
+        "mass_command": ["Command, depot lost! Enemy holds the site."],
+        "industrial_command": ["Command, fuel depot offline. Hostile forces hold the installation, transfer has stopped."]
+      }
+    },
+    {"id": "air.contact_unidentified", "status": "parked", "category": "air_defense", "severity": "urgent",
+      "needs": "Radar contacts do not yet tell aircraft from ground contacts.",
+      "fallback": "Unidentified aircraft detected.",
+      "lines": {"elite_command": ["Overwatch, multiple bogeys detected, {cardinal} of command."]}},
+    {"id": "air.airspace_clear", "status": "parked", "category": "air_defense", "severity": "routine",
+      "needs": "A native all-clear transition (the raid memory exists, the report does not).",
+      "fallback": "Airspace clear.",
+      "lines": {"elite_command": ["Overwatch, scope is clear. Air-defense stations, stand down."]}},
+    {"id": "logistics.aircraft_bingo", "status": "parked", "category": "logistics", "severity": "operational",
+      "needs": "A per-aircraft bingo-fuel threshold event.",
+      "fallback": "Aircraft at bingo fuel, returning to base.",
+      "lines": {"elite_command": ["Viper One, bingo fuel. Returning to base."]}},
+    {"id": "logistics.fuel_shipment_lost", "status": "parked", "category": "logistics", "severity": "urgent",
+      "needs": "Hook to the existing FUEL SHIPMENT SHOT DOWN outcome.",
+      "fallback": "Fuel shipment shot down.",
+      "lines": {"elite_command": ["Command, the fuel flight is down. Shipment lost."]}},
+    {"id": "logistics.fuel_exhausted", "status": "parked", "category": "logistics", "severity": "urgent",
+      "needs": "Hook to the existing out-of-fuel halt count.",
+      "fallback": "Fuel reserves exhausted. Vehicles halted.",
+      "lines": {"elite_command": ["Command, fuel reserves exhausted. Vehicles are halting in place."]}},
+    {"id": "intel.contact_lost", "status": "parked", "category": "intel", "severity": "routine",
+      "needs": "A sighting-log transition event; must speak only the last-known position and call it stale.",
+      "fallback": "Contact lost.",
+      "lines": {"elite_command": ["Command, contact lost. Last known position is stale."]}},
+    {"id": "ground.defensive_line_breached", "status": "parked", "category": "ground", "severity": "critical",
+      "needs": "A defensive-perimeter concept in the simulation.",
+      "fallback": "Defensive line compromised.",
+      "lines": {"elite_command": ["Warning. Defensive line compromised. Enemy forces advancing."]}},
+    {"id": "naval.carrier_lost", "status": "parked", "category": "naval", "severity": "critical",
+      "needs": "Carriers do not exist yet.",
+      "fallback": "Carrier lost.",
+      "lines": {"elite_command": ["Priority alert. Carrier lost. Regional air support capability degraded."]}}
+  ]
+}

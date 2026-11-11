@@ -60,3 +60,9 @@ __pycache__/
 
 # Development-only dependencies for deterministic icon generation.
 tools/icons/node_modules/
+
+# Local secrets (ElevenLabs key for tools/generate_radio_voice.py)
+.env
+.env.*
+# Radio voice working files: clean masters and unapproved audition clips
+godot/project/audio/radio/audition/
