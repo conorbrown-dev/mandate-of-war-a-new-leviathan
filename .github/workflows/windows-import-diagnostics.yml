@@ -1,5 +1,9 @@
 name: Windows Godot Import Diagnostics
 
+permissions:
+  actions: read
+  contents: read
+
 on:
   push:
     branches:
@@ -29,22 +33,23 @@ jobs:
 
       - name: Import and inspect project resources
         shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
-          $project = Join-Path $PWD "godot/project"
-          if (-not (Test-Path (Join-Path $project "project.godot"))) { throw "The expected Godot project was not found at $project" }
+          $artifactRoot = Join-Path $env:RUNNER_TEMP "prior-demo-artifact"
+          gh run download 42962205622 --repo conorbrown-dev/mandate-of-war-a-new-leviathan --name MandateOfWarDemo-Windows-x86_64 --dir $artifactRoot
+          if ($LASTEXITCODE -ne 0) { throw "Could not download the previously compiled Windows demo artifact." }
+          $archive = Get-ChildItem -Path $artifactRoot -Filter "*.zip" -Recurse | Select-Object -First 1
+          if (-not $archive) { throw "The compiled Windows demo zip was not found in the downloaded artifact." }
+          $package = Join-Path $env:RUNNER_TEMP "prior-demo-package"
+          Expand-Archive -Path $archive.FullName -DestinationPath $package -Force
+          $project = Join-Path $package "godot/project"
+          if (-not (Test-Path (Join-Path $project "project.godot")) -or -not (Test-Path (Join-Path $project "bin/rts_gdextension.dll"))) { throw "The compiled project's Windows runtime files are missing." }
           Write-Host "Project path: $project"
-          $extensionDescriptor = Join-Path $project "rts.gdextension"
-          $disabledDescriptor = "$extensionDescriptor.diagnostic-disabled"
-          Move-Item -LiteralPath $extensionDescriptor -Destination $disabledDescriptor
-          try {
-            & "$env:GODOT_EXE" --headless --editor --path $project --verbose --import
-            if ($LASTEXITCODE -ne 0) { throw "Godot's Windows import command failed." }
-          }
-          finally {
-            Move-Item -LiteralPath $disabledDescriptor -Destination $extensionDescriptor
-          }
+          & (Join-Path $package "GodotRuntime.exe") --headless --editor --path $project --verbose --import
+          Write-Host "Godot import exit code: $LASTEXITCODE"
           $importedDir = Join-Path $project ".godot/imported"
-          Get-ChildItem -Path (Join-Path $project ".godot") -Force -Recurse
+          Get-ChildItem -Path (Join-Path $project ".godot") -Force -Recurse | Select-Object -First 30
           $files = Get-ChildItem -Path $importedDir -File -Recurse -Force -ErrorAction SilentlyContinue
           Write-Host "Imported cache file count: $($files.Count)"
           if ($files.Count -eq 0) { throw "Godot's Windows import command produced no imported cache files." }
@@ -53,7 +58,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: windows-import-cache
-          path: godot/project/.godot/imported
+          path: ${{ runner.temp }}/prior-demo-package/godot/project/.godot/imported
           include-hidden-files: true
           if-no-files-found: error
           retention-days: 3
