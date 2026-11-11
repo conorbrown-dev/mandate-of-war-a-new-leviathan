@@ -33,7 +33,7 @@ jobs:
 
           $runtimeDir = Join-Path $env:RUNNER_TEMP "godot-runtime"
           Expand-Archive -Path $godotArchive -DestinationPath $runtimeDir -Force
-          $godot = Get-ChildItem $runtimeDir -Filter "Godot_v${version}-stable_win64.exe" -Recurse | Select-Object -First 1
+          $godot = Get-ChildItem $runtimeDir -Filter "Godot_v${version}-stable_win64_console.exe" -Recurse | Select-Object -First 1
           if (-not $godot) { throw "Godot Windows editor was not found in the release archive." }
 
           $templateDir = Join-Path $env:APPDATA "Godot/export_templates/${version}.stable"
@@ -80,7 +80,7 @@ jobs:
           $outputDir = Join-Path $env:RUNNER_TEMP "MandateOfWarDemo"
           New-Item -ItemType Directory -Force -Path $outputDir | Out-Null
           $gameExe = Join-Path $outputDir "MandateOfWarDemo.exe"
-          & "$env:GODOT_EXE" --headless --path godot/project --export-release "Windows Desktop" $gameExe
+          & "$env:GODOT_EXE" --verbose --headless --path godot/project --export-release "Windows Desktop" $gameExe
           if ($LASTEXITCODE -ne 0) { throw "Godot Windows release export failed." }
           if (-not (Test-Path $gameExe)) { throw "Godot did not produce the game executable." }
 
