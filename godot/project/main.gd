@@ -480,7 +480,11 @@ func _ready() -> void:
 	# future operational-theater panel, but never show it over the battlefield.
 	territory_debug_label.visible = false
 	_hotkey_setup_from_manager()
-	var content_data_root := ProjectSettings.globalize_path("res://../../data").simplify_path()
+	var content_data_root := ""
+	if OS.has_feature("standalone"):
+		content_data_root = OS.get_executable_path().get_base_dir().path_join("data")
+	else:
+		content_data_root = ProjectSettings.globalize_path("res://../../data").simplify_path()
 	OS.set_environment("RTS_DATA_ROOT", content_data_root)
 
 	if not ClassDB.class_exists("RtsExtension"):
