@@ -46,8 +46,12 @@ jobs:
           Copy-Item -Path $env:GODOT_EXE -Destination (Join-Path $package "GodotRuntime.exe")
           $launcher = Join-Path $env:WINDIR "Microsoft.NET/Framework64/v4.0.30319/csc.exe"
           if (-not (Test-Path $launcher)) { throw "The .NET Framework C# compiler was not found on the Windows runner." }
-          & $launcher /nologo /target:winexe /reference:System.Windows.Forms.dll /out:"$(Join-Path $package 'MandateOfWar.exe')" tools/windows-demo/launcher.cs
+          $launcherSource = Join-Path $PWD "tools\windows-demo\launcher.cs"
+          & $launcher /nologo /target:winexe /reference:System.Windows.Forms.dll /out:"$(Join-Path $package 'MandateOfWar.exe')" $launcherSource
           if ($LASTEXITCODE -ne 0) { throw "Compiling the demo launcher failed." }
+          if (-not (Test-Path (Join-Path $package "godot/project/bin/rts_gdextension.dll"))) { throw "The Windows game extension was not copied into the package." }
+          & (Join-Path $package "GodotRuntime.exe") --headless --path (Join-Path $package "godot/project") --quit-after 120
+          if ($LASTEXITCODE -ne 0) { throw "The packaged project failed its headless startup check." }
           @'
           Mandate of War — Windows Demo
 
