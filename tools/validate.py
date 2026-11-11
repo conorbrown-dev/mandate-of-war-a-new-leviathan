@@ -70,6 +70,7 @@ CONTRACT_SCENARIOS = {
     "slice4_audio": ("test_slice4_audio.gd", "SLICE4_AUDIO checks="),
     "audio_library": ("test_audio_library.gd", "AUDIO_LIBRARY checks="),
     "radio_callouts": ("test_radio_callouts.gd", "RADIO_CALLOUTS checks="),
+    "radio_voice_source": ("test_radio_voice_source.gd", "RADIO_VOICE_SOURCE checks="),
     "build_menu_hover": ("test_build_menu_hover.gd", "BUILD_MENU_HOVER checks="),
     "queued_builds": ("test_queued_builds.gd", "QUEUED_BUILDS checks="),
     "ground_transport": ("test_ground_transport.gd", "GROUND_TRANSPORT checks="),

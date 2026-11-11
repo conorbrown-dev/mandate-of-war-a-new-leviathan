@@ -1,0 +1,298 @@
+{
+  "schema_version": 1,
+  "generator": "tools/generate_radio_voice.py",
+  "license": "Generated with ElevenLabs text-to-speech under the generating account's plan. Commercial use needs a paid plan and a voice the account has rights to; confirm both before shipping (https://elevenlabs.io/terms-of-use).",
+  "clips": [
+    {
+      "id": "elite_command/air.hostile_inbound.v1.e",
+      "event": "air.hostile_inbound",
+      "voice_set": "elite_command",
+      "variant": 1,
+      "text": "Overwatch has bandits confirmed, east of command. All air-defense stations, stand by.",
+      "file": "clips/elite_command/air.hostile_inbound.v1.e.wav",
+      "master": "masters/elite_command/air.hostile_inbound.v1.e.wav",
+      "voice_id": "RF1D19eUaCmPbFWzGMTz",
+      "model_id": "eleven_multilingual_v2",
+      "voice_settings": {
+        "stability": 0.6,
+        "similarity_boost": 0.75,
+        "style": 0.0,
+        "use_speaker_boost": true,
+        "speed": 1.0
+      },
+      "output_format": "pcm_24000",
+      "settings_hash": "442a0b58637aa0d1d6e58a8ab4c0eec3ce87fd010206e632d7db73a76e170299",
+      "master_sha256": "3256fad9b880397a28b2eab816d53aa18e2ff9385beeadcce41f02c580e207d6",
+      "sha256": "3256fad9b880397a28b2eab816d53aa18e2ff9385beeadcce41f02c580e207d6",
+      "processing": {
+        "version": 2,
+        "radio": false,
+        "steps": "none; original mono PCM16 24 kHz"
+      },
+      "source": "ElevenLabs text-to-speech",
+      "path": "res://audio/radio/clips/elite_command/air.hostile_inbound.v1.e.wav"
+    },
+    {
+      "id": "elite_command/air.hostile_inbound.v1.n",
+      "event": "air.hostile_inbound",
+      "voice_set": "elite_command",
+      "variant": 1,
+      "text": "Overwatch has bandits confirmed, north of command. All air-defense stations, stand by.",
+      "file": "clips/elite_command/air.hostile_inbound.v1.n.wav",
+      "master": "masters/elite_command/air.hostile_inbound.v1.n.wav",
+      "voice_id": "RF1D19eUaCmPbFWzGMTz",
+      "model_id": "eleven_multilingual_v2",
+      "voice_settings": {
+        "stability": 0.6,
+        "similarity_boost": 0.75,
+        "style": 0.0,
+        "use_speaker_boost": true,
+        "speed": 1.0
+      },
+      "output_format": "pcm_24000",
+      "settings_hash": "3c2d60cae56668980b503643c3e7675b4ff1a70b25de71b7a83a3e2f69a84cf3",
+      "master_sha256": "4d78e5d6ebd4e1213be56ca4c70e22fd1967508757ecaf71d6b6b82a21a6a52a",
+      "sha256": "4d78e5d6ebd4e1213be56ca4c70e22fd1967508757ecaf71d6b6b82a21a6a52a",
+      "processing": {
+        "version": 2,
+        "radio": false,
+        "steps": "none; original mono PCM16 24 kHz"
+      },
+      "source": "ElevenLabs text-to-speech",
+      "path": "res://audio/radio/clips/elite_command/air.hostile_inbound.v1.n.wav"
+    },
+    {
+      "id": "elite_command/air.hostile_inbound.v1.ne",
+      "event": "air.hostile_inbound",
+      "voice_set": "elite_command",
+      "variant": 1,
+      "text": "Overwatch has bandits confirmed, northeast of command. All air-defense stations, stand by.",
+      "file": "clips/elite_command/air.hostile_inbound.v1.ne.wav",
+      "master": "masters/elite_command/air.hostile_inbound.v1.ne.wav",
+      "voice_id": "RF1D19eUaCmPbFWzGMTz",
+      "model_id": "eleven_multilingual_v2",
+      "voice_settings": {
+        "stability": 0.6,
+        "similarity_boost": 0.75,
+        "style": 0.0,
+        "use_speaker_boost": true,
+        "speed": 1.0
+      },
+      "output_format": "pcm_24000",
+      "settings_hash": "294aa35ee94a275a443b98e5af2a5dac05c3be89671089b3848cae9887279fc3",
+      "master_sha256": "98b0562157f2c186304505eb5ab774fc649f207b6aa593de1756ab5c86884d8c",
+      "sha256": "98b0562157f2c186304505eb5ab774fc649f207b6aa593de1756ab5c86884d8c",
+      "processing": {
+        "version": 2,
+        "radio": false,
+        "steps": "none; original mono PCM16 24 kHz"
+      },
+      "source": "ElevenLabs text-to-speech",
+      "path": "res://audio/radio/clips/elite_command/air.hostile_inbound.v1.ne.wav"
+    },
+    {
+      "id": "elite_command/air.hostile_inbound.v1.nw",
+      "event": "air.hostile_inbound",
+      "voice_set": "elite_command",
+      "variant": 1,
+      "text": "Overwatch has bandits confirmed, northwest of command. All air-defense stations, stand by.",
+      "file": "clips/elite_command/air.hostile_inbound.v1.nw.wav",
+      "master": "masters/elite_command/air.hostile_inbound.v1.nw.wav",
+      "voice_id": "RF1D19eUaCmPbFWzGMTz",
+      "model_id": "eleven_multilingual_v2",
+      "voice_settings": {
+        "stability": 0.6,
+        "similarity_boost": 0.75,
+        "style": 0.0,
+        "use_speaker_boost": true,
+        "speed": 1.0
+      },
+      "output_format": "pcm_24000",
+      "settings_hash": "1468713ccd990398308403e89fe36c22266e8bc1a03e7aa7aa71525c336a58cc",
+      "master_sha256": "5808f73dde5bf76437e6d7351351e4897946f715e0be0324843f124a898f5463",
+      "sha256": "5808f73dde5bf76437e6d7351351e4897946f715e0be0324843f124a898f5463",
+      "processing": {
+        "version": 2,
+        "radio": false,
+        "steps": "none; original mono PCM16 24 kHz"
+      },
+      "source": "ElevenLabs text-to-speech",
+      "path": "res://audio/radio/clips/elite_command/air.hostile_inbound.v1.nw.wav"
+    },
+    {
+      "id": "elite_command/air.hostile_inbound.v1.s",
+      "event": "air.hostile_inbound",
+      "voice_set": "elite_command",
+      "variant": 1,
+      "text": "Overwatch has bandits confirmed, south of command. All air-defense stations, stand by.",
+      "file": "clips/elite_command/air.hostile_inbound.v1.s.wav",
+      "master": "masters/elite_command/air.hostile_inbound.v1.s.wav",
+      "voice_id": "RF1D19eUaCmPbFWzGMTz",
+      "model_id": "eleven_multilingual_v2",
+      "voice_settings": {
+        "stability": 0.6,
+        "similarity_boost": 0.75,
+        "style": 0.0,
+        "use_speaker_boost": true,
+        "speed": 1.0
+      },
+      "output_format": "pcm_24000",
+      "settings_hash": "5fcd0abc02af4f2be5bd5cb44e5d8e88bde3b66b27b945b26a80a08430e5695c",
+      "master_sha256": "ac594eb342bc8a116f2294c8279729f99e9c34b2982120cf9e0d54475b0dedba",
+      "sha256": "ac594eb342bc8a116f2294c8279729f99e9c34b2982120cf9e0d54475b0dedba",
+      "processing": {
+        "version": 2,
+        "radio": false,
+        "steps": "none; original mono PCM16 24 kHz"
+      },
+      "source": "ElevenLabs text-to-speech",
+      "path": "res://audio/radio/clips/elite_command/air.hostile_inbound.v1.s.wav"
+    },
+    {
+      "id": "elite_command/air.hostile_inbound.v1.se",
+      "event": "air.hostile_inbound",
+      "voice_set": "elite_command",
+      "variant": 1,
+      "text": "Overwatch has bandits confirmed, southeast of command. All air-defense stations, stand by.",
+      "file": "clips/elite_command/air.hostile_inbound.v1.se.wav",
+      "master": "masters/elite_command/air.hostile_inbound.v1.se.wav",
+      "voice_id": "RF1D19eUaCmPbFWzGMTz",
+      "model_id": "eleven_multilingual_v2",
+      "voice_settings": {
+        "stability": 0.6,
+        "similarity_boost": 0.75,
+        "style": 0.0,
+        "use_speaker_boost": true,
+        "speed": 1.0
+      },
+      "output_format": "pcm_24000",
+      "settings_hash": "06115adc86f9f079d8ab7e0c36174143df6ef2db6e33bbcd307e5c08006ad8f6",
+      "master_sha256": "029213cabd3a64fbb02b774ba9b39123f41f13511aa3a01781e04882fd6e6302",
+      "sha256": "029213cabd3a64fbb02b774ba9b39123f41f13511aa3a01781e04882fd6e6302",
+      "processing": {
+        "version": 2,
+        "radio": false,
+        "steps": "none; original mono PCM16 24 kHz"
+      },
+      "source": "ElevenLabs text-to-speech",
+      "path": "res://audio/radio/clips/elite_command/air.hostile_inbound.v1.se.wav"
+    },
+    {
+      "id": "elite_command/air.hostile_inbound.v1.sw",
+      "event": "air.hostile_inbound",
+      "voice_set": "elite_command",
+      "variant": 1,
+      "text": "Overwatch has bandits confirmed, southwest of command. All air-defense stations, stand by.",
+      "file": "clips/elite_command/air.hostile_inbound.v1.sw.wav",
+      "master": "masters/elite_command/air.hostile_inbound.v1.sw.wav",
+      "voice_id": "RF1D19eUaCmPbFWzGMTz",
+      "model_id": "eleven_multilingual_v2",
+      "voice_settings": {
+        "stability": 0.6,
+        "similarity_boost": 0.75,
+        "style": 0.0,
+        "use_speaker_boost": true,
+        "speed": 1.0
+      },
+      "output_format": "pcm_24000",
+      "settings_hash": "c91caf93b9c3103a9567a1fca5d8c23689465b51441b56d751f13c4f823921ef",
+      "master_sha256": "66a30383b0a09540e880356d136a21de49dd693c32d8ced1200fde7b2b0042cb",
+      "sha256": "66a30383b0a09540e880356d136a21de49dd693c32d8ced1200fde7b2b0042cb",
+      "processing": {
+        "version": 2,
+        "radio": false,
+        "steps": "none; original mono PCM16 24 kHz"
+      },
+      "source": "ElevenLabs text-to-speech",
+      "path": "res://audio/radio/clips/elite_command/air.hostile_inbound.v1.sw.wav"
+    },
+    {
+      "id": "elite_command/air.hostile_inbound.v1.w",
+      "event": "air.hostile_inbound",
+      "voice_set": "elite_command",
+      "variant": 1,
+      "text": "Overwatch has bandits confirmed, west of command. All air-defense stations, stand by.",
+      "file": "clips/elite_command/air.hostile_inbound.v1.w.wav",
+      "master": "masters/elite_command/air.hostile_inbound.v1.w.wav",
+      "voice_id": "RF1D19eUaCmPbFWzGMTz",
+      "model_id": "eleven_multilingual_v2",
+      "voice_settings": {
+        "stability": 0.6,
+        "similarity_boost": 0.75,
+        "style": 0.0,
+        "use_speaker_boost": true,
+        "speed": 1.0
+      },
+      "output_format": "pcm_24000",
+      "settings_hash": "6fa0061eb9aae6cc591493276bc79d55bec9540f14b1d03b2859a1a859fcb86a",
+      "master_sha256": "a7386220a35f1d3526ec3b992acfc3a8bab7ade95cd4e413c46a148ea023f915",
+      "sha256": "a7386220a35f1d3526ec3b992acfc3a8bab7ade95cd4e413c46a148ea023f915",
+      "processing": {
+        "version": 2,
+        "radio": false,
+        "steps": "none; original mono PCM16 24 kHz"
+      },
+      "source": "ElevenLabs text-to-speech",
+      "path": "res://audio/radio/clips/elite_command/air.hostile_inbound.v1.w.wav"
+    },
+    {
+      "id": "elite_command/objective.fuel_depot_lost.v1",
+      "event": "objective.fuel_depot_lost",
+      "voice_set": "elite_command",
+      "variant": 1,
+      "text": "Command, we've lost the fuel depot. Hostile forces control the installation.",
+      "file": "clips/elite_command/objective.fuel_depot_lost.v1.wav",
+      "master": "masters/elite_command/objective.fuel_depot_lost.v1.wav",
+      "voice_id": "RF1D19eUaCmPbFWzGMTz",
+      "model_id": "eleven_multilingual_v2",
+      "voice_settings": {
+        "stability": 0.6,
+        "similarity_boost": 0.75,
+        "style": 0.0,
+        "use_speaker_boost": true,
+        "speed": 1.0
+      },
+      "output_format": "pcm_24000",
+      "settings_hash": "99ca02c3cae3ad1a17cdc3624466f3d083b632981754ff26601ede82c892453a",
+      "master_sha256": "bb962f52b202758dfc6c2e243b436917f64a0a441f9a39fc4b65f98378f3035d",
+      "sha256": "bb962f52b202758dfc6c2e243b436917f64a0a441f9a39fc4b65f98378f3035d",
+      "processing": {
+        "version": 2,
+        "radio": false,
+        "steps": "none; original mono PCM16 24 kHz"
+      },
+      "source": "ElevenLabs text-to-speech",
+      "path": "res://audio/radio/clips/elite_command/objective.fuel_depot_lost.v1.wav"
+    },
+    {
+      "id": "elite_command/objective.fuel_depot_secured.v1",
+      "event": "objective.fuel_depot_secured",
+      "voice_set": "elite_command",
+      "variant": 1,
+      "text": "Command, fuel depot secured. Logistics personnel moving in.",
+      "file": "clips/elite_command/objective.fuel_depot_secured.v1.wav",
+      "master": "masters/elite_command/objective.fuel_depot_secured.v1.wav",
+      "voice_id": "RF1D19eUaCmPbFWzGMTz",
+      "model_id": "eleven_multilingual_v2",
+      "voice_settings": {
+        "stability": 0.6,
+        "similarity_boost": 0.75,
+        "style": 0.0,
+        "use_speaker_boost": true,
+        "speed": 1.0
+      },
+      "output_format": "pcm_24000",
+      "settings_hash": "6906b15adb452544c0f55590af4169c8822ed9005746f7a19cf59b97624a44e3",
+      "master_sha256": "81b28f27655c7b4275c43cf9a77af722541fd905760aec99e43dae936960a6a9",
+      "sha256": "81b28f27655c7b4275c43cf9a77af722541fd905760aec99e43dae936960a6a9",
+      "processing": {
+        "version": 2,
+        "radio": false,
+        "steps": "none; original mono PCM16 24 kHz"
+      },
+      "source": "ElevenLabs text-to-speech",
+      "path": "res://audio/radio/clips/elite_command/objective.fuel_depot_secured.v1.wav"
+    }
+  ],
+  "pending": []
+}

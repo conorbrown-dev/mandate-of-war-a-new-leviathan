@@ -83,3 +83,18 @@ See STATUS.md for behavior and PERFORMANCE.md for native-only timing evidence.
 
 Overlay implementation checks are complete (39 headless / 40 rendered); remaining
 work is hand-play tuning, not missing aircraft anchoring or placeholder radii.
+
+
+2026-11-10 voice playback fix: generated voice WAVs can exist in the manifest
+without Godot import metadata. The announcer now loads WAV source files directly
+with AudioStreamWAV.load_from_file, preserving PCM and bypassing the missing
+import. Other formats retain normal ResourceLoader loading. No EQ or treatment
+is added. `radio_voice_source` creates an unimported WAV and manifest and checks
+speech playback, no fallback blip, unchanged PCM, and zero Voice-bus effects.
+The regression fails against the old announcer and passes with the fix.
+Release build passes. CTest discovers/passes four programs (20 unit, 21 snapshot,
+318 integration, BALANCE_OK). Focused radio_voice_source scenario passes four
+checks outside the sandbox; Godot reports two ObjectDB leaks at shutdown.
+Human playback acceptance: user confirmed speech works in this worktree.
+The shipped pack contains ten Elite Command clips; other faction voices remain
+text-only. Generator output preserves original PCM without processing.

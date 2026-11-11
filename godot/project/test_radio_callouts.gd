@@ -36,8 +36,10 @@ func packet(events: Array, tick := 0) -> Dictionary:
 func fresh_announcer() -> Node:
 	preload("res://audio/audio_mix.gd").new().setup()
 	var radio: Node = Announcer.new()
-	radio.set_process(false)
 	root.add_child(radio)
+	# After entering the tree: a node with _process turns processing back on
+	# when it enters, so the announcer must be stopped here to run on virtual time.
+	radio.set_process(false)
 	radio.map_rect = Rect2(-14000, -14000, 28000, 28000)
 	radio.clips.clear()
 	return radio
@@ -98,6 +100,8 @@ func _check_announcer_rules() -> void:
 	radio.advance(0.05)
 	check(radio.current.get("id", "") == "objective.fuel_depot_lost" and radio.current.voiced and radio.voice_playing(), "a recorded line is spoken")
 	check(radio.get_node("RadioVoice").bus == "Voice", "speech has its own volume channel")
+	check(AudioServer.get_bus_effect_count(AudioServer.get_bus_index("Voice")) == 0, "voice bus has no processing effects")
+	check(radio.get_node_or_null("RadioStatic") == null and radio.get_node_or_null("RadioSquelch") == null, "voiceovers have no static or squelch players")
 	var players := 0
 	for child in radio.get_children():
 		players += int(child is AudioStreamPlayer and child.playing)
@@ -215,6 +219,9 @@ func _check_real_match() -> void:
 	var radio: Node = view.radio_announcer
 	var feed: Control = view.radio_feed
 	radio.set_process(false)
+	# The view loads whatever voice pack is installed; these checks are about
+	# text, so they must not depend on whether clips have been generated.
+	radio.clips.clear()
 	check(radio != null and feed != null and radio.listener_faction == 0, "the match view has a radio for the player")
 	var engineer := int(view._player_engineer_id())
 	var home: PackedFloat32Array = view.extension.call("get_unit_position", engineer)
