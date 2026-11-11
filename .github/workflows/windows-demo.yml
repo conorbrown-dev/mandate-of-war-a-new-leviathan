@@ -6,7 +6,7 @@ on:
 jobs:
   package-windows-demo:
     runs-on: windows-2025
-    timeout-minutes: 45
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
 
@@ -17,53 +17,89 @@ jobs:
           cmake -S . -B build/windows -G Ninja -DCMAKE_BUILD_TYPE=Release
           cmake --build build/windows --parallel 8
 
-      - name: Download Godot Windows runtime
+      - name: Download Godot editor and Windows export templates
         shell: pwsh
         run: |
           $version = "4.7.2"
-          $archive = Join-Path $env:RUNNER_TEMP "godot-win64.zip"
-          Invoke-WebRequest -Uri "https://github.com/godotengine/godot-builds/releases/download/${version}-stable/Godot_v${version}-stable_win64.exe.zip" -OutFile $archive
+          $godotArchive = Join-Path $env:RUNNER_TEMP "godot-win64.zip"
+          $templateArchive = Join-Path $env:RUNNER_TEMP "godot-export-templates.tpz"
+          $templateZip = Join-Path $env:RUNNER_TEMP "godot-export-templates.zip"
+          Invoke-WebRequest -Uri "https://github.com/godotengine/godot-builds/releases/download/${version}-stable/Godot_v${version}-stable_win64.exe.zip" -OutFile $godotArchive
+          Invoke-WebRequest -Uri "https://github.com/godotengine/godot-builds/releases/download/${version}-stable/Godot_v${version}-stable_export_templates.tpz" -OutFile $templateArchive
+          Move-Item -Path $templateArchive -Destination $templateZip
+
           $runtimeDir = Join-Path $env:RUNNER_TEMP "godot-runtime"
-          Expand-Archive -Path $archive -DestinationPath $runtimeDir -Force
+          Expand-Archive -Path $godotArchive -DestinationPath $runtimeDir -Force
           $godot = Get-ChildItem $runtimeDir -Filter "Godot_v${version}-stable_win64.exe" -Recurse | Select-Object -First 1
-          if (-not $godot) { throw "Godot Windows runtime was not found in the release archive." }
+          if (-not $godot) { throw "Godot Windows editor was not found in the release archive." }
+
+          $templateDir = Join-Path $env:APPDATA "Godot/export_templates/${version}.stable"
+          New-Item -ItemType Directory -Force -Path $templateDir | Out-Null
+          $templateContents = Join-Path $env:RUNNER_TEMP "godot-export-templates"
+          Expand-Archive -Path $templateZip -DestinationPath $templateContents -Force
+          $templatesRoot = Join-Path $templateContents "templates"
+          if (-not (Test-Path (Join-Path $templatesRoot "windows_release_x86_64.exe"))) { throw "The Windows release export template is missing." }
+          Copy-Item -Path (Join-Path $templatesRoot "*") -Destination $templateDir -Recurse -Force
           "GODOT_EXE=$($godot.FullName)" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
 
-      - name: Import project assets
-        shell: pwsh
-        run: '& "$env:GODOT_EXE" --headless --path godot/project --import'
-
-      - name: Assemble portable demo folder
+      - name: Import project resources and export Windows game
         shell: pwsh
         run: |
-          $package = Join-Path $env:RUNNER_TEMP "MandateOfWarDemo"
-          New-Item -ItemType Directory -Force -Path $package | Out-Null
-          New-Item -ItemType Directory -Force -Path (Join-Path $package "godot") | Out-Null
-          Copy-Item -Path "godot/project" -Destination (Join-Path $package "godot/project") -Recurse -Force
-          Copy-Item -Path $env:GODOT_EXE -Destination (Join-Path $package "GodotRuntime.exe")
-          $launcher = Join-Path $env:WINDIR "Microsoft.NET/Framework64/v4.0.30319/csc.exe"
-          if (-not (Test-Path $launcher)) { throw "The .NET Framework C# compiler was not found on the Windows runner." }
-          $launcherSource = Join-Path $PWD "tools\windows-demo\launcher.cs"
-          & $launcher /nologo /target:winexe /reference:System.Windows.Forms.dll /out:"$(Join-Path $package 'MandateOfWar.exe')" $launcherSource
-          if ($LASTEXITCODE -ne 0) { throw "Compiling the demo launcher failed." }
-          if (-not (Test-Path (Join-Path $package "godot/project/bin/rts_gdextension.dll"))) { throw "The Windows game extension was not copied into the package." }
-          $sourceImports = Get-ChildItem -Path "godot/project/.godot/imported" -File -Recurse -Force
-          if ($sourceImports.Count -eq 0) { throw "Godot did not generate imported assets for the Windows project." }
-          $importedAssets = Get-ChildItem -Path (Join-Path $package "godot/project/.godot/imported") -File -Recurse -Force
-          if ($importedAssets.Count -ne $sourceImports.Count) { throw "Some Godot imported assets were omitted from the packaged project." }
-          Write-Host "Packaged $($importedAssets.Count) imported Godot assets."
-          & (Join-Path $package "GodotRuntime.exe") --headless --path (Join-Path $package "godot/project") --quit-after 120
-          if ($LASTEXITCODE -ne 0) { throw "The packaged project failed its headless startup check." }
+          $env:GODOT_SILENCE_ROOT_WARNING = "1"
+          & "$env:GODOT_EXE" --headless --editor --path godot/project --import
+          if ($LASTEXITCODE -ne 0) { throw "Godot project resource import failed." }
+
+          $preset = @'
+          [preset.0]
+          name="Windows Desktop"
+          platform="Windows Desktop"
+          runnable=true
+          dedicated_server=false
+          custom_features=""
+          export_filter="all_resources"
+          include_filter=""
+          exclude_filter=""
+          export_path=""
+          patches=PackedStringArray()
+          encryption_include_filters=""
+          encryption_exclude_filters=""
+          seed=0
+          encrypt_pck=false
+          encrypt_directory=false
+
+          [preset.0.options]
+          custom_template/debug=""
+          custom_template/release=""
+          debug/export_console_wrapper=1
+          binary_format/architecture="x86_64"
+          binary_format/embed_pck=true
+          texture_format/s3tc_bptc=true
+          texture_format/etc2_astc=false
+          '@
+          $preset | Set-Content -Path "godot/project/export_presets.cfg" -Encoding utf8
+          $outputDir = Join-Path $env:RUNNER_TEMP "MandateOfWarDemo"
+          New-Item -ItemType Directory -Force -Path $outputDir | Out-Null
+          $gameExe = Join-Path $outputDir "MandateOfWarDemo.exe"
+          & "$env:GODOT_EXE" --headless --path godot/project --export-release "Windows Desktop" $gameExe
+          if ($LASTEXITCODE -ne 0) { throw "Godot Windows release export failed." }
+          if (-not (Test-Path $gameExe)) { throw "Godot did not produce the game executable." }
+
+          $extension = Join-Path $outputDir "bin/rts_gdextension.dll"
+          if (-not (Test-Path $extension)) { throw "Godot did not package the Windows GDExtension DLL." }
+          if ((Get-Item $gameExe).Length -lt 100MB) { throw "The exported executable is unexpectedly small; embedded game resources may be missing." }
+          & $gameExe --headless --quit-after 120
+          if ($LASTEXITCODE -ne 0) { throw "The exported Windows game failed its headless startup check." }
           @'
           Mandate of War — Windows Demo
 
-          Run MandateOfWar.exe to start the game. The first launch may take a little longer while Godot prepares imported assets.
+          Run MandateOfWarDemo.exe to start a match.
 
-          This is a demo build for Windows x86_64. It includes the game project, Godot runtime, and native game extension.
-          '@ | Set-Content -Path (Join-Path $package "README.txt") -Encoding utf8
+          This is a Windows x86_64 demo build. Extract the entire ZIP before running the game.
+          '@ | Set-Content -Path (Join-Path $outputDir "README.txt") -Encoding utf8
+
           $archive = Join-Path $env:RUNNER_TEMP "MandateOfWarDemo-Windows-x86_64.zip"
           Add-Type -AssemblyName System.IO.Compression.FileSystem
-          [System.IO.Compression.ZipFile]::CreateFromDirectory($package, $archive, [System.IO.Compression.CompressionLevel]::Optimal, $false)
+          [System.IO.Compression.ZipFile]::CreateFromDirectory($outputDir, $archive, [System.IO.Compression.CompressionLevel]::Optimal, $false)
           "DEMO_ARCHIVE=$archive" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
 
       - name: Upload Windows demo
