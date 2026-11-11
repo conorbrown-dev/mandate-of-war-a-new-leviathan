@@ -4305,14 +4305,14 @@ bool Simulation::command_post_site_claimed(float x, float y, float half_x, float
     return false;
 }
 
-StructureSite Simulation::assess_structure_site(uint8_t structure_type, float x, float y, bool check_command_post) const {
+StructureSite Simulation::assess_structure_site(uint8_t structure_type, float x, float y, bool check_command_post, bool check_site_claims) const {
     StructureSite site{};
     const StructureSiteRules rules = structure_site_rules(structure_type);
     if (rules.footprint_x <= 0.0f || !std::isfinite(x) || !std::isfinite(y)) return site;
 
     const float half_x = rules.footprint_x * 0.5f;
     const float half_y = rules.footprint_y * 0.5f;
-    if (site_claimed(x, y, half_x, half_y) ||
+    if ((check_site_claims && site_claimed(x, y, half_x, half_y)) ||
         (check_command_post && command_post_site_claimed(x, y, half_x, half_y))) return site;
     const float sample_x = rules.footprint_x / 4.0f;
     const float sample_y = rules.footprint_y / 4.0f;
@@ -4410,7 +4410,7 @@ bool Simulation::validate_engineer_placement(float x, float y) const {
     // A construction unit needs one usable local building footprint. Requiring
     // valid road probes in both axes rejected otherwise healthy slopes and
     // made engineer spawning much stricter than normal play.
-    const StructureSite site = assess_structure_site(0, x, y, false);
+    const StructureSite site = assess_structure_site(0, x, y, false, false);
     return site.buildable && !site.earthworks;
 }
 

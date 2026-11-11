@@ -290,7 +290,7 @@ public:
     void block_civilian_area(float x, float y, float radius);
     bool validate_structure_placement(uint8_t structure_type, float x, float y) const;
     bool structure_site_claimed(uint8_t structure_type, float x, float y) const;
-    StructureSite assess_structure_site(uint8_t structure_type, float x, float y, bool check_command_post = true) const;
+    StructureSite assess_structure_site(uint8_t structure_type, float x, float y, bool check_command_post = true, bool check_site_claims = true) const;
     // Queues the structure, with an earthworks job first when the ground needs it.
     bool queue_structure(EntityId line, FactionId faction, uint8_t structure_type, float x, float y);
     bool validate_engineer_placement(float x, float y) const;
