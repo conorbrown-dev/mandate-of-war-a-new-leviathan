@@ -33,6 +33,7 @@
 #include "fuel_supply.hpp"
 #include "vision_map.hpp"
 #include "sighting_log.hpp"
+#include "radio_events.hpp"
 #include "ai/ai_manager.hpp"
 #include "simulation/match_record.hpp"
 #include "production/requisition_manager.hpp"
@@ -78,6 +79,14 @@ public:
         return index < 3 ? combat_event_viewer_sequences_[index] : 0;
     }
     std::vector<CombatPresentationEvent> combat_events_after(uint64_t cursor, FactionId viewer) const;
+    // Command-network reports for one side (see radio_events.hpp). Reading
+    // never consumes or changes anything.
+    static constexpr size_t MAX_RADIO_EVENTS = 64;
+    uint64_t radio_event_cursor(FactionId listener) const {
+        const auto index = static_cast<unsigned>(listener);
+        return index < 3 ? radio_event_sequences_[index] : 0;
+    }
+    std::vector<RadioEvent> radio_events_after(uint64_t cursor, FactionId listener) const;
 
 
     Entity create_unit(float x, float y);
@@ -467,6 +476,13 @@ private:
     uint64_t combat_event_sequence_ = 0; // Monotonic even across match resets.
     std::array<uint64_t, 3> combat_event_viewer_sequences_{};
     std::deque<CombatPresentationEvent> combat_events_;
+    void record_radio_event(RadioEventKind kind, FactionId listener, float x, float y,
+                            int count = 1, EntityId subject = INVALID_ENTITY);
+    void update_air_threat_reports();
+    std::array<uint64_t, 3> radio_event_sequences_{}; // Monotonic across resets.
+    std::array<std::deque<RadioEvent>, 3> radio_events_;
+    struct AirThreat { bool active = false; uint32_t last_seen_tick = 0; };
+    std::array<AirThreat, 3> air_threats_{};
     void refresh_unit_counts();
     static constexpr size_t FACTION_COUNT = 3;
     // Recounted every economy phase so deaths free slots; creation increments.

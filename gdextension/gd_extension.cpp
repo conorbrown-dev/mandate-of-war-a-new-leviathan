@@ -292,6 +292,7 @@ protected:
         ClassDB::bind_method(D_METHOD("vision_revision"), &RtsExtension::vision_revision);
         ClassDB::bind_method(D_METHOD("can_see", "faction_id", "x", "y", "airborne"), &RtsExtension::can_see, DEFVAL(false));
         ClassDB::bind_method(D_METHOD("get_combat_events", "after_sequence", "faction_id"), &RtsExtension::get_combat_events);
+        ClassDB::bind_method(D_METHOD("get_radio_events", "after_sequence", "faction_id"), &RtsExtension::get_radio_events);
         ClassDB::bind_method(D_METHOD("get_removed_entities", "entity_ids"), &RtsExtension::get_removed_entities);
         ClassDB::bind_method(D_METHOD("get_airborne_flags", "entity_ids"), &RtsExtension::get_airborne_flags);
         ClassDB::bind_method(D_METHOD("get_unit_range_profile", "entity_id"), &RtsExtension::get_unit_range_profile);
@@ -490,6 +491,31 @@ protected:
             events.append(item);
         }
         state["cursor"] = static_cast<int64_t>(simulation->combat_event_cursor(static_cast<rts::FactionId>(faction_id)));
+        state["tick"] = simulation->simulation_tick();
+        state["events"] = events;
+        return state;
+    }
+
+    // Presentation only: what this side's command network has been told.
+    Dictionary get_radio_events(int64_t after_sequence, int64_t faction_id) const {
+        Dictionary state;
+        Array events;
+        if (after_sequence < 0 || faction_id < 0 || faction_id > 2) return state;
+        const auto* simulation = rts::runtime_simulation();
+        const auto listener = static_cast<rts::FactionId>(faction_id);
+        for (const auto& event : simulation->radio_events_after(after_sequence, listener)) {
+            Dictionary item;
+            item["sequence"] = static_cast<int64_t>(event.sequence);
+            item["tick"] = event.tick;
+            item["kind"] = static_cast<int>(event.kind);
+            item["x"] = event.x; item["y"] = event.y;
+            item["has_reference"] = event.has_reference;
+            item["reference_x"] = event.reference_x; item["reference_y"] = event.reference_y;
+            item["count"] = event.count;
+            item["subject"] = event.subject;
+            events.append(item);
+        }
+        state["cursor"] = static_cast<int64_t>(simulation->radio_event_cursor(listener));
         state["tick"] = simulation->simulation_tick();
         state["events"] = events;
         return state;

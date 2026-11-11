@@ -219,6 +219,7 @@ add_executable(rts_integration_tests
     tests/test_economy.cpp
     tests/test_terrain.cpp
     tests/test_fuel_supply.cpp
+    tests/test_radio_events.cpp
     tests/test_match_flow.cpp
     tests/test_ai_doctrine.cpp
     tests/test_territorial_control.cpp
