@@ -146,6 +146,50 @@ TEST(structure_sites_sort_ground_into_direct_earthworks_and_refused) {
     simulation.stop();
 }
 
+TEST(structure_orders_reserve_direct_ground_before_construction) {
+    Simulation simulation;
+    simulation.start();
+    simulation.configure_world_size(40000.0f, 40000.0f);
+    const EntityId line = simulation.create_faction_base(FactionId::ELITE_PRECISION, -12000.0f, 0.0f);
+    verify(line != INVALID_ENTITY, "construction line exists");
+    auto* funds = simulation.production_manager().tactical_resources(line);
+    verify(funds != nullptr, "construction resources exist");
+    funds->materials.current = 5000.0f;
+    verify(simulation.validate_structure_placement(0, 0.0f, 0.0f), "flat site starts clear");
+    verify(simulation.queue_structure(line, FactionId::ELITE_PRECISION, 0, 0.0f, 0.0f), "first direct order is accepted");
+    const auto queue_size = simulation.production_manager().production_lines().at(line).queue.size();
+    const float materials = funds->materials.current;
+    verify(!simulation.validate_structure_placement(0, 0.0f, 0.0f), "ghost rejects reserved direct site");
+    verify(simulation.structure_site_claimed(0, 0.0f, 0.0f), "placement reports a reserved native footprint");
+    verify(!simulation.validate_structure_placement(1, 10.0f, 0.0f), "different structure rejects partial overlap");
+    verify(!simulation.queue_structure(line, FactionId::ELITE_PRECISION, 1, 10.0f, 0.0f), "overlapping order is refused");
+    verify(simulation.production_manager().production_lines().at(line).queue.size() == queue_size &&
+        funds->materials.current == materials, "refusal leaves queue and Materials unchanged");
+    verify(simulation.validate_structure_placement(0, 300.0f, 0.0f), "distant site remains available");
+    verify(!simulation.structure_site_claimed(0, 300.0f, 0.0f), "distant site is not claimed");
+}
+
+TEST(command_post_footprint_refuses_overlapping_construction) {
+    Simulation simulation;
+    simulation.start();
+    simulation.configure_world_size(40000.0f, 40000.0f);
+    const EntityId line = simulation.create_faction_base(FactionId::ELITE_PRECISION, 0.0f, 0.0f);
+    verify(line != INVALID_ENTITY, "command post exists");
+    auto* funds = simulation.production_manager().tactical_resources(line);
+    verify(funds != nullptr, "command post has construction resources");
+    funds->materials.current = 5000.0f;
+    const float materials = funds->materials.current;
+    verify(simulation.structure_site_claimed(0, 0.0f, 0.0f), "post centre is claimed");
+    verify(!simulation.validate_structure_placement(0, 0.0f, 0.0f), "outpost ghost rejects the post");
+    verify(!simulation.validate_structure_placement(2, 100.0f, 0.0f), "airfield ghost rejects partial post overlap");
+    verify(!simulation.queue_structure(line, FactionId::ELITE_PRECISION, 2, 100.0f, 0.0f),
+        "native airfield order cannot cover the command post");
+    verify(funds->materials.current == materials &&
+        simulation.production_manager().production_lines().at(line).queue.empty(),
+        "rejected post overlap leaves resources and queue unchanged");
+    verify(simulation.validate_structure_placement(0, 200.0f, 0.0f), "clear ground beside post remains buildable");
+}
+
 TEST(earthworks_flatten_the_terrain_and_spend_materials_and_fuel) {
     const std::string path = write_stepped_terrain();
     Simulation simulation;
@@ -169,6 +213,11 @@ TEST(earthworks_flatten_the_terrain_and_spend_materials_and_fuel) {
     verify(!simulation.queue_structure(line, FactionId::ELITE_PRECISION, 0, 0.0f, 0.0f), "earthworks need enough fuel");
     funds->fuel.current = 5000.0f;
     verify(simulation.queue_structure(line, FactionId::ELITE_PRECISION, 0, 0.0f, 0.0f), "structure is accepted");
+    const auto queue_size = simulation.production_manager().production_lines().at(line).queue.size();
+    verify(!simulation.validate_structure_placement(0, 0.0f, 0.0f), "claimed earthworks site is unavailable immediately");
+    verify(!simulation.queue_structure(line, FactionId::ELITE_PRECISION, 0, 0.0f, 0.0f), "duplicate structure order is refused");
+    verify(simulation.production_manager().production_lines().at(line).queue.size() == queue_size,
+        "refused overlapping order does not add a construction job");
     const auto& queue = simulation.production_manager().production_lines().at(line).queue;
     verify(queue.size() == 2 && queue.front().structure_type == EARTHWORKS_JOB, "earthworks run before the structure");
 

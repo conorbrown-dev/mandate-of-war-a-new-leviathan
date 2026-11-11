@@ -7,6 +7,8 @@ namespace rts {
 
 // Queue job that levels ground before the structure it serves is built.
 inline constexpr uint8_t EARTHWORKS_JOB = 4;
+inline constexpr float kCommandPostFootprintX = 56.0f;
+inline constexpr float kCommandPostFootprintY = 42.0f;
 
 struct StructureSiteRules {
     float footprint_x = 0.0f;

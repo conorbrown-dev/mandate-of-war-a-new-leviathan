@@ -107,6 +107,20 @@ func _run() -> void:
 	for index in range(3):
 		var ground: Vector2 = view._screen_to_world(sites[index])
 		check(expected[index].distance_to(ground) < 1.0, "placement %d keeps its clicked site and its order" % (index + 1))
+	view.build_ghost = view._make_build_ghost(OUTPOST)
+	view.add_child(view.build_ghost)
+	check(view._resolve_build_target(OUTPOST, expected[0]) == Vector2.INF, "pending engineer site makes the ghost invalid")
+	check(view._resolve_build_target(OUTPOST, expected[1]) == Vector2.INF, "waiting queued site makes the ghost invalid")
+	view._set_build_ghost_valid(false)
+	check(view.build_ghost_material.get_shader_parameter("tint") == Color("#ff334d", 0.50), "occupied ghost uses the red invalid tint")
+	var voice_before: int = view.ui_audio._next_voice
+	_click(view, sites[1], true)
+	check(view.ui_audio._next_voice == (voice_before + 1) % view.ui_audio.VOICE_LIMIT and view.queued_build_orders.size() == 2,
+		"clicking a red queued site plays refusal and keeps the queue")
+	voice_before = view.ui_audio._next_voice
+	_click(view, sites[1], false)
+	check(view.ui_audio._next_voice == (voice_before + 1) % view.ui_audio.VOICE_LIMIT and view.queued_build_orders.size() == 2 and view.build_mode_type == OUTPOST,
+		"plain click on a red site plays refusal without clearing the queue or mode")
 	var markers: Node3D = view.queued_build_markers
 	check(markers != null and markers.get_child_count() == 3, "every queued placement shows a marker")
 	for index in range(3):
@@ -151,6 +165,9 @@ func _run() -> void:
 	for job in view.extension.call("get_hud_state", 0, commander_id, -1, 0.0, 0.0, false).get("production_queue", []):
 		native_jobs += 1 if String(job.get("name", "")).to_upper().contains("OUTPOST") else 0
 	check(native_jobs + _built_outposts(view) >= 3, "the native production line holds or has finished three outposts")
+	var completed_site: Dictionary = view.extension.call("get_structure_site", OUTPOST - 100, expected[0].x, expected[0].y)
+	check(bool(completed_site.get("claimed", false)) and view._resolve_build_target(OUTPOST, expected[0]) == Vector2.INF,
+		"native structure site stays red after handoff and construction")
 	check(markers.get_child_count() == 0, "markers clear once every site is handed over")
 
 	# A plain click replaces whatever is queued.

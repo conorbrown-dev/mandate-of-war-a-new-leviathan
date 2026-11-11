@@ -289,7 +289,8 @@ public:
     bool is_land_position(float x, float y) const;
     void block_civilian_area(float x, float y, float radius);
     bool validate_structure_placement(uint8_t structure_type, float x, float y) const;
-    StructureSite assess_structure_site(uint8_t structure_type, float x, float y) const;
+    bool structure_site_claimed(uint8_t structure_type, float x, float y) const;
+    StructureSite assess_structure_site(uint8_t structure_type, float x, float y, bool check_command_post = true) const;
     // Queues the structure, with an earthworks job first when the ground needs it.
     bool queue_structure(EntityId line, FactionId faction, uint8_t structure_type, float x, float y);
     bool validate_engineer_placement(float x, float y) const;
@@ -553,6 +554,7 @@ private:
         float x, y, half_x, half_y, pad_height;
     };
     bool site_claimed(float x, float y, float half_x, float half_y) const;
+    bool command_post_site_claimed(float x, float y, float half_x, float half_y) const;
     std::vector<SiteClaim> site_claims_;
     void refresh_contact_grid();
     bool near_enemy(float x, float y, FactionId faction) const;

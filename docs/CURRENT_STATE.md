@@ -214,3 +214,37 @@ The shipped pack contains ten Elite Command clips; other faction voices remain
 text-only. Generator output preserves original PCM without processing.
 Main integration: Release build, radio_voice_source (4), radio_callouts (88)
 and generator tests (11) pass. Human listening acceptance is confirmed.
+
+# Issue #10: overlapping structures (2026-11-10)
+
+Native placement now checks reserved construction footprints on level ground as
+well as earthworks sites. The same validation feeds the build ghost and order
+acceptance, so a queued structure reserves its site immediately. Native tests
+cover direct and earthworks orders, partial overlap, unchanged queue/Materials
+on rejection, and a separate valid site.
+
+The placement preview also treats the engineer's pending and waiting build
+orders as occupied before native handoff. An occupied cursor site stays under
+the cursor and turns the ghost red, including at strategic zoom; clicking it
+plays the UI `order_refused` cue and retains the placement mode and queued
+orders. `test_queued_builds.gd` includes assertions for these states and for
+the native claim after handoff.
+
+The Release build passes. The direct-site regression fails before the fix and
+passes afterward. CTest passes three of four programs; the integration program
+has one failure in the existing airfield engineer move fixture after construction
+finishes (318 passed, 1 failed). After importing the fresh worktree's assets,
+`queued_builds` passes 34/34 checks, including ghost colour, refusal cue and
+queue preservation. Human visual and listening checks remain open.
+
+Follow-up after hand play: the airfield ghost is now positioned after the
+camera's frame update and outlines the full native 250 x 750 m site around its
+offset runway. The construction preview contract checks that ghost and finished
+runway share the same local and world site coordinates (43 checks pass). Native
+structure placement now excludes both 56 x 42 m command posts, including
+partial airfield overlap, without changing engineer spawn suitability. The
+command-post Godot contract checks the red-site refusal path (75 checks pass);
+`match_flow` passes 80 checks and the AI builds its airfield. Native CTest still
+has the existing airfield engineer move failure (319 integration passed, 1
+failed); the other three programs pass. The queued-build contract passed 34
+checks on rerun; one earlier run hit its existing unreachable engineer fixture.

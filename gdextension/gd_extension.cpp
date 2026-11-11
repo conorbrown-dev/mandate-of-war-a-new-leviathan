@@ -1139,6 +1139,8 @@ public:
         const auto site = rts::runtime_simulation()->assess_structure_site(
             static_cast<uint8_t>(structure_type), static_cast<float>(x), static_cast<float>(y));
         result["buildable"] = site.buildable;
+        result["claimed"] = rts::runtime_simulation()->structure_site_claimed(
+            static_cast<uint8_t>(structure_type), static_cast<float>(x), static_cast<float>(y));
         result["earthworks"] = site.earthworks;
         result["material"] = site.material;
         result["fuel"] = site.fuel;
@@ -1150,6 +1152,9 @@ public:
         const float cell = rts::runtime_simulation()->pathfinding().cell_size();
         result["clearance_x"] = rules.footprint_x * 0.5f + cell * 1.5f;
         result["clearance_y"] = rules.footprint_y * 0.5f + cell * 1.5f;
+        result["footprint_x"] = rules.footprint_x;
+        result["footprint_y"] = rules.footprint_y;
+        result["claim_margin"] = cell;
         return result;
     }
 

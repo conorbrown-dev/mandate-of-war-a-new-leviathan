@@ -1,5 +1,11 @@
 # Next tasks
 
+Issue #10's overlap guard and red ghost/refusal feedback are implemented.
+Hand-check the preview and sound over a queued and completed structure in a
+match. The focused Godot contract passes 34/34 checks.
+Airfield ghost alignment and command-post exclusion now pass focused native and
+Godot checks. Hand-check the updated airfield boundary at several zoom levels.
+
 Follow the slice plan in [HANDOFF.md](HANDOFF.md).
 
 Power grid (issue #4, 2026-11-10) is implemented and assertion-backed: stations,

@@ -4293,13 +4293,27 @@ bool Simulation::site_claimed(float x, float y, float half_x, float half_y) cons
     return false;
 }
 
-StructureSite Simulation::assess_structure_site(uint8_t structure_type, float x, float y) const {
+bool Simulation::command_post_site_claimed(float x, float y, float half_x, float half_y) const {
+    for (size_t index = 0; index < FACTION_COUNT; ++index) {
+        const EntityId base = production_manager_.faction_line(static_cast<FactionId>(index));
+        if (base == INVALID_ENTITY || !entity_manager_.is_alive(base)) continue;
+        if (std::abs(get_unit_x(base) - x) < kCommandPostFootprintX * 0.5f + half_x &&
+            std::abs(get_unit_y(base) - y) < kCommandPostFootprintY * 0.5f + half_y) {
+            return true;
+        }
+    }
+    return false;
+}
+
+StructureSite Simulation::assess_structure_site(uint8_t structure_type, float x, float y, bool check_command_post) const {
     StructureSite site{};
     const StructureSiteRules rules = structure_site_rules(structure_type);
     if (rules.footprint_x <= 0.0f || !std::isfinite(x) || !std::isfinite(y)) return site;
 
     const float half_x = rules.footprint_x * 0.5f;
     const float half_y = rules.footprint_y * 0.5f;
+    if (site_claimed(x, y, half_x, half_y) ||
+        (check_command_post && command_post_site_claimed(x, y, half_x, half_y))) return site;
     const float sample_x = rules.footprint_x / 4.0f;
     const float sample_y = rules.footprint_y / 4.0f;
     float heights[5][5]{};
@@ -4342,8 +4356,7 @@ StructureSite Simulation::assess_structure_site(uint8_t structure_type, float x,
         site.buildable = true;
         return site;
     }
-    if (maximum_slope > rules.earthworks_slope || height_variation > rules.earthworks_height_variation ||
-        site_claimed(x, y, half_x, half_y)) {
+    if (maximum_slope > rules.earthworks_slope || height_variation > rules.earthworks_height_variation) {
         return site;
     }
     float total_depth = 0.0f;
@@ -4363,6 +4376,14 @@ StructureSite Simulation::assess_structure_site(uint8_t structure_type, float x,
 
 bool Simulation::validate_structure_placement(uint8_t structure_type, float x, float y) const {
     return assess_structure_site(structure_type, x, y).buildable;
+}
+
+bool Simulation::structure_site_claimed(uint8_t structure_type, float x, float y) const {
+    const StructureSiteRules rules = structure_site_rules(structure_type);
+    if (rules.footprint_x <= 0.0f || !std::isfinite(x) || !std::isfinite(y)) return false;
+    const float half_x = rules.footprint_x * 0.5f;
+    const float half_y = rules.footprint_y * 0.5f;
+    return site_claimed(x, y, half_x, half_y) || command_post_site_claimed(x, y, half_x, half_y);
 }
 
 bool Simulation::queue_structure(EntityId line, FactionId faction, uint8_t structure_type, float x, float y) {
@@ -4389,7 +4410,7 @@ bool Simulation::validate_engineer_placement(float x, float y) const {
     // A construction unit needs one usable local building footprint. Requiring
     // valid road probes in both axes rejected otherwise healthy slopes and
     // made engineer spawning much stricter than normal play.
-    const StructureSite site = assess_structure_site(0, x, y);
+    const StructureSite site = assess_structure_site(0, x, y, false);
     return site.buildable && !site.earthworks;
 }
 

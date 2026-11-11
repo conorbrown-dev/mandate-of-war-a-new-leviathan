@@ -1384,24 +1384,6 @@ func _process(delta: float) -> void:
 	if road_build_mode:
 		var road_target := _screen_to_world(get_viewport().get_mouse_position())
 		_update_road_preview(road_target)
-	if build_mode_type >= 0:
-		var ghost_target := _screen_to_world(get_viewport().get_mouse_position())
-		if build_ghost == null:
-			build_ghost = _make_build_ghost(build_mode_type)
-			add_child(build_ghost)
-		var ghost_valid := true
-		var ghost_earthworks := false
-		if build_mode_type >= 100 and extension != null:
-			# Up close the preview stays beneath the cursor and colour reports an
-			# invalid location. Zoomed out it shows the nearby spot the order will use.
-			var resolved_target := _resolve_build_target(build_mode_type, ghost_target)
-			ghost_valid = resolved_target != Vector2.INF
-			if ghost_valid:
-				ghost_target = resolved_target
-				var site: Dictionary = extension.call("get_structure_site", build_mode_type - 100, ghost_target.x, ghost_target.y)
-				ghost_earthworks = bool(site.get("earthworks", false))
-		_set_build_ghost_valid(ghost_valid, ghost_earthworks)
-		build_ghost.position = Vector3(ghost_target.x, _terrain_height_at(ghost_target.x, ghost_target.y) + 0.08, ghost_target.y)
 	_update_unit_routes(delta)
 	if extension == null or not match_started or match_finished:
 		engine_audio.clear()
@@ -1421,6 +1403,7 @@ func _process(delta: float) -> void:
 	_sync_completed_roads()
 	_update_keyboard_pan(delta)
 	_update_camera(delta)
+	_update_build_ghost()
 	if order_overlay_renderer != null:
 		order_overlay_renderer.set_camera_distance(camera_distance)
 	_sync_tree_lod()
@@ -1714,6 +1697,9 @@ func _unhandled_input(event: InputEvent) -> void:
 					return
 				if build_mode_type >= 0:
 					var target := _screen_to_world(event.position)
+					if _resolve_build_target(build_mode_type, target) == Vector2.INF:
+						ui_audio.play_cue("order_refused")
+						return
 					if event.shift_pressed:
 						# Shift adds to the engineer's build queue and keeps placing.
 						_queue_build_placement(build_mode_type, target)
@@ -4357,6 +4343,10 @@ func _resolve_build_target(build_type: int, target: Vector2) -> Vector2:
 	if build_type < 100:
 		return target
 	var structure_type := build_type - 100
+	# An occupied site stays under the cursor and turns the ghost red. Do not
+	# search for a nearby substitute when the player points at a structure.
+	if _build_site_occupied(structure_type, target):
+		return Vector2.INF
 	if bool(extension.call("validate_structure_placement", structure_type, target.x, target.y)):
 		return target
 	var tolerance := _click_tolerance_meters()
@@ -4366,9 +4356,31 @@ func _resolve_build_target(build_type: int, target: Vector2) -> Vector2:
 		var radius := tolerance * float(ring) / 4.0
 		for step in range(16):
 			var candidate := target + Vector2.RIGHT.rotated(TAU * float(step) / 16.0) * radius
-			if bool(extension.call("validate_structure_placement", structure_type, candidate.x, candidate.y)):
+			if not _build_site_occupied(structure_type, candidate) and bool(extension.call("validate_structure_placement", structure_type, candidate.x, candidate.y)):
 				return candidate
 	return Vector2.INF
+
+
+func _build_site_occupied(structure_type: int, target: Vector2) -> bool:
+	var site: Dictionary = extension.call("get_structure_site", structure_type, target.x, target.y)
+	if bool(site.get("claimed", false)):
+		return true
+	var half := Vector2(float(site.get("footprint_x", 0.0)), float(site.get("footprint_y", 0.0))) * 0.5
+	var margin := float(site.get("claim_margin", 0.0))
+	var orders: Array[Dictionary] = []
+	if not pending_build_order.is_empty():
+		orders.append(pending_build_order)
+	orders.append_array(queued_build_orders)
+	for order in orders:
+		var other_type := int(order.get("type", -1))
+		if other_type < 100:
+			continue
+		var other_target: Vector2 = order.target
+		var other: Dictionary = extension.call("get_structure_site", other_type - 100, other_target.x, other_target.y)
+		var other_half := Vector2(float(other.get("footprint_x", 0.0)), float(other.get("footprint_y", 0.0))) * 0.5
+		if absf(target.x - other_target.x) < half.x + other_half.x + margin and absf(target.y - other_target.y) < half.y + other_half.y + margin:
+			return true
+	return false
 
 
 func _begin_build_placement(build_type: int) -> void:
@@ -4531,6 +4543,12 @@ func _make_build_preview(build_type: int, material: Material) -> Node3D:
 		1:
 			_add_build_ghost_cylinder(root, 0.35, 8.0, Vector3(0.0, 4.0, 0.0))
 		2:
+			# Native placement reserves the whole 250 x 750 m site, centred on
+			# the click. Show that centre and boundary around the offset runway.
+			_add_build_ghost_box(root, Vector3(250.0, 0.2, 2.0), Vector3(0.0, 0.5, -374.0))
+			_add_build_ghost_box(root, Vector3(250.0, 0.2, 2.0), Vector3(0.0, 0.5, 374.0))
+			_add_build_ghost_box(root, Vector3(2.0, 0.2, 750.0), Vector3(-124.0, 0.5, 0.0))
+			_add_build_ghost_box(root, Vector3(2.0, 0.2, 750.0), Vector3(124.0, 0.5, 0.0))
 			# Match the completed airfield's paved areas and buildings.
 			for piece in AIRFIELD_PAVING:
 				_add_build_ghost_box(root, Vector3(piece.size.x, 0.4, piece.size.y), Vector3(piece.center.x, 0.2, piece.center.y))
@@ -4680,6 +4698,26 @@ func _sync_completed_roads() -> void:
 		road.material_override = _demo_material(Color("#343c42"), 0.0)
 		add_child(road)
 		road_views[road_id] = road
+
+func _update_build_ghost() -> void:
+	if build_mode_type < 0:
+		return
+	var ghost_target := _screen_to_world(get_viewport().get_mouse_position())
+	if build_ghost == null:
+		build_ghost = _make_build_ghost(build_mode_type)
+		add_child(build_ghost)
+	var ghost_valid := true
+	var ghost_earthworks := false
+	if build_mode_type >= 100 and extension != null:
+		var resolved_target := _resolve_build_target(build_mode_type, ghost_target)
+		ghost_valid = resolved_target != Vector2.INF
+		if ghost_valid:
+			ghost_target = resolved_target
+			var site: Dictionary = extension.call("get_structure_site", build_mode_type - 100, ghost_target.x, ghost_target.y)
+			ghost_earthworks = bool(site.get("earthworks", false))
+	_set_build_ghost_valid(ghost_valid, ghost_earthworks)
+	build_ghost.position = Vector3(ghost_target.x, _terrain_height_at(ghost_target.x, ghost_target.y) + 0.08, ghost_target.y)
+
 
 func _set_build_ghost_valid(valid: bool, earthworks := false) -> void:
 	if build_ghost_material == null:
