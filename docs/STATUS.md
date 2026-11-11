@@ -1626,8 +1626,11 @@ passes 81/81. This package remains open pending those failures.
 Design and rules: [adr/0001-radio-callouts.md](adr/0001-radio-callouts.md).
 
 Three alerts work end to end: `air.hostile_inbound`, `objective.fuel_depot_secured`
-and `objective.fuel_depot_lost`. **No voice clips exist yet**, so every alert is
-text with a short attention tone. Generating speech needs an ElevenLabs key.
+and `objective.fuel_depot_lost`. Ten Elite Command recordings are shipped (eight aircraft directions plus depot
+secured/lost). Other faction voices remain text-only with an attention tone.
+Voice WAVs load directly even without Godot import metadata and preserve their
+original PCM; there is no voice EQ, filtering, static or squelch. Generating
+additional speech needs an ElevenLabs key.
 
 - Native: `Simulation::record_radio_event` raises a report for one side. A depot
   capture tells the captor and the previous holder once each. Hostile aircraft in
@@ -1669,7 +1672,11 @@ Evidence (Apple M1 Pro, macOS arm64, Release):
   the sweep and passed twice alone. Three `test_validation.py` tool tests error on
   a missing `resolution` argument, unrelated to this work. Cost: PERFORMANCE.md.
 
-Known gaps: no recorded speech and no human listening; ElevenLabs commercial
+Human playback acceptance: user confirmed the Elite recordings work on macOS.
+`radio_voice_source` verifies unimported WAV playback, original PCM and no voice
+effects; its negative control fails with the old announcer.
+
+Known gaps: other faction recordings are absent; ElevenLabs commercial
 rights not yet checked; voice ids in the catalog are empty; the catalog cannot be
 replaced by a mod without code; replays do not replay radio; the AI side's
 reports are produced but nothing presents them.

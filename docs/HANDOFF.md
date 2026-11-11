@@ -208,7 +208,9 @@ they are resolved or triaged with evidence.
 Slices A to C of the issue are implemented: native radio reports, a JSON alert
 catalog, the announcer with subtitles and an F3 log, and the offline ElevenLabs
 generator. Three alerts are live (hostile aircraft, fuel depot secured, fuel depot
-lost) and are text-only until clips are generated. See STATUS.md "Radio callouts"
+lost). Ten Elite Command clips now ship; other factions remain text-only.
+The user confirmed playback on macOS. WAVs load directly without an import pass
+and preserve the original audio without processing. See STATUS.md "Radio callouts"
 and `docs/adr/0001-radio-callouts.md`. To add speech: put voice ids in the catalog
 (or `ELEVENLABS_VOICE_<SET>`), set `ELEVENLABS_API_KEY`, run
 `tools/generate_radio_voice.py --generate`, listen, then `--approve-all`. Check

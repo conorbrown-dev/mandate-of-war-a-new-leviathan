@@ -98,3 +98,5 @@ checks outside the sandbox; Godot reports two ObjectDB leaks at shutdown.
 Human playback acceptance: user confirmed speech works in this worktree.
 The shipped pack contains ten Elite Command clips; other faction voices remain
 text-only. Generator output preserves original PCM without processing.
+Main integration: Release build, radio_voice_source (4), radio_callouts (88)
+and generator tests (11) pass. Human listening acceptance is confirmed.
