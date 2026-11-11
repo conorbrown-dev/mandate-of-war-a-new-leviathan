@@ -45,13 +45,10 @@ jobs:
           Copy-Item -Path (Join-Path $templatesRoot "*") -Destination $templateDir -Recurse -Force
           "GODOT_EXE=$($godot.FullName)" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
 
-      - name: Import project resources and export Windows game
+      - name: Export Windows game
         shell: pwsh
         run: |
           $env:GODOT_SILENCE_ROOT_WARNING = "1"
-          & "$env:GODOT_EXE" --headless --editor --path godot/project --import
-          if ($LASTEXITCODE -ne 0) { throw "Godot project resource import failed." }
-
           $preset = @'
           [preset.0]
           name="Windows Desktop"
