@@ -481,7 +481,11 @@ func _ready() -> void:
 	territory_debug_label.visible = false
 	_hotkey_setup_from_manager()
 	var content_data_root := ProjectSettings.globalize_path("res://../../data").simplify_path()
+	var packaged_data_root := OS.get_executable_path().get_base_dir().path_join("data")
+	if FileAccess.file_exists(packaged_data_root.path_join("unit_faction_stats.json")):
+		content_data_root = packaged_data_root
 	OS.set_environment("RTS_DATA_ROOT", content_data_root)
+	print("Runtime data root: %s" % content_data_root)
 
 	if not ClassDB.class_exists("RtsExtension"):
 		push_error("RtsExtension is unavailable. Build rts_gdextension and check rts.gdextension.")

@@ -1,0 +1,128 @@
+name: Windows Demo Package
+
+on:
+  push:
+    branches:
+      - codex/windows-demo-build
+  workflow_dispatch:
+
+jobs:
+  package-windows-demo:
+    runs-on: windows-2025
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: ilammy/msvc-dev-cmd@v1
+
+      - name: Build native game extension
+        run: |
+          cmake -S . -B build/windows -G Ninja -DCMAKE_BUILD_TYPE=Release
+          cmake --build build/windows --parallel 8
+
+      - name: Download Godot editor and Windows export templates
+        shell: pwsh
+        run: |
+          $version = "4.7.2"
+          $godotArchive = Join-Path $env:RUNNER_TEMP "godot-win64.zip"
+          $templateArchive = Join-Path $env:RUNNER_TEMP "godot-export-templates.tpz"
+          $templateZip = Join-Path $env:RUNNER_TEMP "godot-export-templates.zip"
+          Invoke-WebRequest -Uri "https://github.com/godotengine/godot-builds/releases/download/${version}-stable/Godot_v${version}-stable_win64.exe.zip" -OutFile $godotArchive
+          Invoke-WebRequest -Uri "https://github.com/godotengine/godot-builds/releases/download/${version}-stable/Godot_v${version}-stable_export_templates.tpz" -OutFile $templateArchive
+          Move-Item -Path $templateArchive -Destination $templateZip
+
+          $runtimeDir = Join-Path $env:RUNNER_TEMP "godot-runtime"
+          Expand-Archive -Path $godotArchive -DestinationPath $runtimeDir -Force
+          $godot = Get-ChildItem $runtimeDir -Filter "Godot_v${version}-stable_win64_console.exe" -Recurse | Select-Object -First 1
+          if (-not $godot) { throw "Godot Windows editor was not found in the release archive." }
+
+          $templateDir = Join-Path $env:APPDATA "Godot/export_templates/${version}.stable"
+          New-Item -ItemType Directory -Force -Path $templateDir | Out-Null
+          $templateContents = Join-Path $env:RUNNER_TEMP "godot-export-templates"
+          Expand-Archive -Path $templateZip -DestinationPath $templateContents -Force
+          $templatesRoot = Join-Path $templateContents "templates"
+          if (-not (Test-Path (Join-Path $templatesRoot "windows_release_x86_64.exe"))) { throw "The Windows release export template is missing." }
+          Copy-Item -Path (Join-Path $templatesRoot "*") -Destination $templateDir -Recurse -Force
+          "GODOT_EXE=$($godot.FullName)" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
+      - name: Export Windows game
+        shell: pwsh
+        run: |
+          $env:GODOT_SILENCE_ROOT_WARNING = "1"
+          $preset = @'
+          [preset.0]
+          name="Windows Desktop"
+          platform="Windows Desktop"
+          runnable=true
+          dedicated_server=false
+          custom_features=""
+          export_filter="all_resources"
+          include_filter=""
+          exclude_filter=""
+          export_path=""
+          patches=PackedStringArray()
+          encryption_include_filters=""
+          encryption_exclude_filters=""
+          seed=0
+          encrypt_pck=false
+          encrypt_directory=false
+
+          [preset.0.options]
+          custom_template/debug=""
+          custom_template/release=""
+          debug/export_console_wrapper=1
+          binary_format/architecture="x86_64"
+          binary_format/embed_pck=true
+          texture_format/s3tc_bptc=true
+          texture_format/etc2_astc=false
+          '@
+          $preset | Set-Content -Path "godot/project/export_presets.cfg" -Encoding utf8
+          $outputDir = Join-Path $env:RUNNER_TEMP "MandateOfWarDemo"
+          New-Item -ItemType Directory -Force -Path $outputDir | Out-Null
+          $gameExe = Join-Path $outputDir "MandateOfWarDemo.exe"
+          & "$env:GODOT_EXE" --verbose --headless --path godot/project --export-release "Windows Desktop" $gameExe
+          if ($LASTEXITCODE -ne 0) { throw "Godot Windows release export failed." }
+          if (-not (Test-Path $gameExe)) { throw "Godot did not produce the game executable." }
+
+          $extensionSource = "godot/project/bin/rts_gdextension.dll"
+          if (-not (Test-Path $extensionSource)) { throw "The Windows game extension was not built." }
+          $extension = Join-Path $outputDir "bin/rts_gdextension.dll"
+          New-Item -ItemType Directory -Force -Path (Split-Path $extension) | Out-Null
+          Copy-Item -Path $extensionSource -Destination $extension -Force
+          if (-not (Test-Path $extension)) { throw "Godot did not package the Windows GDExtension DLL." }
+          if ((Get-Item $gameExe).Length -lt 100MB) { throw "The exported executable is unexpectedly small; embedded game resources may be missing." }
+          Copy-Item -Path "data" -Destination (Join-Path $outputDir "data") -Recurse -Force
+          $consoleExe = Join-Path $outputDir "MandateOfWarDemo.console.exe"
+          if (-not (Test-Path $consoleExe)) {
+            $consoleTemplate = Join-Path $env:APPDATA "Godot/export_templates/4.7.2.stable/windows_release_x86_64_console.exe"
+            if (-not (Test-Path $consoleTemplate)) { throw "The Windows console export template is missing; startup cannot be verified." }
+            Copy-Item -Path $consoleTemplate -Destination $consoleExe
+          }
+          $env:RTS_AUTO_START_SKIRMISH = "1"
+          $startupOutput = & $consoleExe --headless --quit-after 120 2>&1
+          $startupExitCode = $LASTEXITCODE
+          $startupOutput | ForEach-Object { Write-Host $_ }
+          if ($startupExitCode -ne 0) { throw "The exported Windows game failed its headless startup check." }
+          if (($startupOutput -join "`n") -notmatch "Started .+ with \d+ player Field Engineer and \d+ AI Field Engineer") {
+            throw "The exported Windows game did not start a skirmish; inspect the console output above."
+          }
+          @'
+          Mandate of War — Windows Demo
+
+          Run MandateOfWarDemo.exe to start a match.
+
+          This is a Windows x86_64 demo build. Extract the entire ZIP before running the game.
+          '@ | Set-Content -Path (Join-Path $outputDir "README.txt") -Encoding utf8
+
+          $archive = Join-Path $env:RUNNER_TEMP "MandateOfWarDemo-Windows-x86_64.zip"
+          Add-Type -AssemblyName System.IO.Compression.FileSystem
+          [System.IO.Compression.ZipFile]::CreateFromDirectory($outputDir, $archive, [System.IO.Compression.CompressionLevel]::Optimal, $false)
+          "DEMO_ARCHIVE=$archive" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
+      - name: Upload Windows demo
+        uses: actions/upload-artifact@v4
+        with:
+          name: MandateOfWarDemo-Windows-x86_64
+          path: ${{ runner.temp }}/MandateOfWarDemo-Windows-x86_64.zip
+          if-no-files-found: error
+          retention-days: 14
