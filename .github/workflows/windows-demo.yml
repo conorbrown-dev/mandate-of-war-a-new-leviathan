@@ -92,12 +92,15 @@ jobs:
           if (-not (Test-Path $extension)) { throw "Godot did not package the Windows GDExtension DLL." }
           if ((Get-Item $gameExe).Length -lt 100MB) { throw "The exported executable is unexpectedly small; embedded game resources may be missing." }
           Copy-Item -Path "data" -Destination (Join-Path $outputDir "data") -Recurse -Force
-          $startupOutput = & $gameExe --headless --quit-after 120 2>&1
+          $consoleExe = Join-Path $outputDir "MandateOfWarDemo.console.exe"
+          if (-not (Test-Path $consoleExe)) { throw "The Windows console wrapper is missing; startup cannot be verified." }
+          $env:RTS_AUTO_START_SKIRMISH = "1"
+          $startupOutput = & $consoleExe --headless --quit-after 120 2>&1
           $startupExitCode = $LASTEXITCODE
           $startupOutput | ForEach-Object { Write-Host $_ }
           if ($startupExitCode -ne 0) { throw "The exported Windows game failed its headless startup check." }
-          if (($startupOutput -join "`n") -match "Unit data could not be read|RtsExtension is unavailable|could not be instantiated") {
-            throw "The exported Windows game could not load bundled runtime data or its native extension."
+          if (($startupOutput -join "`n") -notmatch "Started .+ with \d+ player Field Engineer and \d+ AI Field Engineer") {
+            throw "The exported Windows game did not start a skirmish; inspect the console output above."
           }
           @'
           Mandate of War — Windows Demo
