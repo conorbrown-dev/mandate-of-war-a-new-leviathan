@@ -25,4 +25,6 @@ copied executable with a sibling runtime `data/` folder, printed that folder
 as `Runtime data root` and started Broken Strait with one Field Engineer per
 side. A PowerShell check asserted both lines and rejected script or unit-data
 errors. The exported ZIP itself still needs a new package run; the workflow now
-checks for the skirmish-start line through the exported console wrapper.
+checks for the skirmish-start line through the console wrapper from Godot's
+Windows release export templates. Godot 4.7.2 did not emit that wrapper during
+the first fixed-path package run, so the workflow copies it beside the game.

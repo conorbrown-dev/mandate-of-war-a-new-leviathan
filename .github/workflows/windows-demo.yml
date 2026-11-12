@@ -93,7 +93,11 @@ jobs:
           if ((Get-Item $gameExe).Length -lt 100MB) { throw "The exported executable is unexpectedly small; embedded game resources may be missing." }
           Copy-Item -Path "data" -Destination (Join-Path $outputDir "data") -Recurse -Force
           $consoleExe = Join-Path $outputDir "MandateOfWarDemo.console.exe"
-          if (-not (Test-Path $consoleExe)) { throw "The Windows console wrapper is missing; startup cannot be verified." }
+          if (-not (Test-Path $consoleExe)) {
+            $consoleTemplate = Join-Path $env:APPDATA "Godot/export_templates/4.7.2.stable/windows_release_x86_64_console.exe"
+            if (-not (Test-Path $consoleTemplate)) { throw "The Windows console export template is missing; startup cannot be verified." }
+            Copy-Item -Path $consoleTemplate -Destination $consoleExe
+          }
           $env:RTS_AUTO_START_SKIRMISH = "1"
           $startupOutput = & $consoleExe --headless --quit-after 120 2>&1
           $startupExitCode = $LASTEXITCODE
