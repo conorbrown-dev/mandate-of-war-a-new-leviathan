@@ -78,6 +78,11 @@ func refresh_catalog(catalog: Array, can_build: bool) -> void:
 	var instruction := Label.new()
 	instruction.text = "CLICK OR PRESS A KEY, THEN PLACE  //  SHIFT QUEUES"
 	instruction.theme_type_variation = "MutedLabel"
+	# Wrap into whatever width the title leaves, so wider font metrics (or a
+	# narrow window) never push the card past MAX_WIDTH.
+	instruction.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	instruction.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	instruction.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	header.add_child(instruction)
 	# The engineer builds structures and earthworks only: forces are ordered from
 	# Strategic Command (G) and flown in.

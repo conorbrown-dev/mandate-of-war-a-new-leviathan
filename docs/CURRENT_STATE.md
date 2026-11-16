@@ -1,5 +1,18 @@
 # Current state
 
+CI repair (2026-11-16): the Linux `contracts` job had failed on `main` since
+the fog-of-war and power-grid merges. `skirmish_presentation` still expected
+every resource site visible at start, unchanged power stores, and an airfield
+and floodlight built on the two command-post spawn points, all of which the
+newer rules now correctly refuse. The test now asserts the fog-of-war and
+no-overlap rules instead. `hud_bridge` caught a real overflow: with Linux font
+metrics the build catalog header made the card 610 px wide (cap 540), so the
+instruction line now wraps beside the title. `ground_transport` passed its
+checks but intermittently failed on Godot's exit-time "resources still in use"
+error for UI cues; it now gives the AudioServer 0.25 s to drop stopped
+playbacks before quitting (8/8 clean Linux runs). Full `contracts` passes on
+Windows and on Linux (WSL, Godot 4.7.2); `ctest` passes 4/4 on both.
+
 GitHub issues #11–#13 are implemented in the `codex/issues-11-13` worktree:
 Esc opens an exit confirmation; the 3D and deterministic 2D battle maps show
 simulated elapsed match time; and +/- plays a UI cue only when speed changes.
