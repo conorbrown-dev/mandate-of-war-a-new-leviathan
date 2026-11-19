@@ -12,6 +12,9 @@ var _next_voice := 0
 ## Hover ticks get their own quiet voice, so sweeping the pointer across a row
 ## of buttons restarts one short tick instead of cutting off an order cue.
 var hover_voice: AudioStreamPlayer
+# How many hover ticks have played. A tick is a few milliseconds long, so whether
+# it is still sounding says little; this count says whether one was played.
+var hover_plays := 0
 
 func _ready() -> void:
 	add_to_group(GROUP)
@@ -49,6 +52,7 @@ func play_hover() -> bool:
 	if not enabled or hover_voice == null or hover_voice.stream == null:
 		return false
 	hover_voice.play()
+	hover_plays += 1
 	return true
 
 

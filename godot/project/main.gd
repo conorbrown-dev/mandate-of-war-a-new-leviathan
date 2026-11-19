@@ -84,6 +84,7 @@ const FUEL_STATUS_SECONDS := 8.0
 const RECON_PLANE_UNIT_TYPE := 14
 const FogShader := preload("res://fog_of_war.gdshader")
 const MatchEndPanelScript := preload("res://ui/components/match_end_panel.gd")
+const ExitConfirmScript := preload("res://ui/components/exit_confirm.gd")
 const MandateTokens := preload("res://ui/theme/ui_tokens.gd")
 const TerrainVegetation := preload("res://terrain_vegetation.gd")
 const UnitCatalog := preload("res://unit_catalog.gd")
@@ -107,6 +108,7 @@ const RadioAnnouncerScript := preload("res://audio/radio/radio_announcer.gd")
 const RadioFeedScript := preload("res://ui/components/radio_feed.gd")
 const StrategicCommandPanelScript := preload("res://ui/components/strategic_command_panel.gd")
 const CommandPostModel := preload("res://structures/command_post_model.gd")
+const PowerGridViewScript := preload("res://power_grid_view.gd")
 const CommandPostPanelScript := preload("res://ui/components/command_post_panel.gd")
 const MagnifierViewScript := preload("res://ui/components/magnifier_view.gd")
 const ArmorTexture := preload("res://assets/units/near_future_armor_tile_v1.png")
@@ -311,6 +313,7 @@ var queued_build_orders: Array[Dictionary] = []
 var queued_build_markers: Node3D
 var material_site_state: Dictionary = {}
 var fuel_depot_state: Dictionary = {}
+var power_grid_view: Node3D
 var fuel_supply_status := ""
 var fuel_supply_reason_seen := ""
 var fuel_supply_status_expires_msec := 0
@@ -408,6 +411,7 @@ var panning := false
 var selection_start := Vector2.ZERO
 var selection_end := Vector2.ZERO
 var hud_elapsed := 0.0
+var exit_confirm: ExitConfirm
 var profile_target_frames := 0
 var profile_warmup_frames := 60
 var profile_seen_frames := 0
@@ -477,7 +481,11 @@ func _ready() -> void:
 	territory_debug_label.visible = false
 	_hotkey_setup_from_manager()
 	var content_data_root := ProjectSettings.globalize_path("res://../../data").simplify_path()
+	var packaged_data_root := OS.get_executable_path().get_base_dir().path_join("data")
+	if FileAccess.file_exists(packaged_data_root.path_join("unit_faction_stats.json")):
+		content_data_root = packaged_data_root
 	OS.set_environment("RTS_DATA_ROOT", content_data_root)
+	print("Runtime data root: %s" % content_data_root)
 
 	if not ClassDB.class_exists("RtsExtension"):
 		push_error("RtsExtension is unavailable. Build rts_gdextension and check rts.gdextension.")
@@ -1342,6 +1350,7 @@ func _on_start_skirmish_pressed() -> void:
 		SKIRMISH_PRESENTATION_STARTING_MATERIALS, SKIRMISH_PRESENTATION_STARTING_FUEL)
 	_spawn_material_sites()
 	_spawn_fuel_depots()
+	_spawn_power_grid()
 	_spawn_civilian_buildings()
 	_begin_battle()
 	_set_selected(_player_engineer_id(), true)
@@ -1381,24 +1390,6 @@ func _process(delta: float) -> void:
 	if road_build_mode:
 		var road_target := _screen_to_world(get_viewport().get_mouse_position())
 		_update_road_preview(road_target)
-	if build_mode_type >= 0:
-		var ghost_target := _screen_to_world(get_viewport().get_mouse_position())
-		if build_ghost == null:
-			build_ghost = _make_build_ghost(build_mode_type)
-			add_child(build_ghost)
-		var ghost_valid := true
-		var ghost_earthworks := false
-		if build_mode_type >= 100 and extension != null:
-			# Up close the preview stays beneath the cursor and colour reports an
-			# invalid location. Zoomed out it shows the nearby spot the order will use.
-			var resolved_target := _resolve_build_target(build_mode_type, ghost_target)
-			ghost_valid = resolved_target != Vector2.INF
-			if ghost_valid:
-				ghost_target = resolved_target
-				var site: Dictionary = extension.call("get_structure_site", build_mode_type - 100, ghost_target.x, ghost_target.y)
-				ghost_earthworks = bool(site.get("earthworks", false))
-		_set_build_ghost_valid(ghost_valid, ghost_earthworks)
-		build_ghost.position = Vector3(ghost_target.x, _terrain_height_at(ghost_target.x, ghost_target.y) + 0.08, ghost_target.y)
 	_update_unit_routes(delta)
 	if extension == null or not match_started or match_finished:
 		engine_audio.clear()
@@ -1418,6 +1409,7 @@ func _process(delta: float) -> void:
 	_sync_completed_roads()
 	_update_keyboard_pan(delta)
 	_update_camera(delta)
+	_update_build_ghost()
 	if order_overlay_renderer != null:
 		order_overlay_renderer.set_camera_distance(camera_distance)
 	_sync_tree_lod()
@@ -1548,6 +1540,11 @@ func _update_territory() -> void:
 
 
 func _unhandled_input(event: InputEvent) -> void:
+	if exit_confirm != null and exit_confirm.visible:
+		if event is InputEventKey and event.pressed and not event.echo and event.keycode == KEY_ESCAPE:
+			exit_confirm.hide()
+		get_viewport().set_input_as_handled()
+		return
 	if audio_settings != null and audio_settings.visible:
 		get_viewport().set_input_as_handled()
 		return
@@ -1606,7 +1603,7 @@ func _unhandled_input(event: InputEvent) -> void:
 		if build_mode_type >= 0 or fob_build_mode or material_order_mode != 0 or recon_targeting or paradrop_targeting_type >= 0:
 			_cancel_tactical_modes()
 			return
-		get_tree().quit()
+		_show_exit_confirm()
 		return
 	if event is InputEventKey and event.keycode == KEY_SPACE:
 		if not event.echo:
@@ -1711,6 +1708,9 @@ func _unhandled_input(event: InputEvent) -> void:
 					return
 				if build_mode_type >= 0:
 					var target := _screen_to_world(event.position)
+					if _resolve_build_target(build_mode_type, target) == Vector2.INF:
+						ui_audio.play_cue("order_refused")
+						return
 					if event.shift_pressed:
 						# Shift adds to the engineer's build queue and keeps placing.
 						_queue_build_placement(build_mode_type, target)
@@ -1939,6 +1939,34 @@ func _spawn_fuel_depots() -> void:
 			"known_owner": -1,
 		}
 	_rebuild_material_site_views()
+
+
+# Stations, pylons and poles. The simulation decides who each line powers;
+# power_grid_view.gd draws what the player's side knows of it.
+func _spawn_power_grid() -> void:
+	if power_grid_view == null:
+		power_grid_view = PowerGridViewScript.new()
+		power_grid_view.name = "PowerGrid"
+		power_grid_view.friendly_color = PLAYER_FACTION_COLOR
+		power_grid_view.hostile_color = AI_FACTION_COLOR
+		add_child(power_grid_view)
+	power_grid_view.setup(extension, HUMAN_PLAYER_ID, _terrain_height_at,
+		func(x: float, y: float) -> bool: return bool(extension.call("can_see", HUMAN_PLAYER_ID, x, y)))
+	var path := String(scenario_definition.get("power_grid", ""))
+	if path.is_empty():
+		power_grid_view.clear()
+		return
+	if not power_grid_view.load_grid(path):
+		push_warning("Power grid data is unavailable: %s" % path)
+
+
+func _sync_power_grid() -> void:
+	if power_grid_view == null or not power_grid_view.active:
+		return
+	power_grid_view.sync()
+	var notice := String(power_grid_view.take_notice())
+	if not notice.is_empty():
+		_announce_intel(notice)
 
 
 func _begin_battle() -> void:
@@ -2200,6 +2228,7 @@ func _refresh_site_intel() -> void:
 		if not enemy_airfield_views.has(key):
 			enemy_airfield_views[key] = _add_enemy_airfield_view(position)
 			_announce_intel("ENEMY AIRFIELD LOCATED")
+	_sync_power_grid()
 
 
 func _add_enemy_airfield_view(position: Vector2) -> Node3D:
@@ -2533,9 +2562,21 @@ func _issue_material_site_order(screen_position: Vector2) -> void:
 		if distance <= nearest_distance:
 			nearest_distance = distance
 			selected_site = site
-	if selected_site.is_empty():
-		return
 	var commander_id := _player_engineer_id()
+	if selected_site.is_empty():
+		# Nothing of the Materials or fuel economy there: a power station or line?
+		if power_grid_view != null and power_grid_view.active:
+			var worker := commander_id
+			for id in selected_ids:
+				if player_entity_ids.has(id):
+					worker = id
+					break
+			var result: Dictionary = power_grid_view.order_at(target, _click_tolerance_meters(), material_order_mode, worker, commander_id)
+			if bool(result.handled):
+				_announce_intel(String(result.message))
+				material_order_mode = 0
+				_update_hud()
+		return
 	var site_position: Vector2 = selected_site.position
 	if fuel_depot_state.has(int(selected_site.id)):
 		# Any friendly unit can take a depot; the slow engineer is only the fallback.
@@ -3056,10 +3097,23 @@ func _enforce_game_speed_policy() -> void:
 func _change_game_speed(direction: int) -> void:
 	if _can_change_game_speed():
 		var current := float(extension.call("get_game_speed"))
-		extension.call("set_game_speed", clampf(current + 0.25 * direction, 0.25, 1.75))
+		var next := clampf(current + 0.25 * direction, 0.25, 1.75)
+		if next != current:
+			extension.call("set_game_speed", next)
+			ui_audio.play_cue("speed_step")
 	else:
 		_enforce_game_speed_policy()
 	_update_hud()
+
+
+func _show_exit_confirm() -> void:
+	if exit_confirm == null:
+		exit_confirm = ExitConfirmScript.new()
+		exit_confirm.name = "ExitConfirm"
+		exit_confirm.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+		exit_confirm.exit_requested.connect(func(): get_tree().quit())
+		ui_root.add_child(exit_confirm)
+	exit_confirm.show()
 
 
 func _zoom_toward_cursor(screen_position: Vector2, multiplier: float) -> void:
@@ -3292,6 +3346,11 @@ func _update_hover_context(pointer := Vector2.INF) -> void:
 					"detail": "FUEL STOCK %.0f / %.0f  //  2 THEN RIGHT-CLICK TO CAPTURE" % [float(site.stock), float(site.capacity)],
 					"accent": Color("#7ad99b") if owner == HUMAN_PLAYER_ID else Color("#ff6d65") if owner >= 0 else Color("#ffbd52"),
 				}
+	if next_context.is_empty() and match_started and power_grid_view != null and power_grid_view.active:
+		var ground := _screen_ground_point(pointer)
+		if ground != Vector2.INF:
+			var meters_per_pixel := 2.0 * camera_distance * tan(deg_to_rad(camera.fov) * 0.5) / maxf(get_viewport().get_visible_rect().size.y, 1.0)
+			next_context = power_grid_view.hover_context(ground, maxf(12.0, meters_per_pixel * 14.0))
 	# Command posts: our own always, the enemy's only once discovered. Its
 	# integrity shows only while it is in sight; otherwise the last fix.
 	if next_context.is_empty() and match_started:
@@ -4307,6 +4366,10 @@ func _resolve_build_target(build_type: int, target: Vector2) -> Vector2:
 	if build_type < 100:
 		return target
 	var structure_type := build_type - 100
+	# An occupied site stays under the cursor and turns the ghost red. Do not
+	# search for a nearby substitute when the player points at a structure.
+	if _build_site_occupied(structure_type, target):
+		return Vector2.INF
 	if bool(extension.call("validate_structure_placement", structure_type, target.x, target.y)):
 		return target
 	var tolerance := _click_tolerance_meters()
@@ -4316,9 +4379,31 @@ func _resolve_build_target(build_type: int, target: Vector2) -> Vector2:
 		var radius := tolerance * float(ring) / 4.0
 		for step in range(16):
 			var candidate := target + Vector2.RIGHT.rotated(TAU * float(step) / 16.0) * radius
-			if bool(extension.call("validate_structure_placement", structure_type, candidate.x, candidate.y)):
+			if not _build_site_occupied(structure_type, candidate) and bool(extension.call("validate_structure_placement", structure_type, candidate.x, candidate.y)):
 				return candidate
 	return Vector2.INF
+
+
+func _build_site_occupied(structure_type: int, target: Vector2) -> bool:
+	var site: Dictionary = extension.call("get_structure_site", structure_type, target.x, target.y)
+	if bool(site.get("claimed", false)):
+		return true
+	var half := Vector2(float(site.get("footprint_x", 0.0)), float(site.get("footprint_y", 0.0))) * 0.5
+	var margin := float(site.get("claim_margin", 0.0))
+	var orders: Array[Dictionary] = []
+	if not pending_build_order.is_empty():
+		orders.append(pending_build_order)
+	orders.append_array(queued_build_orders)
+	for order in orders:
+		var other_type := int(order.get("type", -1))
+		if other_type < 100:
+			continue
+		var other_target: Vector2 = order.target
+		var other: Dictionary = extension.call("get_structure_site", other_type - 100, other_target.x, other_target.y)
+		var other_half := Vector2(float(other.get("footprint_x", 0.0)), float(other.get("footprint_y", 0.0))) * 0.5
+		if absf(target.x - other_target.x) < half.x + other_half.x + margin and absf(target.y - other_target.y) < half.y + other_half.y + margin:
+			return true
+	return false
 
 
 func _begin_build_placement(build_type: int) -> void:
@@ -4394,7 +4479,7 @@ func _handle_hotkey(keycode: Key, event: InputEventKey) -> bool:
 			if build_mode_type >= 0 or fob_build_mode or material_order_mode != 0:
 				_cancel_tactical_modes()
 				return true
-			get_tree().quit()
+			_show_exit_confirm()
 			return true
 		"toggle_debug":
 			debug_panel.visible = not debug_panel.visible
@@ -4481,6 +4566,12 @@ func _make_build_preview(build_type: int, material: Material) -> Node3D:
 		1:
 			_add_build_ghost_cylinder(root, 0.35, 8.0, Vector3(0.0, 4.0, 0.0))
 		2:
+			# Native placement reserves the whole 250 x 750 m site, centred on
+			# the click. Show that centre and boundary around the offset runway.
+			_add_build_ghost_box(root, Vector3(250.0, 0.2, 2.0), Vector3(0.0, 0.5, -374.0))
+			_add_build_ghost_box(root, Vector3(250.0, 0.2, 2.0), Vector3(0.0, 0.5, 374.0))
+			_add_build_ghost_box(root, Vector3(2.0, 0.2, 750.0), Vector3(-124.0, 0.5, 0.0))
+			_add_build_ghost_box(root, Vector3(2.0, 0.2, 750.0), Vector3(124.0, 0.5, 0.0))
 			# Match the completed airfield's paved areas and buildings.
 			for piece in AIRFIELD_PAVING:
 				_add_build_ghost_box(root, Vector3(piece.size.x, 0.4, piece.size.y), Vector3(piece.center.x, 0.2, piece.center.y))
@@ -4630,6 +4721,26 @@ func _sync_completed_roads() -> void:
 		road.material_override = _demo_material(Color("#343c42"), 0.0)
 		add_child(road)
 		road_views[road_id] = road
+
+func _update_build_ghost() -> void:
+	if build_mode_type < 0:
+		return
+	var ghost_target := _screen_to_world(get_viewport().get_mouse_position())
+	if build_ghost == null:
+		build_ghost = _make_build_ghost(build_mode_type)
+		add_child(build_ghost)
+	var ghost_valid := true
+	var ghost_earthworks := false
+	if build_mode_type >= 100 and extension != null:
+		var resolved_target := _resolve_build_target(build_mode_type, ghost_target)
+		ghost_valid = resolved_target != Vector2.INF
+		if ghost_valid:
+			ghost_target = resolved_target
+			var site: Dictionary = extension.call("get_structure_site", build_mode_type - 100, ghost_target.x, ghost_target.y)
+			ghost_earthworks = bool(site.get("earthworks", false))
+	_set_build_ghost_valid(ghost_valid, ghost_earthworks)
+	build_ghost.position = Vector3(ghost_target.x, _terrain_height_at(ghost_target.x, ghost_target.y) + 0.08, ghost_target.y)
+
 
 func _set_build_ghost_valid(valid: bool, earthworks := false) -> void:
 	if build_ghost_material == null:
@@ -4993,6 +5104,7 @@ func _update_hud() -> void:
 	if extension != null and match_started:
 		_sync_terrain_edits()
 		_sync_fuel_supply()
+		_sync_power_grid()
 		_sync_strategic_command()
 		_sync_paradrop_markers()
 	_activate_reinforcement_delivery_from_airfield()
@@ -5017,9 +5129,9 @@ func _update_hud() -> void:
 	var tactical_resources: Array = hud_state.get("tactical_resources", [])
 	var selection_detail := "Drag-select a force to inspect it."
 	if material_order_mode == 1:
-		selection_detail = "CLAIM MODE  •  RIGHT-CLICK A MATERIAL FACILITY OR FUEL DEPOT"
+		selection_detail = "CLAIM MODE  •  RIGHT-CLICK A MATERIAL FACILITY, FUEL DEPOT, POWER STATION OR POWER LINE"
 	elif material_order_mode == 2:
-		selection_detail = "DEMOLISH MODE  •  RIGHT-CLICK A MATERIAL FACILITY OR FUEL DEPOT"
+		selection_detail = "DEMOLISH MODE  •  RIGHT-CLICK A MATERIAL FACILITY, FUEL DEPOT OR POWER LINE"
 	elif fob_build_mode:
 		selection_detail = "FOB PLACEMENT  •  LEFT-CLICK TERRAIN"
 	var selected_unit: Dictionary = {}
@@ -5053,6 +5165,7 @@ func _update_hud() -> void:
 		pending_completed_structures.clear()
 	command_hud.refresh({
 		"scenario": scenario_name,
+		"match_seconds": float(extension.call("match_state").get("seconds", 0.0)),
 		"game_speed": roundi(float(extension.call("get_game_speed")) * 100.0),
 		"speed_locked": not _can_change_game_speed(),
 		"friendly": player_entity_ids.size(),

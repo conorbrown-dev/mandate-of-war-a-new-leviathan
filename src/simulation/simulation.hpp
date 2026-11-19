@@ -22,6 +22,7 @@
 #include "structure_sites.hpp"
 #include "airfield_approach.hpp"
 #include "road_network.hpp"
+#include "power_grid.hpp"
 #include "off_road.hpp"
 #include "../ecs/components/off_road.hpp"
 #include "../ecs/components/factions.hpp"
@@ -288,7 +289,8 @@ public:
     bool is_land_position(float x, float y) const;
     void block_civilian_area(float x, float y, float radius);
     bool validate_structure_placement(uint8_t structure_type, float x, float y) const;
-    StructureSite assess_structure_site(uint8_t structure_type, float x, float y) const;
+    bool structure_site_claimed(uint8_t structure_type, float x, float y) const;
+    StructureSite assess_structure_site(uint8_t structure_type, float x, float y, bool check_command_post = true, bool check_site_claims = true) const;
     // Queues the structure, with an earthworks job first when the ground needs it.
     bool queue_structure(EntityId line, FactionId faction, uint8_t structure_type, float x, float y);
     bool validate_engineer_placement(float x, float y) const;
@@ -471,6 +473,32 @@ public:
     // Every Materials site, its holder and whether a unit is on its way to take it.
     std::vector<MaterialSiteStatus> material_sites() const;
 
+    // The power grid. A scenario adds its stations, loads and lines before the
+    // match; from then on each side's Power state is what the grid delivers.
+    PowerGrid& power_grid() { return power_grid_; }
+    const PowerGrid& power_grid() const { return power_grid_; }
+    // Work on the grid is a HARVEST command with this bit, the kind of work
+    // and the station or line id in `extra`, so it is recorded and plays back.
+    // The unit drives to the target and acts when it arrives.
+    static constexpr uint32_t POWER_ORDER_FLAG = 0x40000000u;
+    enum class PowerOrder : uint8_t { CAPTURE_STATION = 1, CAPTURE_LINE = 2, SEVER_LINE = 3, REPAIR_LINE = 4 };
+    static constexpr uint32_t power_order_extra(PowerOrder order, uint32_t target) {
+        return POWER_ORDER_FLAG | (static_cast<uint32_t>(order) << 16) | (target & 0xFFFFu);
+    }
+    // Empty when the unit can be sent to do this now, else why not.
+    std::string power_order_refusal(EntityId unit, PowerOrder order, uint32_t target) const;
+    size_t issue_power_command(EntityId unit, FactionId faction, PowerOrder order, uint32_t target);
+    struct PowerTask {
+        EntityId unit = INVALID_ENTITY;
+        PowerOrder order = PowerOrder::CAPTURE_LINE;
+        uint32_t target = 0;
+        float x = 0.0f;
+        float y = 0.0f;
+    };
+    const std::vector<PowerTask>& power_tasks() const { return power_tasks_; }
+    // The last thing that went wrong with a side's grid work, for its HUD.
+    const std::string& power_notice(FactionId faction) const { return power_notices_[static_cast<size_t>(faction)]; }
+
 private:
     void record_combat_event(CombatEventKind kind, EntityId entity, float vx = 0, float vy = 0);
     uint64_t combat_event_sequence_ = 0; // Monotonic even across match resets.
@@ -526,6 +554,7 @@ private:
         float x, y, half_x, half_y, pad_height;
     };
     bool site_claimed(float x, float y, float half_x, float half_y) const;
+    bool command_post_site_claimed(float x, float y, float half_x, float half_y) const;
     std::vector<SiteClaim> site_claims_;
     void refresh_contact_grid();
     bool near_enemy(float x, float y, FactionId faction) const;
@@ -611,6 +640,12 @@ private:
     std::vector<FuelShipment> fuel_shipments_;
     std::array<std::string, FACTION_COUNT> fuel_supply_reasons_{};
     RoadNetwork road_network_;
+    PowerGrid power_grid_;
+    std::vector<PowerTask> power_tasks_;
+    std::array<std::string, FACTION_COUNT> power_notices_{};
+    bool power_work_point(EntityId unit, PowerOrder order, uint32_t target, float& x, float& y) const;
+    void order_power_work(EntityId unit, uint32_t extra);
+    void update_power_grid(float delta_ms);
     TerritorialControlManager territorial_control_;
      ControlPointBattle control_point_battle_;
      ReinforcementDelivery reinforcement_delivery_;

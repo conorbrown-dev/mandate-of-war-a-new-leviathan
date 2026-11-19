@@ -11,6 +11,8 @@ Typical use:
   tools/generate_radio_voice.py --approve-all        # after listening: put clips in the game
   tools/generate_radio_voice.py --reprocess          # rebuild clips from the kept masters
 
+Clips preserve the original PCM without filters, trimming, fades or level changes.
+
 The API key comes from ELEVENLABS_API_KEY in the environment or the ignored
 .env file at the repository root. Voice ids come from the catalog, or from
 ELEVENLABS_VOICE_<VOICE_SET> (for example ELEVENLABS_VOICE_ELITE_COMMAND).
@@ -22,7 +24,6 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
-import math
 import os
 from pathlib import Path
 import re
@@ -39,7 +40,7 @@ RADIO_DIR = ROOT / "godot" / "project" / "audio" / "radio"
 API_URL = "https://api.elevenlabs.io/v1/text-to-speech/{voice_id}?output_format={output_format}"
 OUTPUT_FORMAT = "pcm_24000"  # raw signed 16-bit little-endian mono
 SAMPLE_RATE = 24000
-PROCESSING_VERSION = 1
+PROCESSING_VERSION = 2
 DEFAULT_BUDGET = 5000
 CARDINALS = [("n", "north"), ("ne", "northeast"), ("e", "east"), ("se", "southeast"),
              ("s", "south"), ("sw", "southwest"), ("w", "west"), ("nw", "northwest")]
@@ -159,48 +160,11 @@ def to_samples(pcm: bytes) -> list[float]:
     return [value / 32768.0 for value in struct.unpack(f"<{count}h", pcm[:count * 2])]
 
 
-def biquad(samples: list[float], kind: str, frequency: float, q: float = 0.707) -> list[float]:
-    omega = 2.0 * math.pi * frequency / SAMPLE_RATE
-    alpha = math.sin(omega) / (2.0 * q)
-    cosine = math.cos(omega)
-    if kind == "highpass":
-        b0, b1, b2 = (1 + cosine) / 2, -(1 + cosine), (1 + cosine) / 2
-    else:
-        b0, b1, b2 = (1 - cosine) / 2, 1 - cosine, (1 - cosine) / 2
-    a0, a1, a2 = 1 + alpha, -2 * cosine, 1 - alpha
-    out = []
-    x1 = x2 = y1 = y2 = 0.0
-    for x in samples:
-        y = (b0 * x + b1 * x1 + b2 * x2 - a1 * y1 - a2 * y2) / a0
-        x2, x1, y2, y1 = x1, x, y1, y
-        out.append(y)
-    return out
-
-
-def process(pcm: bytes, radio: bool = True) -> bytes:
-    """Trim dead air, optionally band-limit like a radio set, level to -3 dBFS."""
-    samples = to_samples(pcm)
-    if not samples:
+def process(pcm: bytes, radio: bool = False) -> bytes:
+    """Preserve the source samples exactly; voiceovers have no processing."""
+    if not pcm:
         raise GeneratorError("ElevenLabs returned no audio")
-    threshold = 10 ** (-45 / 20)
-    loud = [index for index, value in enumerate(samples) if abs(value) > threshold]
-    if not loud:
-        raise GeneratorError("the returned audio is silent")
-    pad = int(0.04 * SAMPLE_RATE)
-    samples = samples[max(0, loud[0] - pad):min(len(samples), loud[-1] + pad)]
-    if radio:
-        # Subtle: a voice band of about 300 Hz to 3.4 kHz and light saturation.
-        samples = biquad(biquad(samples, "highpass", 300.0), "lowpass", 3400.0)
-        samples = [math.tanh(value * 1.6) for value in samples]
-    peak = max(abs(value) for value in samples) or 1.0
-    gain = 10 ** (-3 / 20) / peak
-    fade_in, fade_out = int(0.005 * SAMPLE_RATE), int(0.03 * SAMPLE_RATE)
-    out = bytearray()
-    last = len(samples) - 1
-    for index, value in enumerate(samples):
-        fade = min(1.0, index / fade_in, (last - index) / fade_out)
-        out.extend(struct.pack("<h", max(-32767, min(32767, round(value * gain * fade * 32767)))))
-    return bytes(out)
+    return pcm
 
 
 def write_wav(path: Path, pcm: bytes) -> None:
@@ -302,10 +266,8 @@ def generate(workspace: Workspace, catalog: dict, lines: list[dict], api_key: st
             "voice_id": config["voice_id"], "model_id": config["model_id"], "voice_settings": config["voice_settings"],
             "output_format": OUTPUT_FORMAT, "settings_hash": line["hash"],
             "master_sha256": sha256_file(master), "sha256": sha256_file(audition),
-            "processing": {"version": PROCESSING_VERSION, "radio": radio,
-                           "steps": "trim below -45 dBFS with 40 ms pad; "
-                                    + ("300 Hz high-pass, 3.4 kHz low-pass, tanh saturation; " if radio else "")
-                                    + "peak -3 dBFS; 5 ms fade-in, 30 ms fade-out; mono PCM16 24 kHz"},
+            "processing": {"version": PROCESSING_VERSION, "radio": False,
+                           "steps": "none; original mono PCM16 24 kHz"},
             "source": "ElevenLabs text-to-speech",
         }
         # A re-render replaces any earlier copy and must be approved again.
@@ -331,7 +293,8 @@ def reprocess(workspace: Workspace, radio: bool) -> int:
                 raise GeneratorError(f"master missing for {clip['id']}: {master}")
             write_wav(workspace.radio_dir / clip["file"], process(read_wav(master), radio))
             clip["sha256"] = sha256_file(workspace.radio_dir / clip["file"])
-            clip["processing"]["radio"] = radio
+            clip["processing"] = {"version": PROCESSING_VERSION, "radio": False,
+                                  "steps": "none; original mono PCM16 24 kHz"}
             count += 1
     workspace.save_manifest(manifest)
     return count
@@ -370,15 +333,16 @@ def main(argv: list[str] | None = None, transport=synthesize, environ: dict[str,
     parser.add_argument("--force", action="store_true", help="render again even if the cached clip matches")
     parser.add_argument("--max-characters", type=int, default=DEFAULT_BUDGET,
                         help=f"refuse to send more than this many characters (default {DEFAULT_BUDGET})")
-    parser.add_argument("--no-radio", action="store_true", help="skip the radio band-limit; level and trim only")
     parser.add_argument("--reprocess", action="store_true", help="rebuild clips from masters; no API call")
     parser.add_argument("--approve", action="append", metavar="CLIP_ID", help="put an auditioned clip in the game")
     parser.add_argument("--approve-all", action="store_true", help="put every auditioned clip in the game")
     args = parser.parse_args(argv)
-    env = dict(read_env_file(ROOT / ".env"))
+    # An explicit environment (tests) is used as given: the local .env is only
+    # read for a real run.
+    env = dict(read_env_file(ROOT / ".env")) if environ is None else {}
     env.update(os.environ if environ is None else environ)
     workspace = Workspace(args.radio_dir)
-    radio = not args.no_radio
+    radio = False
     try:
         if args.approve or args.approve_all:
             print(f"approved {approve(workspace, None if args.approve_all else set(args.approve))} clips")

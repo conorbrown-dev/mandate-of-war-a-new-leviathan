@@ -1,5 +1,36 @@
 # Current Status
 
+## GitHub issues #11–#13 (2026-11-10)
+
+Esc now opens a themed confirmation with Stay in Match focused by default and
+Exit to Desktop as an explicit action. Esc dismisses the confirmation. While it
+is visible, match hotkeys are blocked. Existing Esc behavior still closes open
+panels or cancels placement first.
+
+The 3D HUD reads the native `match_state.seconds` value and shows `MATCH MM:SS`
+under the operation name. The deterministic 2D battle map shows the same format
+from its authoritative 20 Hz tick. These clocks track simulated match time,
+including game-speed changes and pauses, rather than wall time. The +/- speed
+keys play a short UI-bus cue only when the requested step changes the speed;
+clamped keys and multiplayer-locked speed stay silent.
+
+Validation (Apple M1 Pro, macOS arm64, Release): build passes. Focused Godot
+contracts pass: `exit_confirmation` 6/6, `game_speed` 31/31,
+`native_skirmish_match_to_result` 25/25, and `hotkey_sheet` 41/41. The game-speed
+checks confirm native simulation time advances at each speed and the HUD clock
+tracks it; the 2D scenario checks 00:00 then 00:03 after 60 native ticks.
+`git diff --check` passes.
+
+CTest discovers four programs. Two network-dependent CTest programs could not
+bind loopback TCP in the sandbox: `rts_tests` (18 pass, 2 loopback checks fail)
+and `rts_integration_tests` (317 pass, 1 loopback check fail); portable snapshot
+and faction balance pass. An attempted outside-sandbox rerun was rejected by
+automatic approval because its usage limit had been reached, so those two
+loopback checks remain unverified in this session. The sandboxed Godot harnesses
+also log a macOS certificate-access error after their assertions; focused runs
+were rerun outside the sandbox and passed. No rendered screenshot or hand-play
+acceptance was performed.
+
 ## Core design rules
 
 - **Research happens outside the skirmish.** It is not done in a warzone.
@@ -1621,13 +1652,81 @@ rendered `ground_transport_routes` report resources still in use at exit;
 The stale fighter hover description was corrected and `build_menu_hover` now
 passes 81/81. This package remains open pending those failures.
 
+## Power grid and power lines (2026-11-10, issue #4)
+
+Power is now carried by lines, not simply granted. `src/simulation/power_grid.hpp`
+holds the rules and `godot/project/scenarios/power_grid.json` places the grid.
+
+- **Stations, loads and lines.** A power station has an output in megawatts. A
+  load is a side's command post, with a demand (40 MW). A side's Power state is
+  the output of every station joined to one of its loads by an unbroken chain of
+  lines it may use. Lines always draw from a station: a line joined to none
+  carries nothing. Finished structures add demand wherever they stand (outpost
+  5 MW, radar 15, airfield 25, floodlight 2), but only in a match that has a
+  grid. A match with no grid (every native test and the other scenarios) leaves
+  Power untouched.
+- **Who may use what.** A civilian station or line (no owner) serves any side
+  joined to it. A side's own line carries power for that side only, and power
+  does not pass through a station the other side holds.
+- **Capture.** Any ground unit takes a station or an intact line when it comes
+  within 40 m of it. Capturing a line denies it to the side that held it.
+- **Cutting.** Any ground unit within 40 m of a line can cut it. The line then
+  carries nothing, so a side whose only feed is cut loses all its power income.
+- **Repair.** Only an engineer repairs a line, at the break. The price is paid
+  in Materials when it arrives: wooden lines 30 plus 0.01 per metre and 8 s plus
+  1 s per 500 m, steel lines 90 plus 0.03 per metre and 15 s plus 1 s per 300 m.
+  The player's 3.9 km wooden feed costs 72 Materials and takes 16 s. Whoever
+  repairs a line then holds it.
+- **Orders.** Grid work is a HARVEST command with `POWER_ORDER_FLAG`, the kind
+  of work and the target id in `extra`, so it is recorded and plays back. The
+  unit drives to the target and acts on arrival; a redirected or dead unit
+  gives up. The bridge call `power_order` answers at once with why not.
+- **Wood or steel.** Broken Strait has three stations and ten lines. Steel
+  pylons leave each station, run to the two west-shore cities and cross the
+  strait from the Eastern Hydro Plant, standing in the water on the way. Wooden
+  poles follow each side's supply road to its command post and run across open
+  ground to two small works. The player starts with 320 MW against 40 MW.
+- **What the player sees.** `power_grid_view.gd` draws stations, poles, pylons
+  and conductors. The player starts knowing its own line, the trunk and the
+  station that feed it. Everything else is drawn once seen and then shows the
+  holder and condition it had when last seen; a side is told at once when its
+  own line is cut or taken. Conductors take the holder's colour. A cut line is
+  drawn dashed with a gap at the break, a `LINE DOWN` label and sparks that
+  repeat every 2.4 s until a repair starts. Stations get a map marker (a
+  diamond with a lightning bolt) coloured by last-seen holder. Hovering names
+  the line, its holder and the repair price.
+- **Controls.** `2` then right-click captures a station or line, or sends the
+  engineer to repair a line that is down. `3` then right-click cuts a line.
+  These are the existing claim and demolish modes.
+- **Models.** Three original generated models; see
+  [POWER_ASSETS.md](POWER_ASSETS.md).
+
+Evidence (2026-11-10, Apple M1 Pro, macOS arm64, Release): 12 native tests in
+`tests/test_power_grid.cpp` cover supply, cutting on arrival, repair by an
+engineer for Materials, wood cheaper than steel, capture of lines and stations,
+"no station, no power", abandoned work, structure demand and playback from the
+command log. Eight rules were removed in turn and each made at least one test
+fail. The Godot contract `tools/validate.py power_grid` passes 42 checks
+through the real match scene. Rendered screenshots were inspected:
+`validation/artifacts/power_grid/rendered/`.
+
+Known gaps: a power deficit is shown in the HUD but changes nothing else yet.
+The AI never captures, cuts or repairs lines, so in a match against the AI the
+player's grid is not attacked. Lines cannot be shot: only a unit standing at a
+line cuts it. Engineers repair lines but cannot lay new ones. Poles and pylons
+are scenery: units drive through them, structures can be placed on them, and
+they are not in network snapshots. Not hand-played.
+
 ## Radio callouts and command voice alerts (2026-11-10, issue #3)
 
 Design and rules: [adr/0001-radio-callouts.md](adr/0001-radio-callouts.md).
 
 Three alerts work end to end: `air.hostile_inbound`, `objective.fuel_depot_secured`
-and `objective.fuel_depot_lost`. **No voice clips exist yet**, so every alert is
-text with a short attention tone. Generating speech needs an ElevenLabs key.
+and `objective.fuel_depot_lost`. Ten Elite Command recordings are shipped (eight aircraft directions plus depot
+secured/lost). Other faction voices remain text-only with an attention tone.
+Voice WAVs load directly even without Godot import metadata and preserve their
+original PCM; there is no voice EQ, filtering, static or squelch. Generating
+additional speech needs an ElevenLabs key.
 
 - Native: `Simulation::record_radio_event` raises a report for one side. A depot
   capture tells the captor and the previous holder once each. Hostile aircraft in
@@ -1669,7 +1768,11 @@ Evidence (Apple M1 Pro, macOS arm64, Release):
   the sweep and passed twice alone. Three `test_validation.py` tool tests error on
   a missing `resolution` argument, unrelated to this work. Cost: PERFORMANCE.md.
 
-Known gaps: no recorded speech and no human listening; ElevenLabs commercial
+Human playback acceptance: user confirmed the Elite recordings work on macOS.
+`radio_voice_source` verifies unimported WAV playback, original PCM and no voice
+effects; its negative control fails with the old announcer.
+
+Known gaps: other faction recordings are absent; ElevenLabs commercial
 rights not yet checked; voice ids in the catalog are empty; the catalog cannot be
 replaced by a mod without code; replays do not replay radio; the AI side's
 reports are produced but nothing presents them.

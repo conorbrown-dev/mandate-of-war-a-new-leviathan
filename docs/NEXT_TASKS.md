@@ -1,6 +1,23 @@
 # Next tasks
 
+Issue #10's overlap guard and red ghost/refusal feedback are implemented.
+Hand-check the preview and sound over a queued and completed structure in a
+match. The focused Godot contract passes 34/34 checks.
+Airfield ghost alignment and command-post exclusion now pass focused native and
+Godot checks. Hand-check the updated airfield boundary at several zoom levels.
+
+GitHub issues #11–#13 are implemented and passed focused automated checks; the
+user also verified them in manual play. See STATUS.md for details.
+
 Follow the slice plan in [HANDOFF.md](HANDOFF.md).
+
+Power grid (issue #4, 2026-11-10) is implemented and assertion-backed: stations,
+steel and wooden lines, capture, cutting and engineer repair, with 12 native
+tests and a 42-check Godot contract. Next, in the order the user chooses: give
+a power deficit an effect, teach the AI to cut, take and repair lines under the
+player's limits, let engineers lay new lines, and let weapons damage lines.
+Hand-play: cut and repair the supply-road line, and judge the pylons, wires and
+sparks at tactical and strategic zoom.
 
 Resource-map verification (2026-11-09) is complete. The 2026-11-10 scouting
 change now hides every Materials/Fuel site until discovered, then remembers
@@ -83,3 +100,20 @@ See STATUS.md for behavior and PERFORMANCE.md for native-only timing evidence.
 
 Overlay implementation checks are complete (39 headless / 40 rendered); remaining
 work is hand-play tuning, not missing aircraft anchoring or placeholder radii.
+
+
+2026-11-10 voice playback fix: generated voice WAVs can exist in the manifest
+without Godot import metadata. The announcer now loads WAV source files directly
+with AudioStreamWAV.load_from_file, preserving PCM and bypassing the missing
+import. Other formats retain normal ResourceLoader loading. No EQ or treatment
+is added. `radio_voice_source` creates an unimported WAV and manifest and checks
+speech playback, no fallback blip, unchanged PCM, and zero Voice-bus effects.
+The regression fails against the old announcer and passes with the fix.
+Release build passes. CTest discovers/passes four programs (20 unit, 21 snapshot,
+318 integration, BALANCE_OK). Focused radio_voice_source scenario passes four
+checks outside the sandbox; Godot reports two ObjectDB leaks at shutdown.
+Human playback acceptance: user confirmed speech works in this worktree.
+The shipped pack contains ten Elite Command clips; other faction voices remain
+text-only. Generator output preserves original PCM without processing.
+Main integration: Release build, radio_voice_source (4), radio_callouts (88)
+and generator tests (11) pass. Human listening acceptance is confirmed.

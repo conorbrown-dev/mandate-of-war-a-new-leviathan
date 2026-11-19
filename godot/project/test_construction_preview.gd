@@ -35,6 +35,23 @@ func _run() -> void:
 			check(frame.position == Vector3(-16500.0, view._terrain_height_at(-16500.0, -1500.0) + 0.08, -1500.0), "construction uses the placement terrain offset and queued site")
 			check(view.build_ghost_material == placement_material, "construction leaves active placement material intact")
 		ghost.free()
+	var airfield_ghost: Node3D = view._make_build_ghost(102)
+	var site := Vector2(-16500.0, -1500.0)
+	airfield_ghost.position = Vector3(site.x, view._terrain_height_at(site.x, site.y) + 0.08, site.y)
+	view.add_child(airfield_ghost)
+	view._spawn_completed_structure_view(2, site)
+	var built: Node3D = view.completed_structure_views.back()
+	var runway: MeshInstance3D = built.get_node("Runway")
+	var ghost_runway: MeshInstance3D = airfield_ghost.get_child(4)
+	check(ghost_runway.position.x == runway.position.x and ghost_runway.position.z == runway.position.z,
+		"airfield runway ghost and finished runway share the same site offset")
+	check(airfield_ghost.position.x == built.position.x and airfield_ghost.position.z == built.position.z,
+		"airfield ghost and finished structure share the clicked site centre")
+	for index in range(4):
+		var edge: MeshInstance3D = airfield_ghost.get_child(index)
+		check(absf(edge.position.x) <= 124.0 and absf(edge.position.z) <= 374.0,
+			"airfield footprint edge %d stays centred on the native 250 x 750 m site" % index)
+	airfield_ghost.queue_free()
 	view._sync_construction_frames([])
 	await process_frame
 	check(view.construction_frames.get_child_count() == 0, "completed or cancelled queue removes construction geometry")

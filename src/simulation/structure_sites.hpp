@@ -7,6 +7,8 @@ namespace rts {
 
 // Queue job that levels ground before the structure it serves is built.
 inline constexpr uint8_t EARTHWORKS_JOB = 4;
+inline constexpr float kCommandPostFootprintX = 56.0f;
+inline constexpr float kCommandPostFootprintY = 42.0f;
 
 struct StructureSiteRules {
     float footprint_x = 0.0f;
@@ -42,6 +44,17 @@ constexpr float structure_view_range(uint8_t structure_type) {
         case 1: return 3000.0f; // radar
         case 2: return 500.0f;  // airfield
         case 3: return 300.0f;  // floodlight
+        default: return 0.0f;
+    }
+}
+
+// What a finished structure draws from its side's power grid, in megawatts.
+constexpr float structure_power_demand(uint8_t structure_type) {
+    switch (structure_type) {
+        case 0: return 5.0f;  // outpost
+        case 1: return 15.0f; // radar
+        case 2: return 25.0f; // airfield
+        case 3: return 2.0f;  // floodlight
         default: return 0.0f;
     }
 }
