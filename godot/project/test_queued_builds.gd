@@ -198,5 +198,10 @@ func _built_outposts(view: Node) -> int:
 func _finish(view: Node) -> void:
 	view.queue_free()
 	await process_frame
+	# Order cues may still be in the audio mixer; quitting at once sometimes
+	# reported their streams as leaked. Give the mixer time to let them go.
+	var mixer_deadline := Time.get_ticks_msec() + 150
+	while Time.get_ticks_msec() < mixer_deadline:
+		await process_frame
 	print("QUEUED_BUILDS checks=%d failures=%d" % [checks, failures])
 	quit(1 if failures else 0)
