@@ -14,6 +14,9 @@ const RangeOutlineScript = preload("res://range_outline.gd")
 const MODEL_LAYER := 1 << 1
 # Below this camera distance a unit is drawn as its model.
 const MODEL_HIDE_DISTANCE := 600.0
+# Aircraft render on a layer of their own: the main view keeps drawing them much
+# farther out than ground units (set_aircraft_presentation).
+const AIRCRAFT_LAYER := 1 << 2
 
 var _registry
 var _definition: Dictionary = {}
@@ -34,6 +37,11 @@ var _ranges_airborne := false
 # (RangeEnvelopeRenderer); the unit then draws its own only while airborne.
 var merged_ground_ranges := false
 var _last_range_center := Vector3.INF
+# Above zero, this unit is an aircraft whose model stays drawn out to this camera
+# distance. Its model can also be enlarged (_presentation_scale) to keep it legible.
+var _aircraft_visible_distance := 0.0
+var _presentation_scale := 1.0
+var _model_shown := true
 static var _flat_range_meshes: Dictionary = {}
 static var _fallback_materials: Dictionary = {}
 
@@ -263,10 +271,12 @@ func update_lod(camera_distance: float) -> void:
 	var far_distance := maxf(float(lod.get("strategic_distance", 190.0)), MODEL_HIDE_DISTANCE)
 	var mid_distance := float(lod.get("reduced_distance", 95.0))
 	var tier := 2 if camera_distance >= far_distance else (1 if camera_distance >= mid_distance else 0)
-	if tier == _lod_tier:
+	var shown := camera_distance < _aircraft_visible_distance if _aircraft_visible_distance > 0.0 else tier < 2
+	if tier == _lod_tier and shown == _model_shown:
 		return
 	_lod_tier = tier
-	_model_root.visible = tier < 2
+	_model_shown = shown
+	_model_root.visible = shown
 	# Map-scale symbols are now rendered by StrategicIconOverlay as fixed-pixel
 	# screen-space markers, like Forged Alliance's strategic view. Do not leave
 	# a scaled 3D glyph on the hull plane where it reads as a gray dot.
@@ -495,9 +505,7 @@ func _register_hardpoint(hardpoint_id: String, parent: Node3D, offset: Vector3) 
 
 func _apply_definition_transform() -> void:
 	_model_root.position = Vector3.ZERO
-	var scale_values: Array = _definition.get("scale", [1.0, 1.0, 1.0])
-	if scale_values.size() == 3:
-		_model_root.scale = Vector3(float(scale_values[0]), float(scale_values[1]), float(scale_values[2]))
+	_apply_model_scale()
 	var rotation_values: Array = _definition.get("rotation_degrees", [0.0, 0.0, 0.0])
 	if rotation_values.size() == 3:
 		_model_root.rotation_degrees = Vector3(float(rotation_values[0]), float(rotation_values[1]), float(rotation_values[2]))
@@ -556,13 +564,58 @@ func _shared_fallback_material(color: Color) -> StandardMaterial3D:
 ## Whether this unit's model shows in what the camera renders: the model is up
 ## and the camera draws the unit model layer.
 func model_drawn_by(camera: Camera3D) -> bool:
-	return _model_root != null and _model_root.visible and camera != null and (camera.cull_mask & MODEL_LAYER) != 0
+	return _model_root != null and _model_root.visible and camera != null and (camera.cull_mask & model_layer()) != 0
+
+
+## The render layer this unit's model is on.
+func model_layer() -> int:
+	return AIRCRAFT_LAYER if _aircraft_visible_distance > 0.0 else MODEL_LAYER
+
+
+## Marks this unit as an aircraft: its model moves to AIRCRAFT_LAYER and stays
+## drawn until the camera is farther than visible_distance.
+func set_aircraft_presentation(visible_distance: float) -> void:
+	_ensure_nodes()
+	if is_equal_approx(_aircraft_visible_distance, visible_distance):
+		return
+	_aircraft_visible_distance = visible_distance
+	_assign_model_layer(_model_root)
+	_lod_tier = -1
+
+
+## Enlarges the model, not its range outlines, so a unit seen from far away keeps
+## a legible size on screen. 1.0 is the authored size.
+func set_presentation_scale(factor: float) -> void:
+	_ensure_nodes()
+	factor = maxf(factor, 1.0)
+	if is_equal_approx(factor, _presentation_scale):
+		return
+	_presentation_scale = factor
+	_apply_model_scale()
+
+
+func presentation_scale() -> float:
+	return _presentation_scale
+
+
+## Radius of the unit as drawn, in metres: its authored selection radius times
+## any presentation enlargement. Overlays use it to stay clear of the model.
+func drawn_radius() -> float:
+	return float(_definition.get("selection_radius", 2.0)) * _presentation_scale
+
+
+func _apply_model_scale() -> void:
+	var scale_values: Array = _definition.get("scale", [1.0, 1.0, 1.0])
+	var authored := Vector3.ONE
+	if scale_values.size() == 3:
+		authored = Vector3(float(scale_values[0]), float(scale_values[1]), float(scale_values[2]))
+	_model_root.scale = authored * _presentation_scale
 
 
 func _assign_model_layer(node: Node) -> void:
 	for child in node.get_children():
 		if child is VisualInstance3D:
-			(child as VisualInstance3D).layers = MODEL_LAYER
+			(child as VisualInstance3D).layers = model_layer()
 		_assign_model_layer(child)
 
 

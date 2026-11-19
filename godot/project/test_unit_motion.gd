@@ -8,7 +8,10 @@ const Registry = preload("res://visual_definition_registry.gd")
 const VisualRoot = preload("res://unit_visual_root.gd")
 # Swept-wing aircraft are as wide as they are long, so their long axis is
 # ambiguous; their noses were checked by eye.
-const SQUARE_PLANFORMS := ["visual.elite.fighter.prototype"]
+# Straight-winged recon planes (the U-2 and the MQ-9 Reaper) are wider than they
+# are long, so the same applies to them.
+const SQUARE_PLANFORMS := ["visual.elite.fighter.prototype", "visual.mass.recon_plane.prototype",
+	"visual.elite.recon_plane.prototype"]
 # No ground vehicle in the game is longer than this; a donor pack that lays
 # several vehicles side by side is.
 const LONGEST_VEHICLE_M := 14.0
@@ -64,7 +67,8 @@ func _test_model_facing() -> void:
 		var size: Vector3 = (merged[0] as AABB).size
 		measured += 1
 		var naval := visual_id.contains("destroyer") or visual_id.contains("carrier")
-		if not naval and not visual_id.contains("fighter") and not visual_id.contains("vtol"):
+		var aircraft := visual_id.contains("fighter") or visual_id.contains("vtol") or visual_id.contains("recon_plane") or visual_id.contains("strategic_recon")
+		if not naval and not aircraft:
 			check(maxf(size.x, size.z) <= LONGEST_VEHICLE_M, "%s is one vehicle, not a pack (%.1f m long)" % [visual_id, maxf(size.x, size.z)])
 		if definition.has("isolate"):
 			var expected := float(definition.isolate.length_m) * float(definition.scale[0])

@@ -482,15 +482,24 @@ void AIManager::produce_for_assault(EntityId base) {
     std::optional<UnitType> scout, plane;
     float flight_price = 0.0f;
     float flight_view = 0.0f;
+    // With several recon planes on the roster, fly the cheapest; ties go to the
+    // lowest id so the choice never depends on map iteration order.
+    std::optional<UnitType> cheapest_plane;
     for (const auto& [type, prototype] : get_unit_prototypes()) {
-        if (prototype.faction != faction_id_) continue;
-        if (is_recon_plane(prototype)) {
-            flight_price = prototype.material_cost + prototype.operational_material;
+        if (prototype.faction != faction_id_ || !is_recon_plane(prototype)) continue;
+        const float price = prototype.material_cost + prototype.operational_material;
+        if (!cheapest_plane || price < flight_price ||
+            (price == flight_price && static_cast<int>(type) < static_cast<int>(*cheapest_plane))) {
+            cheapest_plane = type;
+            flight_price = price;
             flight_view = prototype.view_range;
         }
+    }
+    for (const auto& [type, prototype] : get_unit_prototypes()) {
+        if (prototype.faction != faction_id_) continue;
         if (!production.can_queue_unit(base, faction_id_, type) || !can_receive(type)) continue;
         if (is_scout(prototype)) scout = type;
-        else if (is_recon_plane(prototype)) plane = type;
+        else if (is_recon_plane(prototype)) { if (type == cheapest_plane) plane = type; }
         else if (!prototype.is_aircraft && !prototype.is_naval && !prototype.construction_unit) fighters.push_back(type);
     }
     // Fighters wait while scouts are short, or a scout sits behind them in the queue.

@@ -107,10 +107,49 @@ Earthworks change sight lines, because the height samples refresh with the terra
 Recon sources: Pathfinder Scout Car (650 m), Longsight Recon Plane (1,600 m), Radar
 Mast (3,000 m, fixed).
 
+Recon planes come in tiers: Farwatch (Mass, tier 1), Longsight (Elite, tier 2) and
+Highwatch Strategic Recon Plane (Elite, tier 3, unit id 20, 2,400 m sight). Any
+recon card in Strategic Command starts the map click for that plane's flight.
+
+Altitude decides which air-capable weapons can reach an aircraft. A weapon must
+first hit air at all (`weapon.targets`, see `src/combat/air_domain.hpp`). Then its
+ceiling (`weapon.max_target_altitude_m`, 15,000 m by default) must reach the
+aircraft's cruise altitude (`flight_altitude_m` in the unit data, 1,500 m by
+default). Aircraft on the ground count as zero. Highwatch flies at 24,000 m, so
+the T1 fighter and the VTOL cannot touch it, and ground guns never could. Only
+the two anti-air vehicles (ceiling 30,000 m) can. `CombatManager::find_target` and
+the projectile hit tests apply both rules (`src/combat/engagement_altitude.hpp`).
+They are covered by `tests/test_air_altitude.cpp` and the `high_altitude_recon`
+contract. The game has no tier 2 fighter yet. Highwatch is unarmed like the other
+recon planes.
+
+Aircraft are drawn so they stay readable at any zoom (presentation only). The
+main view keeps drawing them out to half of full zoom (13 km), on their own render
+layer, and enlarges them beyond 250 m camera distance so they keep the size they
+have there. Their drawn altitude is fixed, whatever the zoom: ordinary aircraft
+160 m, recon planes 1,200 m and Highwatch 2,500 m (`presented_cruise_height_m` in
+the visual definitions). So Highwatch is above the camera until it is zoomed out
+past about 4.5 km, and recon planes past about 2 km. A high aircraft gets a
+faint drop line to the ground beneath it. Strategic icons sit 30 px above the
+unit as drawn, not on it. Clicking, hovering and box selection pick an aircraft
+where it is drawn, not at its ground position. The `aircraft_presentation`
+contract covers this. The AI orders its
+cheapest recon plane. The recon planes use Sketchfab models under CC BY 4.0: an
+MQ-9 Reaper for Farwatch, a U-2 for Longsight and an SR-71 for Highwatch. They are
+credited in the AUDIO & CREDITS panel (F2, or the button on the startup screen),
+which lists every entry in `godot/project/credits.json`, and in
+`assets/source_3d/reference_models/CREDITS.md`. The U-2 has 30,511 triangles,
+above the 20,000 prototype budget, so its definition carries its own
+`triangle_budget`.
+
 A recon plane flies a flight plan set when it is ordered: Strategic Command, Plot
 Recon Flight, then a click on the map. It needs no airfield. It comes in from the
 west map edge, flies straight to the point, circles there for
-`recon_loiter_seconds` and flies back off the map. It takes no further orders.
+`recon_loiter_seconds` and flies back off the map. A move order re-plots its
+flight while it is on its mission: it flies straight to the new point and spends
+the rest of its time on station there (`Simulation::retask_recon_flight`). It
+takes no other order, no queued moves and nothing once it is leaving. Cargo
+airlifters take no orders at all.
 
 `src/simulation/sighting_log.hpp` records where each faction last saw each enemy.
 The map shows these as `?` markers with their age, merged when they would overlap.

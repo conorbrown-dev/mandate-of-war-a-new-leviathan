@@ -55,7 +55,7 @@ func _run() -> void:
 	check(wrapper.get_node("RadarHex").mesh == first_mesh, "moving aircraft reuse range geometry")
 	var placement: Dictionary = view.strategic_icon_overlay.marker_placement(friend, view.camera)
 	check(placement.world.is_equal_approx(wrapper.global_position+Vector3.UP*5), "strategic icon leader anchors at drawn flight pose")
-	check(placement.icon_center.y == placement.anchor.y-22, "icon sits above aircraft in screen space")
+	check(placement.icon_center.y < placement.anchor.y - placement.radius_pixels - 20.0, "icon sits above the aircraft as drawn, clear of it")
 	check(placement.world.y > view._terrain_height_at(-12500,1000)+100, "strategic icon is never anchored to ground for aircraft")
 	check(extension.call("get_unit_position", friend) == native_before and extension.call("get_tick_clock")[0] == tick_before, "overlay updates do not mutate simulation")
 	wrapper.set_ranges_airborne(false)

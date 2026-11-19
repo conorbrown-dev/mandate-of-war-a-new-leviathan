@@ -6,6 +6,7 @@
 #include "ecs/component_manager.hpp"
 #include "ecs/components/factions.hpp"
 #include "logistics/logistics.hpp"
+#include "ecs/components/weapon.hpp"
 
 namespace rts {
 
@@ -26,6 +27,8 @@ struct Projectile {
     FactionId faction_id;
     bool hits_ground = true;
     bool hits_air = false;
+    // Targets flying above this altitude, in metres, are out of reach.
+    float max_target_altitude = DEFAULT_WEAPON_CEILING_METERS;
 };
 
 class ProjectileManager {
@@ -34,7 +37,8 @@ public:
 
     void spawn(float x, float y, float vel_x, float vel_y, float speed,
                float damage, float aoe_radius, float max_lifetime, FactionId faction_id,
-               bool hits_ground = true, bool hits_air = false);
+               bool hits_ground = true, bool hits_air = false,
+               float max_target_altitude = DEFAULT_WEAPON_CEILING_METERS);
     
     void update(float delta_ms);
     void update(float delta_ms, SpatialGrid& spatial_grid, ComponentManager& component_manager);

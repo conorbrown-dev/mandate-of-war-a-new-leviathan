@@ -7,6 +7,10 @@ const UnitCatalog := preload("res://unit_catalog.gd")
 ## 3D unit meshes so they remain a fixed, legible size at full-map zoom.
 
 const STRATEGIC_ZOOM_DISTANCE := 600.0
+# Gap between the top of a unit as drawn and the centre of its icon.
+const ICON_LIFT_PIXELS := 30.0
+# Aircraft drawn at least this high get a drop line to the ground beneath them.
+const DROP_LINE_MIN_HEIGHT := 60.0
 const LAST_KNOWN_COLOR := Color("#ff8a6b")
 const LAST_KNOWN_MERGE_PIXELS := 42.0
 const LAST_KNOWN_FADE_SECONDS := 180.0
@@ -62,7 +66,17 @@ func _draw() -> void:
 		var faction_color: Color = match_view.entity_base_colors.get(entity_id, Color.WHITE)
 		var leader_color := Color("#b8bec0")
 		leader_color.a = 0.82
-		draw_line(anchor, icon_center + Vector2(0.0, 7.0), leader_color, 1.5, true)
+		# An aircraft high above the ground gets a faint drop line to the point
+		# beneath it, so its height and ground position both read at a glance.
+		var ground_y: float = match_view._terrain_height_at(world.x, world.z)
+		if world.y - ground_y > DROP_LINE_MIN_HEIGHT:
+			var ground_point := Vector3(world.x, ground_y, world.z)
+			if not camera.is_position_behind(ground_point):
+				var below := camera.unproject_position(ground_point)
+				var drop_color := Color(faction_color, 0.45)
+				draw_line(below, anchor + Vector2(0.0, float(placement.radius_pixels) * 0.3), drop_color, 1.0, true)
+				draw_circle(below, 2.5, drop_color)
+		draw_line(anchor + Vector2(0.0, -float(placement.radius_pixels)), icon_center + Vector2(0.0, 7.0), leader_color, 1.5, true)
 		draw_circle(anchor, 2.0, faction_color)
 		var hostile: bool = match_view.ai_entity_ids.has(entity_id)
 		var symbol: Dictionary = NatoMapSymbolScript.draw(self, icon_center, int(match_view.entity_unit_types.get(entity_id, 0)), hostile, symbol_font)
@@ -71,10 +85,19 @@ func _draw() -> void:
 		last_unit_symbols.append(symbol)
 
 
+## The icon sits above the unit as drawn, never on it: ICON_LIFT_PIXELS clear of
+## the top of the unit's drawn size on screen, joined to it by a leader line.
 func marker_placement(entity_id: int, camera: Camera3D) -> Dictionary:
 	var world: Vector3 = match_view._unit_overlay_anchor(entity_id)
 	var anchor := camera.unproject_position(world)
-	return {"world": world, "anchor": anchor, "icon_center": anchor+Vector2(0,-22)}
+	var radius_pixels := 0.0
+	var wrapper = match_view.prototype_visual_views.get(entity_id)
+	if wrapper != null and wrapper.has_method("drawn_radius"):
+		var top := world + camera.global_basis.y * float(wrapper.drawn_radius())
+		if not camera.is_position_behind(top):
+			radius_pixels = camera.unproject_position(top).distance_to(anchor)
+	var lift := radius_pixels + ICON_LIFT_PIXELS
+	return {"world": world, "anchor": anchor, "radius_pixels": radius_pixels, "icon_center": anchor + Vector2(0.0, -lift)}
 
 
 func _draw_radar_contacts(camera: Camera3D, viewport_bounds: Rect2) -> void:
