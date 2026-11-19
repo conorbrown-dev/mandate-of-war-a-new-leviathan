@@ -287,10 +287,11 @@ TEST(a_recon_flight_goes_straight_to_its_point_with_no_airfield) {
     verify(plane != INVALID_ENTITY, "the plane arrives without an airfield");
     verify(watched, "the plane watches the point it was sent to");
 
-    const float x = simulation.get_unit_x(plane);
-    verify(simulation.issue_commands({plane}, FactionId::ELITE_PRECISION, CommandType::MOVE, x, -9000.0f) == 0, "a new order is refused");
+    // A move order re-plots the flight (tests/test_air_altitude.cpp); any other
+    // order is refused, so the plane cannot be stopped or kept on the map.
+    verify(simulation.issue_stop_commands({plane}, FactionId::ELITE_PRECISION) == 0, "a stop order is refused");
     front.run(40);
-    verify(simulation.get_unit_y(plane) > 0.0f, "a flight plan cannot be changed once it is set");
+    verify(simulation.get_unit_y(plane) > 0.0f, "the flight plan carries on");
 
     bool left = false;
     for (int tick = 0; tick < 20 * 400 && !left; ++tick) {

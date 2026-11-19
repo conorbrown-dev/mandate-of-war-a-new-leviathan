@@ -58,6 +58,9 @@ enum class UnitType : uint8_t {
 // players per faction. Structures do not count.
 constexpr int MAX_UNITS_PER_PLAYER = 2000;
 
+// Aircraft fly here unless their unit data gives flight_altitude_m.
+constexpr float DEFAULT_FLIGHT_ALTITUDE_METERS = 1500.0f;
+
 struct WeaponProfile {
     float damage = 0.0f;
     float range = 0.0f;
@@ -67,6 +70,8 @@ struct WeaponProfile {
     float lead_bias = 0.0f;
     bool hits_ground = true;
     bool hits_air = false;
+    // Highest target altitude, in metres, this weapon can engage.
+    float max_target_altitude = 15000.0f;
 };
 
 struct UnitPrototype {
@@ -94,6 +99,9 @@ struct UnitPrototype {
     // a point set when ordered, on station this long, then off the map. It uses
     // no airfield and takes no further orders.
     float recon_loiter_seconds = 0.0f;
+    // Cruise altitude in metres. A weapon engages an aircraft in flight only when
+    // its max_target_altitude reaches this high.
+    float flight_altitude = 0.0f;
     float energy_consumption_rate = 0.0f;
     float material_consumption_rate = 0.0f;
     // Presentation-only stable reference. Gameplay never derives behavior

@@ -35,6 +35,8 @@ struct UnitData {
     float view_range;
     int unit_type = -1;
     float intel_range = 0.0f; // Unidentified contacts only; never grants sight.
+    // Cruise altitude in metres while flying; zero for ground units and ships.
+    float flight_altitude = 0.0f;
 };
 
 // Lightweight deterministic ground-motion state; no rigid bodies required.

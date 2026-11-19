@@ -1093,6 +1093,8 @@ public:
             entry["material"] = production.get_unit_metal_cost(faction, type);
             entry["build_seconds"] = prototype.build_time_seconds;
             entry["is_aircraft"] = prototype.is_aircraft;
+            // A flight-plan plane is ordered with a map click, not a plain order.
+            entry["flight_plan"] = prototype.recon_loiter_seconds > 0.0f;
             const bool airfield_ready = !prototype.is_aircraft || !prototype.requires_runway || prototype.recon_loiter_seconds > 0.0f ||
                 rts::runtime_simulation()->territorial_control_manager().has_active_installation(faction, rts::InstallationType::AIRFIELD);
             const auto& simulation = *rts::runtime_simulation();

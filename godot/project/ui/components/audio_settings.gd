@@ -84,6 +84,7 @@ func _ready() -> void:
 	credits.bbcode_enabled = true
 	credits.selection_enabled = true
 	credits.text = "[b]SOUND CREDITS[/b]\n\nEngine-loop heavy vehicle/tank by Nayckron, based on qubodup.\nhttps://opengameart.org/content/engine-loop-heavy-vehicletank\nLicensed under CC BY 3.0: https://creativecommons.org/licenses/by/3.0/\nSource unchanged; loop playback, gain and speed-based pitch in game.\n\nInterface, Impact and Sci-fi Sounds by Kenney — CC0.\nhttps://kenney.nl/assets\nBreaking / falling / hit SFX by rubberduck — CC0.\nhttps://opengameart.org/content/75-cc0-breaking-falling-hit-sfx\nFree Firearm Sound Library by Ben Jaszczak, Brian Nelson, Kevin Heras and Matthew Nanney — CC0.\nhttps://opengameart.org/node/21826\nAK-47 and SMG cues: trimmed, mono, downsampled, normalized and faded.\n\nAircraft, cannon and missile cues are stylized layers.\nFull sources, checksums and licenses accompany the game in audio/.\n\n[b]MODEL CREDITS[/b]\nWarehouse by Lavender Harmony — CC BY 3.0.\nhttps://poly.pizza/m/fsxbktzB1zo\nhttps://creativecommons.org/licenses/by/3.0/\nResidential Block and Office Tower by Kenney; Water Tower by Quaternius — CC0.\nSee docs/BUILDING_ASSETS.md for exact model pages and checksums.\nPower station, steel pylon and wooden power pole: original models made for Mandate of War (tools/generate_power_models.py). No third-party content."
+	credits.text += sourced_asset_credits()
 	column.add_child(credits)
 	_status = Label.new()
 	_status.theme_type_variation = "CaptionLabel"
@@ -181,3 +182,19 @@ func _input(event: InputEvent) -> void:
 	if visible and event is InputEventKey and event.pressed and not event.echo and not event.ctrl_pressed and not event.meta_pressed and not event.alt_pressed and event.keycode in [KEY_F2, KEY_ESCAPE]:
 		dismiss()
 		get_viewport().set_input_as_handled()
+
+
+## Credits for sourced models and textures, one entry per asset in
+## res://credits.json, so a new asset is credited in game by adding it there.
+static func sourced_asset_credits() -> String:
+	var parsed = JSON.parse_string(FileAccess.get_file_as_string("res://credits.json"))
+	if typeof(parsed) != TYPE_DICTIONARY:
+		return ""
+	var text := ""
+	for entry in parsed.get("credits", []):
+		text += "
+
+%s by %s (%s) — %s.
+%s" % [entry.get("asset", ""), entry.get("author", ""), entry.get("source", ""), entry.get("license", ""), entry.get("url", "")]
+	return text
+

@@ -9,6 +9,7 @@
 #include "ecs/components/factions.hpp"
 #include "ecs/components/faction.hpp"
 #include "ecs/components/weapon.hpp"
+#include "combat/engagement_altitude.hpp"
 
 namespace rts {
 
@@ -120,7 +121,8 @@ FireSolution CombatManager::find_target(
     ComponentManager& component_manager,
     EntityId explicit_target,
     bool hits_ground,
-    bool hits_air
+    bool hits_air,
+    float max_target_altitude
 ) {
     FireSolution solution{};
     solution.valid = false;
@@ -132,7 +134,8 @@ FireSolution CombatManager::find_target(
         
         if (target_pos && target_faction && target_health && !target_health->is_dead &&
             target_faction->faction_id != faction &&
-            weapon_reaches(hits_ground, hits_air, is_air_target(component_manager, explicit_target))) {
+            weapon_reaches(hits_ground, hits_air, is_air_target(component_manager, explicit_target)) &&
+            engagement_altitude(explicit_target, component_manager) <= max_target_altitude) {
             float dx = target_pos->x - shooter_x;
             float dy = target_pos->y - shooter_y;
             float dist = std::sqrt(dx * dx + dy * dy);
@@ -170,7 +173,8 @@ FireSolution CombatManager::find_target(
         const uint32_t end = target_cell_starts_[row_offset + last_column + 1];
         for (uint32_t index = begin; index < end; ++index) {
             const auto& candidate = target_candidates_[index];
-            if (candidate.faction == faction || !weapon_reaches(hits_ground, hits_air, candidate.in_air)) continue;
+            if (candidate.faction == faction || !weapon_reaches(hits_ground, hits_air, candidate.in_air) ||
+                candidate.altitude > max_target_altitude) continue;
             const float dx = candidate.x - shooter_x;
             const float dy = candidate.y - shooter_y;
             const float dist = std::sqrt(dx * dx + dy * dy);
@@ -204,7 +208,8 @@ void CombatManager::build_target_index(const std::vector<EntityId>& entities, Co
         if (!position || !faction || !health || health->is_dead ||
             !std::isfinite(position->x) || !std::isfinite(position->y)) continue;
         target_candidates_.push_back({entity_id, position->x, position->y, faction->faction_id,
-                                      is_air_target(component_manager, entity_id)});
+                                      is_air_target(component_manager, entity_id),
+                                      engagement_altitude(entity_id, component_manager)});
         min_x = std::min(min_x, position->x);
         max_x = std::max(max_x, position->x);
         min_y = std::min(min_y, position->y);
@@ -333,7 +338,7 @@ void CombatManager::resolve_fire(
                     : weapon->range, faction->faction_id,
                 component_manager,
                 explicit_attack_targets_.count(entity_id) > 0 ? pending_fire_.at(entity_id).target_id : 0,
-                weapon->hits_ground, weapon->hits_air
+                weapon->hits_ground, weapon->hits_air, weapon->max_target_altitude
             );
             
             if (target.valid) {
@@ -366,7 +371,7 @@ void CombatManager::resolve_fire(
                     projectile_manager_.spawn(
                         pos->x, pos->y, vel_x, vel_y, fire.projectile_speed,
                         fire.damage, fire.aoe_radius, 3.0f, faction->faction_id,
-                        weapon->hits_ground, weapon->hits_air
+                        weapon->hits_ground, weapon->hits_air, weapon->max_target_altitude
                     );
                     
                     if (event_sink_ && projectile_manager_.total_spawned() != spawned_before)

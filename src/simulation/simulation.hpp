@@ -582,6 +582,7 @@ private:
         int leg = 0;
     };
     std::map<EntityId, ReconFlight> recon_flights_;
+    bool retask_recon_flight(const InputCommand& cmd);
     // Manufactured runway aircraft ferrying in to their side's airfield.
     // They roll out on the main runway, then taxi to distinct apron slots.
     // `sortie` marks a plane heading home on low fuel; with no airfield left it

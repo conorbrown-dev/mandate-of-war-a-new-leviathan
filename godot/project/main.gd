@@ -57,6 +57,12 @@ const UNIT_SNAP_DISTANCE := 60.0
 # Half the distance over which the ground slope under a vehicle is measured.
 const UNIT_TILT_SAMPLE_SPAN := 3.0
 const AIRCRAFT_CRUISE_ALTITUDE := 160.0
+# The main view keeps drawing aircraft out to half of full zoom, enlarged beyond
+# AIRCRAFT_SIZE_REFERENCE_DISTANCE so they keep the size they have there.
+const AIRCRAFT_VISIBLE_DISTANCE := CAMERA_MAX_DISTANCE * 0.5
+const AIRCRAFT_SIZE_REFERENCE_DISTANCE := 250.0
+# Camera height as a share of camera distance in the tactical view.
+const CAMERA_HEIGHT_PER_DISTANCE := 0.78
 const AIRCRAFT_CLIMB_RATE := 45.0
 # Matches the water surface drawn by the Ocean and OpenSea meshes.
 const AIRCRAFT_SEA_LEVEL := 0.0
@@ -342,6 +348,10 @@ var recon_targeting := false
 var paradrop_targeting_type := -1
 var paradrop_markers := {}
 var paradrops_lost_seen := 0
+# The recon plane the next map click sends (any unit with a flight plan).
+var recon_unit_type := RECON_PLANE_UNIT_TYPE
+# Drawn cruise height per unit type, from its visual definition.
+var presented_cruise_heights: Dictionary = {}
 var enemy_post_discovered := false
 # Enemy airfields the player has seen, keyed by rounded position. They stay
 # drawn once found, like the enemy command post.
@@ -774,6 +784,12 @@ func _sync_strategic_command() -> void:
 # Forces are ordered here, not by the engineer. The unit is paid for now and
 # lands at the airfield when its build and flight time are up.
 func _on_strategic_command_order_unit(unit_type: int, mode: int = 0) -> void:
+	# A recon plane flies a flight plan, so its order waits for a map click.
+	if mode == 0:
+		for entry in extension.call("get_build_catalog", HUMAN_PLAYER_ID):
+			if int(entry.get("type", -1)) == unit_type and bool(entry.get("flight_plan", false)):
+				_begin_recon_targeting(unit_type)
+				return
 	var accepted := _order_unit_by_transport(unit_type) if mode == 0 else bool(extension.call("order_ground_transport", HUMAN_PLAYER_ID, unit_type, mode))
 	ui_audio.play_cue("order_accepted" if accepted else "order_refused")
 	var refusal := ""
@@ -805,9 +821,10 @@ func _with_fuel_status(status: String) -> String:
 
 # The next map click sets the flight plan. The plane uses no airfield: it comes in
 # from off the map, flies straight there, and leaves when its time on station ends.
-func _begin_recon_targeting() -> void:
+func _begin_recon_targeting(unit_type: int = RECON_PLANE_UNIT_TYPE) -> void:
 	_cancel_tactical_modes()
 	_close_strategic_command()
+	recon_unit_type = unit_type
 	recon_targeting = true
 	_announce_intel("SELECT RECON TARGET")
 
@@ -815,7 +832,7 @@ func _begin_recon_targeting() -> void:
 func _order_recon_flight(target: Vector2) -> bool:
 	recon_targeting = false
 	var before: int = (extension.call("get_hud_state", HUMAN_PLAYER_ID, int(commander_ids.get(HUMAN_PLAYER_ID, -1)), -1, 0.0, 0.0, false).get("production_queue", []) as Array).size()
-	_order_commander_unit(RECON_PLANE_UNIT_TYPE, target)
+	_order_commander_unit(recon_unit_type, target)
 	extension.call("update_simulation", 50.0)
 	var queued: int = (extension.call("get_hud_state", HUMAN_PLAYER_ID, int(commander_ids.get(HUMAN_PLAYER_ID, -1)), -1, 0.0, 0.0, false).get("production_queue", []) as Array).size()
 	var accepted := queued > before
@@ -2835,6 +2852,9 @@ func _sync_unit_transforms() -> Vector2:
 			if approach.x < 0.0 and not aircraft_heights.has(entity_id) and ground > AIRCRAFT_SEA_LEVEL + 0.5:
 				basis = Basis(Quaternion(Vector3.UP, _terrain_normal_at(x, z))) * basis
 			wrapper.set_ranges_airborne(airborne[index] != 0)
+			if _is_aircraft_type(int(entity_unit_types.get(entity_id, -1))):
+				wrapper.set_aircraft_presentation(AIRCRAFT_VISIBLE_DISTANCE)
+				wrapper.set_presentation_scale(camera_distance / AIRCRAFT_SIZE_REFERENCE_DISTANCE)
 			wrapper.apply_simulation_transform(Transform3D(basis, Vector3(x, height, z)))
 			wrapper.update_lod(unit_lod_distance)
 			wrapper.visible = _is_unit_shown(entity_ids[index])
@@ -2866,22 +2886,42 @@ func _terrain_normal_at(x: float, z: float) -> Vector3:
 # Aircraft in flight are drawn at cruise altitude over whatever is higher, the
 # ground or the sea, and climb or descend to it smoothly. Units on the ground
 # keep their ground height. The simulation stays 2D; this is presentation only.
+# What is stored per aircraft is how far through its climb it is, from 0 to 1.
 func _presented_flight_height(entity_id: int, in_flight: bool, x: float, z: float, ground_height: float, climb_step: float) -> float:
 	if not in_flight and not aircraft_heights.has(entity_id):
 		return ground_height
-	var target := ground_height
-	if in_flight:
-		target = maxf(_terrain_height_at(x, z), AIRCRAFT_SEA_LEVEL) + AIRCRAFT_CRUISE_ALTITUDE
+	var unit_type := int(entity_unit_types.get(entity_id, -1))
 	# An aircraft first seen in flight (a ferry arriving) is already at altitude.
-	var current: float = aircraft_heights.get(entity_id, target)
-	current = move_toward(current, target, climb_step)
+	var progress: float = aircraft_heights.get(entity_id, 1.0 if in_flight else 0.0)
+	var cruise_height := _presented_cruise_height(unit_type)
+	progress = move_toward(progress, 1.0 if in_flight else 0.0, climb_step / cruise_height)
+	var cruise := maxf(_terrain_height_at(x, z), AIRCRAFT_SEA_LEVEL) + cruise_height
 	# Never let a climb or descent cut through rising ground.
-	current = maxf(current, ground_height)
-	if not in_flight and is_equal_approx(current, ground_height):
+	var current := maxf(lerpf(ground_height, cruise, progress), ground_height)
+	if not in_flight and progress <= 0.0:
 		aircraft_heights.erase(entity_id)
 	else:
-		aircraft_heights[entity_id] = current
+		aircraft_heights[entity_id] = progress
 	return current
+
+
+# How high above the ground an aircraft of this type is drawn, from its visual
+# definition (presented_cruise_height_m). It is fixed, whatever the zoom; recon
+# planes give larger values so they fly visibly higher than other aircraft. The
+# real altitude rules are native.
+func _presented_cruise_height(unit_type: int) -> float:
+	if presented_cruise_heights.has(unit_type):
+		return presented_cruise_heights[unit_type]
+	var height := AIRCRAFT_CRUISE_ALTITUDE
+	if unit_type >= 0 and visual_registry != null:
+		var definition: Dictionary = visual_registry.resolve(String(extension.call("get_unit_visual_id", unit_type)))
+		height = float(definition.get("presented_cruise_height_m", AIRCRAFT_CRUISE_ALTITUDE))
+	presented_cruise_heights[unit_type] = height
+	return height
+
+
+func _is_aircraft_type(unit_type: int) -> bool:
+	return bool(UnitCatalog.units().get(unit_type, {}).get("is_aircraft", false))
 
 
 func _validate_state() -> void:
@@ -3018,7 +3058,7 @@ func _update_camera(delta: float) -> void:
 	camera.near = clampf(camera_distance * CAMERA_NEAR_PER_DISTANCE, CAMERA_MIN_NEAR, CAMERA_MAX_NEAR)
 	var desired_offset := Vector3(
 		sin(tactical_camera_yaw) * camera_distance,
-		camera_distance * 0.78,
+		camera_distance * CAMERA_HEIGHT_PER_DISTANCE,
 		cos(tactical_camera_yaw) * camera_distance)
 	if free_float_camera:
 		var pitch := deg_to_rad(free_camera_pitch)
@@ -3034,6 +3074,9 @@ func _update_camera(delta: float) -> void:
 	# so the magnifier can still show them when the main view is zoomed out.
 	var model_layer := int(UnitVisualRoot.MODEL_LAYER)
 	camera.cull_mask = (camera.cull_mask | model_layer) if camera_distance < UnitVisualRoot.MODEL_HIDE_DISTANCE else (camera.cull_mask & ~model_layer)
+	# Aircraft stay in the main view much farther out, to half of full zoom.
+	var aircraft_layer := int(UnitVisualRoot.AIRCRAFT_LAYER)
+	camera.cull_mask = (camera.cull_mask | aircraft_layer) if camera_distance < AIRCRAFT_VISIBLE_DISTANCE else (camera.cull_mask & ~aircraft_layer)
 	if zoom_focus_pending:
 		var under_cursor: Vector2 = _screen_to_world(zoom_focus_screen)
 		var correction := zoom_focus_world - under_cursor
@@ -3137,7 +3180,7 @@ func _select_nearest(screen_position: Vector2) -> void:
 	# Use a forgiving but bounded screen-space hit radius for a direct click.
 	var closest_distance := clampf(camera_distance * 0.22, 20.0, 32.0)
 	for entity_id in player_entity_ids:
-		var world_position := _entity_world_position(entity_id)
+		var world_position := _entity_pick_position(entity_id)
 		if camera.is_position_behind(world_position):
 			continue
 		var distance := camera.unproject_position(world_position).distance_to(screen_position)
@@ -3276,7 +3319,7 @@ func _update_hover_context(pointer := Vector2.INF) -> void:
 		for entity_id in entity_ids:
 			if not _is_unit_shown(entity_id):
 				continue
-			var world_position := _entity_world_position(entity_id)
+			var world_position := _entity_pick_position(entity_id)
 			if camera.is_position_behind(world_position):
 				continue
 			var distance := camera.unproject_position(world_position).distance_to(pointer)
@@ -3351,7 +3394,7 @@ func _update_hover_context(pointer := Vector2.INF) -> void:
 
 func _select_in_rectangle(bounds: Rect2) -> void:
 	for entity_id in player_entity_ids:
-		var world_position := _entity_world_position(entity_id)
+		var world_position := _entity_pick_position(entity_id)
 		if not camera.is_position_behind(world_position) and bounds.has_point(camera.unproject_position(world_position)):
 			_set_selected(entity_id, true)
 
@@ -5034,6 +5077,15 @@ func _issue_attack_order(screen_position: Vector2) -> int:
 			push_warning("Attack order rejected by authoritative command validation")
 			return -1
 	return nearest_enemy_id
+
+
+# Where a unit is drawn, for clicking, hovering and box selection. An aircraft is
+# drawn high above its ground position, so it is picked where it is drawn.
+func _entity_pick_position(entity_id: int) -> Vector3:
+	var wrapper := prototype_visual_views.get(entity_id) as Node3D
+	if wrapper != null and _is_aircraft_type(int(entity_unit_types.get(entity_id, -1))):
+		return wrapper.global_position
+	return _entity_world_position(entity_id)
 
 
 func _entity_world_position(entity_id: int) -> Vector3:

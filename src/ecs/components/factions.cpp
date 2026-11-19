@@ -170,6 +170,9 @@ static UnitPrototype parse_unit_prototype(const rts::data::JsonValue& obj) {
             else throw std::runtime_error("Unit prototype " + prototype.key + " has an unknown weapon target");
         }
     }
+    if (weapon->get("max_target_altitude_m")) {
+        prototype.weapon.max_target_altitude = weapon_number("max_target_altitude_m");
+    }
 
     if (auto content_id_opt = obj.get("content_id"); content_id_opt && content_id_opt->type() == rts::data::JsonValue::Type::String) {
         prototype.content_id = content_id_opt->as_string();
@@ -220,6 +223,13 @@ static UnitPrototype parse_unit_prototype(const rts::data::JsonValue& obj) {
                 throw std::runtime_error("Invalid recon_loiter_seconds in unit prototype");
             }
             prototype.recon_loiter_seconds = static_cast<float>(loiter->as_number());
+        }
+        prototype.flight_altitude = DEFAULT_FLIGHT_ALTITUDE_METERS;
+        if (auto altitude = obj.get("flight_altitude_m"); altitude) {
+            if (altitude->type() != rts::data::JsonValue::Type::Number || !std::isfinite(altitude->as_number()) || altitude->as_number() <= 0.0) {
+                throw std::runtime_error("Invalid flight_altitude_m in unit prototype");
+            }
+            prototype.flight_altitude = static_cast<float>(altitude->as_number());
         }
         if (prototype.payload <= 0.0f || prototype.operational_range <= 0.0f || prototype.operational_energy <= 0.0f ||
             prototype.operational_material <= 0.0f || prototype.max_airborne_time_seconds <= 0.0f ||

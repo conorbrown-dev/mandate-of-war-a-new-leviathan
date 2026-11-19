@@ -1172,9 +1172,14 @@ bool Simulation::is_position_visible_to(FactionId faction, float x, float y) con
 }
 
 bool Simulation::validate_command(const InputCommand& cmd, uint32_t execution_tick) const {
-    // A flight plan is set before the plane reaches the map, and a cargo
-    // aircraft flies straight to its airfield.
-    if (recon_flights_.contains(static_cast<EntityId>(cmd.entity_id))) return false;
+    // A recon plane flies a flight plan. A plain move order re-plots it to a new
+    // point (retask_recon_flight) while the plane is still on its mission; it
+    // takes no other order, and none once it is leaving. A cargo aircraft flies
+    // straight to its airfield.
+    if (const auto flight = recon_flights_.find(static_cast<EntityId>(cmd.entity_id)); flight != recon_flights_.end()) {
+        if (cmd.cmd_type != static_cast<uint8_t>(CommandType::MOVE) || (cmd.extra & MOVE_QUEUE_FLAG) != 0 ||
+            flight->second.leaving) return false;
+    }
     if (const auto* cargo = component_manager_.get_component<UnitData>(cmd.entity_id)) {
         const auto prototype = get_unit_prototypes().find(static_cast<UnitType>(cargo->unit_type));
         if (prototype != get_unit_prototypes().end() && prototype->second.cargo_transport) return false;
@@ -3811,7 +3816,8 @@ extern "C" {
         auto* faction = get_simulation()->component_manager().get_component<Faction>(static_cast<EntityId>(entity_id));
         FactionId faction_id = faction ? faction->faction_id : FactionId::ELITE_PRECISION;
         
-        manager.projectile_manager().spawn(pos->x, pos->y, dx, dy, speed, damage, aoe_radius, 5.0f, faction_id);
+        manager.projectile_manager().spawn(pos->x, pos->y, dx, dy, speed, damage, aoe_radius, 5.0f, faction_id,
+                                           weapon->hits_ground, weapon->hits_air, weapon->max_target_altitude);
     }
     
     void simulation_set_unit_faction(int entity_id, int faction_id) {
@@ -4625,7 +4631,7 @@ int rts::Simulation::create_unit_with_type(float x, float y, rts::UnitType unit_
     const float first_shot_delay = weapon.fire_rate * (0.25f + 0.75f * static_cast<float>(entity.id % 97u) / 96.0f);
     Weapon wep = {weapon.damage, weapon.range, weapon.fire_rate, 0.0f,
                   weapon.projectile_speed, weapon.lead_bias, weapon.aoe_radius, first_shot_delay,
-                  weapon.hits_ground, weapon.hits_air};
+                  weapon.hits_ground, weapon.hits_air, weapon.max_target_altitude};
     
     component_manager_.add_component(entity.id, pos);
     component_manager_.add_component(entity.id, vel);
@@ -4633,7 +4639,7 @@ int rts::Simulation::create_unit_with_type(float x, float y, rts::UnitType unit_
     component_manager_.add_component(entity.id, mat);
     component_manager_.add_component(entity.id, faction);
     component_manager_.add_component(entity.id, wep);
-    component_manager_.add_component(entity.id, UnitData{proto.speed, proto.view_range, static_cast<int>(unit_type), proto.intel_range});
+    component_manager_.add_component(entity.id, UnitData{proto.speed, proto.view_range, static_cast<int>(unit_type), proto.intel_range, proto.flight_altitude});
     if (!proto.is_aircraft && !proto.is_naval) {
         component_manager_.add_component(entity.id, GroundSteering{
             0.0f, 0.0f, 0.0f,
@@ -4717,6 +4723,7 @@ void rts::Simulation::process_commands() {
         if (network_manager_.is_connected()) network_manager_.send_command(cmd);
         command_log_.push_back(cmd);
         match_record_.add_command(cmd);
+        if (retask_recon_flight(cmd)) continue;
         if (cmd.cmd_type == static_cast<uint8_t>(CommandType::MOVE) && cmd.extra > 0) {
             std::vector<EntityId> formation{cmd.entity_id};
             while (i < local_commands.size()) {
@@ -4726,9 +4733,10 @@ void rts::Simulation::process_commands() {
                 ++i;
                 if (validate_command(next, tick_) && std::find(formation.begin(), formation.end(), next.entity_id) == formation.end()) {
                     if (network_manager_.is_connected()) network_manager_.send_command(next);
-                    formation.push_back(next.entity_id);
                     command_log_.push_back(next);
                     match_record_.add_command(next);
+                    // A recon plane in the group flies to the point itself, not in formation.
+                    if (!retask_recon_flight(next)) formation.push_back(next.entity_id);
                 }
             }
             move_units_formation(formation, static_cast<float>(cmd.target_x) / command_position_scale_,
@@ -4751,8 +4759,29 @@ void rts::Simulation::process_network_commands() {
     }
 }
 
+// A move order to a recon plane re-plots its flight: it flies straight to the
+// new point and spends the rest of its time on station there. Returns whether
+// the command was such an order (validate_command has already accepted it).
+bool rts::Simulation::retask_recon_flight(const InputCommand& cmd) {
+    if (cmd.cmd_type != static_cast<uint8_t>(CommandType::MOVE)) return false;
+    const auto plane = static_cast<EntityId>(cmd.entity_id);
+    const auto flight = recon_flights_.find(plane);
+    if (flight == recon_flights_.end() || flight->second.leaving) return false;
+    const float x = std::clamp(static_cast<float>(cmd.target_x) / command_position_scale_,
+                               pathfinding_.min_world_x_center(), pathfinding_.max_world_x_center());
+    const float y = std::clamp(static_cast<float>(cmd.target_y) / command_position_scale_,
+                               pathfinding_.min_world_y_center(), pathfinding_.max_world_y_center());
+    flight->second.x = x;
+    flight->second.y = y;
+    flight->second.on_station = false;
+    flight->second.leg = 0;
+    move_unit(plane, x, y);
+    return true;
+}
+
 void rts::Simulation::process_command_internal(const InputCommand& cmd) {
     if (!validate_command(cmd, tick_)) return;
+    if (retask_recon_flight(cmd)) return;
     
     switch (cmd.cmd_type) {
         case static_cast<uint8_t>(CommandType::MOVE): {

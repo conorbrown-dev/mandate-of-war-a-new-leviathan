@@ -213,6 +213,7 @@ add_executable(rts_integration_tests
     tests/test_pathfinding.cpp
     tests/test_content_id.cpp
     tests/test_combat.cpp
+    tests/test_air_altitude.cpp
     tests/test_health.cpp
     tests/test_mod_manifest.cpp
     tests/test_map_loader.cpp
