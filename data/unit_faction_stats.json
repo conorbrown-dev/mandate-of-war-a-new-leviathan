@@ -252,7 +252,7 @@
     {
       "id": 13,
       "name": "Pathfinder Scout Car",
-      "visual_id": "visual.elite.anti_air.prototype",
+      "visual_id": "visual.elite.scout_car.prototype",
       "type": "ELITE_SCOUT_CAR",
       "fuel_per_km": 2.0,
       "airdrop": true,
@@ -303,7 +303,7 @@
     {
       "id": 15,
       "name": "Outrider Scout Bike",
-      "visual_id": "visual.mass.assault_vehicle.prototype",
+      "visual_id": "visual.mass.scout_bike.prototype",
       "type": "MASS_SCOUT_BIKE",
       "fuel_per_km": 1.0,
       "airdrop": true,
@@ -430,9 +430,9 @@
       "strategic_icon": "naval_surface",
       "weapon": {"damage": 40.0, "range": 90.0, "fire_rate": 1.5, "projectile_speed": 160.0, "aoe_radius": 2.0, "lead_bias": 0.5, "targets": ["ground"]}
     },
-    {"id": 17, "name": "Skybridge Airlifter", "visual_id": "visual.elite.fighter.prototype", "type": "ELITE_AIRLIFTER", "faction": "ELITE_PRECISION", "cargo_transport": true, "material_cost": 0.0, "build_time_seconds": 0.0, "hp": 160.0, "speed": 90.0, "range": 0.0, "view_range": 300.0, "intel_range": 900, "research_prerequisites": [], "is_aircraft": true, "requires_runway": true, "payload": 20.0, "operational_range": 40000.0, "operational_energy": 1.0, "operational_material": 1.0, "max_airborne_time_seconds": 900.0, "energy_consumption_rate": 0.1, "material_consumption_rate": 0.0, "capabilities": [], "nato_symbol": "transport_aircraft", "strategic_icon": "cargo_aircraft", "weapon": {"damage": 0.0, "range": 0.0, "fire_rate": 1.0, "projectile_speed": 1.0, "aoe_radius": 0.0, "lead_bias": 0.0, "targets": []}},
-    {"id": 18, "name": "Packhorse Airlifter", "visual_id": "visual.elite.fighter.prototype", "type": "MASS_AIRLIFTER", "faction": "MASS_WARFARE", "cargo_transport": true, "material_cost": 0.0, "build_time_seconds": 0.0, "hp": 160.0, "speed": 90.0, "range": 0.0, "view_range": 300.0, "intel_range": 900, "research_prerequisites": [], "is_aircraft": true, "requires_runway": true, "payload": 20.0, "operational_range": 40000.0, "operational_energy": 1.0, "operational_material": 1.0, "max_airborne_time_seconds": 900.0, "energy_consumption_rate": 0.1, "material_consumption_rate": 0.0, "capabilities": [], "nato_symbol": "transport_aircraft", "strategic_icon": "cargo_aircraft", "weapon": {"damage": 0.0, "range": 0.0, "fire_rate": 1.0, "projectile_speed": 1.0, "aoe_radius": 0.0, "lead_bias": 0.0, "targets": []}},
-    {"id": 19, "name": "Hauler Airlifter", "visual_id": "visual.elite.fighter.prototype", "type": "INDUSTRIAL_AIRLIFTER", "faction": "INDUSTRIAL_EXPERIMENTAL", "cargo_transport": true, "material_cost": 0.0, "build_time_seconds": 0.0, "hp": 160.0, "speed": 90.0, "range": 0.0, "view_range": 300.0, "intel_range": 900, "research_prerequisites": [], "is_aircraft": true, "requires_runway": true, "payload": 20.0, "operational_range": 40000.0, "operational_energy": 1.0, "operational_material": 1.0, "max_airborne_time_seconds": 900.0, "energy_consumption_rate": 0.1, "material_consumption_rate": 0.0, "capabilities": [], "nato_symbol": "transport_aircraft", "strategic_icon": "cargo_aircraft", "weapon": {"damage": 0.0, "range": 0.0, "fire_rate": 1.0, "projectile_speed": 1.0, "aoe_radius": 0.0, "lead_bias": 0.0, "targets": []}}
+    {"id": 17, "name": "Skybridge Airlifter", "visual_id": "visual.elite.airlifter.prototype", "type": "ELITE_AIRLIFTER", "faction": "ELITE_PRECISION", "cargo_transport": true, "material_cost": 0.0, "build_time_seconds": 0.0, "hp": 160.0, "speed": 90.0, "range": 0.0, "view_range": 300.0, "intel_range": 900, "research_prerequisites": [], "is_aircraft": true, "requires_runway": true, "payload": 20.0, "operational_range": 40000.0, "operational_energy": 1.0, "operational_material": 1.0, "max_airborne_time_seconds": 900.0, "energy_consumption_rate": 0.1, "material_consumption_rate": 0.0, "capabilities": [], "nato_symbol": "transport_aircraft", "strategic_icon": "cargo_aircraft", "weapon": {"damage": 0.0, "range": 0.0, "fire_rate": 1.0, "projectile_speed": 1.0, "aoe_radius": 0.0, "lead_bias": 0.0, "targets": []}},
+    {"id": 18, "name": "Packhorse Airlifter", "visual_id": "visual.mass.airlifter.prototype", "type": "MASS_AIRLIFTER", "faction": "MASS_WARFARE", "cargo_transport": true, "material_cost": 0.0, "build_time_seconds": 0.0, "hp": 160.0, "speed": 90.0, "range": 0.0, "view_range": 300.0, "intel_range": 900, "research_prerequisites": [], "is_aircraft": true, "requires_runway": true, "payload": 20.0, "operational_range": 40000.0, "operational_energy": 1.0, "operational_material": 1.0, "max_airborne_time_seconds": 900.0, "energy_consumption_rate": 0.1, "material_consumption_rate": 0.0, "capabilities": [], "nato_symbol": "transport_aircraft", "strategic_icon": "cargo_aircraft", "weapon": {"damage": 0.0, "range": 0.0, "fire_rate": 1.0, "projectile_speed": 1.0, "aoe_radius": 0.0, "lead_bias": 0.0, "targets": []}},
+    {"id": 19, "name": "Hauler Airlifter", "visual_id": "visual.industrial.airlifter.prototype", "type": "INDUSTRIAL_AIRLIFTER", "faction": "INDUSTRIAL_EXPERIMENTAL", "cargo_transport": true, "material_cost": 0.0, "build_time_seconds": 0.0, "hp": 160.0, "speed": 90.0, "range": 0.0, "view_range": 300.0, "intel_range": 900, "research_prerequisites": [], "is_aircraft": true, "requires_runway": true, "payload": 20.0, "operational_range": 40000.0, "operational_energy": 1.0, "operational_material": 1.0, "max_airborne_time_seconds": 900.0, "energy_consumption_rate": 0.1, "material_consumption_rate": 0.0, "capabilities": [], "nato_symbol": "transport_aircraft", "strategic_icon": "cargo_aircraft", "weapon": {"damage": 0.0, "range": 0.0, "fire_rate": 1.0, "projectile_speed": 1.0, "aoe_radius": 0.0, "lead_bias": 0.0, "targets": []}}
   ],
   "faction_start_data": [
     {
