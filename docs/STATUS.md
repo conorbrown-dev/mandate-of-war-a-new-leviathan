@@ -193,6 +193,15 @@ minutes, and the match ends the same minute. Before the AI was held to player
 limits it started with a position estimate and won at about 7.9 minutes. A tank
 takes about 6 minutes to reach the enemy.
 
+Wave search (issue #18, 2026-11-23): a wave with no contact used to head for one shared
+sector at a time, so a blind wave swept the briefing sector far too slowly. Waves are now
+split into groups of about three (`AIManager::sweep_group`), and each group searches its own
+sector that no scout or other group is watching or heading for (`update_sweep`). Same fog and
+information as before. Headless probe, flat 40 km world, briefing sector from
+`commander_start_skirmish.json`, idle player 7 km away, AI given 15 materials per second: the
+old code had not found the post after 40 minutes (11 waves, 20 recon flights); the new code
+destroys it at 11.0 minutes. Not played in Godot. Test: `a_wave_with_no_contact_searches_in_groups_on_different_ground`.
+
 Vision cost, same date (Release, Windows, 3,902 stationary units on the real
 terrain, 200 ticks): 6.41 ms per tick with sight lines against 6.25 ms without, so
 about 0.16 ms per tick on average for a refresh every fifth tick.

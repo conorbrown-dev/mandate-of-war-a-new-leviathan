@@ -1221,3 +1221,21 @@ TEST(radar_respects_terrain_sensor_loss_and_reset) {
     verify(sim.radar_contacts(FactionId::ELITE_PRECISION).empty(), "reset clears contacts");
     (void)enemy;
 }
+
+TEST(a_wave_with_no_contact_searches_in_groups_on_different_ground) {
+    MatchFront front;
+    front.ai().configure_assault(-6000.0f, -6000.0f, 6000.0f, 6000.0f, 3, 2, 12);
+    std::vector<EntityId> wave;
+    for (int unit = 0; unit < 6; ++unit) wave.push_back(front.spawn_enemy(static_cast<float>(unit) * 20.0f));
+    front.run(20 * 60);
+    verify(front.ai().waves_launched() >= 1, "the wave leaves");
+    std::vector<std::pair<float, float>> targets;
+    for (const EntityId unit : wave) {
+        const auto* path = &front.simulation;
+        verify(path->has_move_target(unit), "every wave unit is searching");
+        targets.emplace_back(front.simulation.get_unit_x(unit), front.simulation.get_unit_y(unit));
+    }
+    float widest = 0.0f;
+    for (const auto& a : targets) for (const auto& b : targets) widest = std::max(widest, std::hypot(a.first - b.first, a.second - b.second));
+    verify(widest > 400.0f, "the wave's groups head for different sectors rather than one point");
+}

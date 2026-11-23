@@ -1,3 +1,4 @@
+#include <map>
 #include "ai/ai_manager.hpp"
 #include "simulation/simulation.hpp"
 #include "ecs/components/faction.hpp"
@@ -115,6 +116,7 @@ void AIManager::reset() {
     sectors_.clear();
     scout_tasks_.clear();
     next_sweep_tick_ = next_flight_tick_ = 0;
+    sweep_tasks_.clear();
     scenario_first_wave_ = scenario_wave_growth_ = scenario_max_wave_ = 0;
     home_guard_.clear();
     first_seen_.clear();
@@ -143,6 +145,7 @@ void AIManager::configure_assault(float min_x, float min_y, float max_x, float m
     area_max_y_ = max_y;
     sectors_.clear();
     scout_tasks_.clear();
+    sweep_tasks_.clear();
     sweep_x_ = (min_x + max_x) * 0.5f;
     sweep_y_ = (min_y + max_y) * 0.5f;
     assault_active_ = true;
@@ -194,15 +197,17 @@ void AIManager::update_sectors() {
 
 // The patch nobody has looked at for longest, nearest first, leaving out any
 // another scout is already heading for.
-size_t AIManager::stalest_sector(float x, float y, EntityId scout) const {
+size_t AIManager::stalest_sector(float x, float y, EntityId scout, EntityId group) const {
     size_t best = 0;
     uint32_t best_age = std::numeric_limits<uint32_t>::max();
     float best_distance = std::numeric_limits<float>::infinity();
     for (size_t index = 0; index < sectors_.size(); ++index) {
         const bool taken = std::any_of(scout_tasks_.begin(), scout_tasks_.end(), [&](const auto& task) {
             return task.first != scout && task.second.sector == index;
+        }) || std::any_of(sweep_tasks_.begin(), sweep_tasks_.end(), [&](const auto& task) {
+            return task.first != group && task.second.sector == index;
         });
-        if (taken && sectors_.size() > scout_tasks_.size()) continue;
+        if (taken && sectors_.size() > scout_tasks_.size() + sweep_tasks_.size()) continue;
         const auto& sector = sectors_[index];
         const uint32_t age = std::max(sector.last_seen_tick, sector.last_tasked_tick);
         const float dx = sector.x - x, dy = sector.y - y;
@@ -273,25 +278,38 @@ void AIManager::update_scouts() {
     }
 }
 
-// With no contact, a wave searches together rather than scattering.
+// With no contact, a wave searches in small groups, each on ground nobody else
+// is watching or heading for, so the wave covers the search area side by side.
 void AIManager::update_sweep() {
     if (!assault_active_ || sectors_.empty() || committed_.empty()) return;
     const uint32_t tick = simulation_->simulation_tick();
-    if (tick < next_sweep_tick_) return;
-    float center_x = 0.0f, center_y = 0.0f;
-    int counted = 0;
+    struct Group { float x = 0.0f, y = 0.0f; int count = 0; };
+    std::map<EntityId, Group> groups;
     for (EntityId unit : visible_units_) {
-        if (!committed_.contains(unit)) continue;
-        center_x += simulation_->get_unit_x(unit);
-        center_y += simulation_->get_unit_y(unit);
-        ++counted;
+        if (!committed_.contains(unit) || is_recon_asset(unit)) continue;
+        auto& group = groups[sweep_group(unit)];
+        group.x += simulation_->get_unit_x(unit);
+        group.y += simulation_->get_unit_y(unit);
+        ++group.count;
     }
-    if (counted == 0) return;
-    const size_t next = stalest_sector(center_x / counted, center_y / counted);
-    sectors_[next].last_tasked_tick = tick;
-    sweep_x_ = sectors_[next].x;
-    sweep_y_ = sectors_[next].y;
-    next_sweep_tick_ = tick + kSweepLegTicks;
+    std::erase_if(sweep_tasks_, [&](const auto& task) { return !groups.contains(task.first); });
+    for (const auto& [key, group] : groups) {
+        const auto task = sweep_tasks_.find(key);
+        const bool reached = task != sweep_tasks_.end() && sectors_[task->second.sector].last_seen_tick > task->second.tasked_tick;
+        const bool overdue = task != sweep_tasks_.end() && tick - task->second.tasked_tick > kSweepLegTicks * 3;
+        if (task != sweep_tasks_.end() && !reached && !overdue) continue;
+        const size_t next = stalest_sector(group.x / group.count, group.y / group.count, INVALID_ENTITY, key);
+        sectors_[next].last_tasked_tick = tick;
+        sweep_tasks_[key] = {next, tick};
+    }
+}
+
+bool AIManager::sweep_target(EntityId unit, float& x, float& y) const {
+    const auto task = sweep_tasks_.find(sweep_group(unit));
+    if (task == sweep_tasks_.end() || task->second.sector >= sectors_.size()) return false;
+    x = sectors_[task->second.sector].x;
+    y = sectors_[task->second.sector].y;
+    return true;
 }
 
 bool AIManager::nearest_contact(float x, float y, float& contact_x, float& contact_y) const {
@@ -820,6 +838,7 @@ void AIManager::attack_enemy() {
             // Nothing in sight: head for the last place the enemy was seen, or
             // keep searching. Never a hidden unit's real position.
             float x = sweep_x_, y = sweep_y_;
+            sweep_target(unit, x, y);
             nearest_contact(position->x, position->y, x, y);
             simulation_->issue_commands({unit}, faction_id_, CommandType::MOVE, x, y);
         } else if (objective_set_) {

@@ -94,6 +94,8 @@ private:
     float area_min_x_ = 0.0f, area_min_y_ = 0.0f, area_max_x_ = 0.0f, area_max_y_ = 0.0f;
     std::vector<Sector> sectors_;
     std::unordered_map<EntityId, ScoutTask> scout_tasks_;
+    // Each small group of a wave searches its own sector, keyed by sweep_group().
+    std::unordered_map<EntityId, ScoutTask> sweep_tasks_;
     float sweep_x_ = 0.0f, sweep_y_ = 0.0f;
     uint32_t next_sweep_tick_ = 0;
     // Scouts ordered but not yet on the map, so a slow queue does not over-order.
@@ -147,7 +149,9 @@ private:
     bool find_airfield_site(EntityId base, float& site_x, float& site_y) const;
     // False when the transport rule would refuse this unit now.
     bool can_receive(UnitType type) const;
-    size_t stalest_sector(float x, float y, EntityId scout = INVALID_ENTITY) const;
+    size_t stalest_sector(float x, float y, EntityId scout = INVALID_ENTITY, EntityId group = INVALID_ENTITY) const;
+    static EntityId sweep_group(EntityId unit) { return unit / 3; }
+    bool sweep_target(EntityId unit, float& x, float& y) const;
     size_t plot_recon_flight(float view_range, float base_x, float base_y);
     bool is_recon_asset(EntityId unit) const;
     bool nearest_contact(float x, float y, float& contact_x, float& contact_y) const;
