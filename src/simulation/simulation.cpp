@@ -4442,6 +4442,21 @@ bool Simulation::validate_road_placement(float start_x, float start_y, float end
     return true;
 }
 
+bool Simulation::add_public_road(float start_x, float start_y, float end_x, float end_y) {
+    if (!std::isfinite(start_x) || !std::isfinite(start_y) || !std::isfinite(end_x) || !std::isfinite(end_y)) return false;
+    const float length = std::hypot(end_x - start_x, end_y - start_y);
+    if (length < 50.0f || length > 20000.0f) return false;
+    const int count = std::max(1, static_cast<int>(std::ceil(length / (pathfinding_.cell_size() * 0.5f))));
+    for (int sample = 0; sample <= count; ++sample) {
+        const float fraction = static_cast<float>(sample) / static_cast<float>(count);
+        if (!is_land_position(start_x + (end_x - start_x) * fraction, start_y + (end_y - start_y) * fraction)) return false;
+    }
+    const float width = get_road_settings().width;
+    if (!road_network_.add_completed(start_x, start_y, end_x, end_y, width)) return false;
+    apply_completed_road(road_network_.segments().back());
+    return true;
+}
+
 bool Simulation::queue_road(EntityId engineer, FactionId owner, float start_x, float start_y,
                             float end_x, float end_y) {
     if (!entity_manager_.is_alive(engineer) ||

@@ -296,6 +296,9 @@ public:
     bool validate_engineer_placement(float x, float y) const;
     bool validate_road_placement(float start_x, float start_y, float end_x, float end_y) const;
     bool queue_road(EntityId engineer, FactionId owner, float start_x, float start_y, float end_x, float end_y);
+    // A finished public road, drawn and driven on from the start. It must lie
+    // wholly on walkable land and be 50 m to 20 km long.
+    bool add_public_road(float start_x, float start_y, float end_x, float end_y);
     const RoadNetwork& road_network() const { return road_network_; }
     void enable_theater_water_rules(bool enabled = true) { theater_water_rules_enabled_ = enabled; }
 

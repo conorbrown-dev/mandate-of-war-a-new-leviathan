@@ -200,9 +200,17 @@ towns (`main.gd` `_civilian_clusters`, about 0.012 settlements per km2 of land, 
 per map size) with two new small building types, so a map has about 46 buildings at 5 km, 227 at 40 km
 and 591 at 80 km (was about 64 at every size). They keep clear of spawns, sites, depots, power stations
 and transport routes; only 350 buildings use detailed models, the rest are batched boxes. Checked
-headless (`test_tree_sizes.gd`, `test_map_sizes.gd`), not seen on screen. STILL TO DO for #22: more
-pre-built roads and more power lines (and whether new roads should be real, speed-giving roads or
-scenery only).
+headless (`test_tree_sizes.gd`, `test_map_sizes.gd`), not seen on screen.
+
+Public roads (issue #22): the map now starts with real roads (`Simulation::add_public_road`, owned by
+nobody, finished at once). `main.gd` `_spawn_public_roads` links every town, base, Materials site, fuel
+depot and power station: nearest-neighbour straight roads that stay on land, joined as a minimum spanning
+network, plus about 20% extra loops; 34 roads at 5 km up to 89 at 80 km. They behave exactly like
+engineer-built roads (pathfinding cost 0.68, so units drive about 1.47x faster on them and plan along them,
+and wear 12x slower on them). Effect on the Broken Strait match flow (`test_match_flow.gd`, idle player):
+a tank now reaches the enemy in 307 s, and the AI's first contact moved from 519 s to 469 s. Native test:
+`a_public_road_is_real_it_is_kept_on_land_and_speeds_units_up` (a 6 km drive is at least 15% quicker on
+a road). Not seen on screen. STILL TO DO for #22: more power lines.
 
 Map sizes (issue #14, 2026-11-23): the startup screen has a MAP SIZE picker (5, 10, 20, 40 or
 80 km square, default 40). `godot/project/map_scale.gd` redraws the authored 40 km Broken Strait at

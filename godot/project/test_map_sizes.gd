@@ -6,6 +6,7 @@ extends SceneTree
 var checks := 0
 var failures := 0
 var buildings_by_size := {}
+var roads_by_size := {}
 
 
 func check(condition: bool, reason: String) -> void:
@@ -53,6 +54,10 @@ func _run() -> void:
 		for mode in [1, 2]:
 			check(bool(view.extension.call("transport_route", 0, mode).get("enabled", false)), "%d km: the player's transport route %d is usable" % [size_km, mode])
 			check(bool(view.extension.call("transport_route", 1, mode).get("enabled", false)), "%d km: the enemy's transport route %d is usable" % [size_km, mode])
+		roads_by_size[size_km] = int(view.public_road_count)
+		check(int(view.public_road_count) >= 3, "%d km: the map has roads (%d)" % [size_km, int(view.public_road_count)])
+		var drawn_roads: PackedFloat32Array = view.extension.call("get_road_segments")
+		check(drawn_roads.size() / 6 >= int(view.public_road_count), "%d km: every road is reported to the view" % size_km)
 		buildings_by_size[size_km] = int(view.civilian_building_instance_count)
 		check(int(view.civilian_building_instance_count) >= 30, "%d km: the land has buildings (%d)" % [size_km, int(view.civilian_building_instance_count)])
 		for _tick_index in range(200):
@@ -61,7 +66,7 @@ func _run() -> void:
 		check(not view.match_finished, "%d km: ten seconds in, the match is still running" % size_km)
 		view.queue_free()
 		await process_frame
-	print("MAP_SIZES buildings by size: ", buildings_by_size)
+	print("MAP_SIZES buildings by size: ", buildings_by_size, " roads by size: ", roads_by_size)
 	check(buildings_by_size[80] > buildings_by_size[20] and buildings_by_size[20] > buildings_by_size[5], "bigger maps get more buildings")
 	print("MAP_SIZES checks=%d failures=%d" % [checks, failures])
 	quit(1 if failures > 0 else 0)

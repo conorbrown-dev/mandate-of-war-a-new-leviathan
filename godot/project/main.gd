@@ -2455,6 +2455,78 @@ func _add_fuel_depot_view(site: Dictionary) -> void:
 		_add_cylinder_model(root, 1.2, 0.18, offset + Vector3(0, 1.9, 0), signal_material)
 
 
+# Roads the map starts with, joining towns, bases, sites, depots and power
+# stations. They are real: units drive faster on them (see Simulation::add_public_road).
+const PUBLIC_ROAD_CLEARANCE := 40.0
+const PUBLIC_ROAD_NEIGHBOURS := 5
+const PUBLIC_ROAD_MAX_LENGTH := 9000.0
+const PUBLIC_ROAD_EXTRA_SHARE := 0.2
+var public_road_count := 0
+
+
+# Builds a connected road network over the land: every point is linked to the
+# network through the shortest straight roads that stay on land, then a few more
+# roads close loops. Deterministic. Returns points along the roads, so buildings
+# can keep off them.
+func _spawn_public_roads(clusters: Array, sites: Array[Vector2]) -> Array[Vector2]:
+	var nodes: Array[Vector2] = []
+	for cluster in clusters:
+		nodes.append(cluster.center)
+	nodes.append_array(sites)
+	var edges: Array = []
+	var seen := {}
+	for index in range(nodes.size()):
+		var nearest: Array = []
+		for other in range(nodes.size()):
+			if other != index:
+				nearest.append([nodes[index].distance_to(nodes[other]), other])
+		nearest.sort_custom(func(a: Array, b: Array) -> bool: return a[0] < b[0])
+		for rank in range(mini(PUBLIC_ROAD_NEIGHBOURS, nearest.size())):
+			var length: float = nearest[rank][0]
+			var other: int = nearest[rank][1]
+			var key := Vector2i(mini(index, other), maxi(index, other))
+			if length >= 100.0 and length <= PUBLIC_ROAD_MAX_LENGTH and not seen.has(key):
+				seen[key] = true
+				edges.append([length, key.x, key.y])
+	edges.sort_custom(func(a: Array, b: Array) -> bool: return a[0] < b[0] if a[0] != b[0] else a[1] < b[1])
+	var group: Array[int] = []
+	for index in range(nodes.size()):
+		group.append(index)
+	var points: Array[Vector2] = []
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 7700 + map_size_km
+	public_road_count = 0
+	var leftover: Array = []
+	for edge in edges:
+		var first: int = edge[1]
+		var second: int = edge[2]
+		var first_root := first
+		while group[first_root] != first_root:
+			first_root = group[first_root]
+		var second_root := second
+		while group[second_root] != second_root:
+			second_root = group[second_root]
+		if first_root == second_root:
+			leftover.append(edge)
+			continue
+		if _add_public_road(nodes[first], nodes[second], points):
+			group[first_root] = second_root
+	for edge in leftover:
+		if rng.randf() < PUBLIC_ROAD_EXTRA_SHARE:
+			_add_public_road(nodes[edge[1]], nodes[edge[2]], points)
+	return points
+
+
+func _add_public_road(start: Vector2, finish: Vector2, points: Array[Vector2]) -> bool:
+	if not bool(extension.call("add_public_road", start.x, start.y, finish.x, finish.y)):
+		return false
+	public_road_count += 1
+	var steps := maxi(1, ceili(start.distance_to(finish) / 60.0))
+	for step in range(steps + 1):
+		points.append(start.lerp(finish, float(step) / float(steps)))
+	return true
+
+
 # Settlements per square kilometre of land, and the most that are generated.
 # Buildings use fixed real sizes, so a bigger map gets more towns, not bigger ones.
 const GENERATED_SETTLEMENTS_PER_KM2 := 0.012
@@ -2584,6 +2656,7 @@ func _spawn_civilian_buildings() -> void:
 			for step in range(steps + 1):
 				corridor_points.append(entry.lerp(terminal, float(step) / float(steps)))
 	var clusters: Array = _civilian_clusters(dressing.get("clusters", []), spawn_origins + corridor_points)
+	var road_points := _spawn_public_roads(clusters, spawn_origins)
 	var scene_budget := CIVILIAN_SCENE_BUDGET
 	for cluster in clusters:
 		var rng := RandomNumberGenerator.new()
@@ -2619,6 +2692,10 @@ func _spawn_civilian_buildings() -> void:
 					break
 			for corridor_point in corridor_points:
 				if too_close or candidate.distance_to(corridor_point) < 160.0:
+					too_close = true
+					break
+			for road_point in road_points:
+				if too_close or candidate.distance_to(road_point) < PUBLIC_ROAD_CLEARANCE:
 					too_close = true
 					break
 			if too_close:

@@ -1273,3 +1273,32 @@ TEST(a_match_runs_and_the_ai_searches_at_every_supported_map_size) {
         simulation.stop();
     }
 }
+
+TEST(a_public_road_is_real_it_is_kept_on_land_and_speeds_units_up) {
+    const auto travel_ticks = [](bool with_road) {
+        Simulation simulation;
+        simulation.configure_world_size(40000.0f, 40000.0f);
+        simulation.configure_theater_landmasses(-12500.0f, 0.0f, 14000.0f, 38000.0f, 12500.0f, 0.0f, 14000.0f, 38000.0f);
+        simulation.start();
+        if (with_road) {
+            // Over open sea the road is refused; on the landmass it is accepted.
+            verify(!simulation.add_public_road(-2000.0f, 0.0f, 2000.0f, 0.0f), "a road over open sea is refused");
+            verify(simulation.add_public_road(-12500.0f, -3000.0f, -12500.0f, 3000.0f), "a road on land is accepted");
+            verify(!simulation.add_public_road(-12500.0f, 0.0f, -12500.0f, 10.0f), "a stub of a road is refused");
+            verify(simulation.road_network().segments().size() == 1 && simulation.road_network().segments().front().completed, "the road is finished and recorded");
+        }
+        const EntityId tank = simulation.create_unit_with_type(-12500.0f, -3000.0f, UnitType::ELITE_MAIN_BATTLE_TANK, FactionId::ELITE_PRECISION);
+        simulation.issue_commands({tank}, FactionId::ELITE_PRECISION, CommandType::MOVE, -12500.0f, 3000.0f);
+        int ticks = 0;
+        while (ticks < 20 * 60 * 30 && std::hypot(simulation.get_unit_x(tank) + 12500.0f, simulation.get_unit_y(tank) - 3000.0f) > 40.0f) {
+            simulation.update(50.0f);
+            ++ticks;
+        }
+        simulation.stop();
+        return ticks;
+    };
+    const int off_road = travel_ticks(false);
+    const int on_road = travel_ticks(true);
+    verify(off_road < 20 * 60 * 30 && on_road < 20 * 60 * 30, "the tank completes the 6 km drive both ways");
+    verify(on_road < off_road * 0.85, "the same drive is clearly quicker on a road");
+}

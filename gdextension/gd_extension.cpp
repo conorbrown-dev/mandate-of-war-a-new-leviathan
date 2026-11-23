@@ -212,6 +212,7 @@ protected:
         ClassDB::bind_method(D_METHOD("validate_road_placement", "start_x", "start_y", "end_x", "end_y"), &RtsExtension::validate_road_placement);
         ClassDB::bind_method(D_METHOD("queue_road", "engineer_id", "faction_id", "start_x", "start_y", "end_x", "end_y"), &RtsExtension::queue_road);
         ClassDB::bind_method(D_METHOD("get_road_segments"), &RtsExtension::get_road_segments);
+        ClassDB::bind_method(D_METHOD("add_public_road", "start_x", "start_y", "end_x", "end_y"), &RtsExtension::add_public_road);
         ClassDB::bind_method(D_METHOD("update_simulation", "delta_ms"), &RtsExtension::update_simulation);
         ClassDB::bind_method(D_METHOD("create_unit", "x", "y"), &RtsExtension::create_unit);
         ClassDB::bind_method(D_METHOD("create_faction_base", "faction_id", "x", "y"), &RtsExtension::create_faction_base);
@@ -1209,6 +1210,12 @@ public:
         record_action("queue_road", {static_cast<double>(engineer_id), static_cast<double>(faction_id), start_x, start_y, end_x, end_y});
         return rts::runtime_simulation()->queue_road(
             static_cast<rts::EntityId>(engineer_id), static_cast<rts::FactionId>(faction_id),
+            static_cast<float>(start_x), static_cast<float>(start_y),
+            static_cast<float>(end_x), static_cast<float>(end_y));
+    }
+
+    bool add_public_road(double start_x, double start_y, double end_x, double end_y) const {
+        return rts::runtime_simulation()->add_public_road(
             static_cast<float>(start_x), static_cast<float>(start_y),
             static_cast<float>(end_x), static_cast<float>(end_y));
     }
