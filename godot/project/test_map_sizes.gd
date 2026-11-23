@@ -61,6 +61,12 @@ func _run() -> void:
 		check(drawn_roads.size() / 6 >= int(view.public_road_count), "%d km: every road is reported to the view" % size_km)
 		feeders_by_size[size_km] = int(view.power_feeder_count)
 		check(int(view.power_feeder_count) >= 2, "%d km: villages are fed from the grid (%d lines)" % [size_km, int(view.power_feeder_count)])
+		check(view.ports_view != null and view.ports_view.ports.size() == 5, "%d km: the five ports are in the game" % size_km)
+		var port_states: Array = view.extension.call("ports_state")
+		check(port_states.size() == 5, "%d km: the simulation holds five ports" % size_km)
+		for port_state: Dictionary in port_states:
+			check(bool(view.extension.call("is_land_position", float(port_state.x), float(port_state.y))), "%d km: port %d has a quay on land" % [size_km, int(port_state.id)])
+		check(int(port_states[3].owner) == 0 and int(port_states[4].owner) == 1 and int(port_states[0].owner) == -1, "%d km: each side starts with a port and two stay neutral" % size_km)
 		buildings_by_size[size_km] = int(view.civilian_building_instance_count)
 		check(int(view.civilian_building_instance_count) >= 30, "%d km: the land has buildings (%d)" % [size_km, int(view.civilian_building_instance_count)])
 		for _tick_index in range(200):

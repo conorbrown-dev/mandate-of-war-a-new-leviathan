@@ -40,6 +40,10 @@ const SHORT_REASONS := {
 	"INSUFFICIENT MATERIALS": "NOT ENOUGH MATERIALS",
 	"ROAD ROUTE UNAVAILABLE": "NEEDS ROAD ROUTE",
 	"RAIL ROUTE UNAVAILABLE": "NEEDS RAIL ROUTE",
+	"NO PORT HELD": "NEEDS A PORT",
+	"PORT NOT HELD": "NEEDS A PORT",
+	"SEA LANE CONTESTED": "SEA LANE BLOCKED",
+	"NO CARGO SHIP": "NO CARGO SHIP",
 }
 
 var _tab := TAB_GROUND
@@ -128,7 +132,7 @@ func _ready() -> void:
 	_tabs.tab_selected.connect(_select_tab)
 	_transport_tabs = TabsComponent.new()
 	_transport_tabs.name = "GroundTransportTabs"
-	_transport_tabs.set_tabs(PackedStringArray(["AIRLIFT", "ROAD", "RAIL"]))
+	_transport_tabs.set_tabs(PackedStringArray(["AIRLIFT", "ROAD", "RAIL", "SEA"]))
 	_transport_tabs.tab_selected.connect(_select_ground_transport)
 	column.add_child(_transport_tabs)
 	var status_box := HBoxContainer.new()
@@ -203,7 +207,7 @@ func _ready() -> void:
 	help.theme_type_variation = "CaptionLabel"
 	help.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	help.custom_minimum_size.x = WINDOW_WIDTH - Tokens.SPACE_XL * 2
-	help.text = "Forces arrive from outside the theater. AIRLIFT needs an airfield; ROAD and RAIL use their marked corridors and unload at separate terminals. RAIL is faster. PARADROP sends light units to ground you can see."
+	help.text = "Forces arrive from outside the theater. AIRLIFT needs an airfield; ROAD and RAIL use their marked corridors and unload at separate terminals. RAIL is faster. SEA needs a port you hold: a cargo ship sails in and can be sunk, and an enemy warship in the lane blocks it. PARADROP sends light units to ground you can see."
 	var help_margin := _margin(Tokens.SPACE_XL, 0, Tokens.SPACE_XL, Tokens.SPACE_LG)
 	root.add_child(help_margin)
 	help_margin.add_child(help)
@@ -297,7 +301,7 @@ func _refresh() -> void:
 	var lines: PackedStringArray = []
 	for force in _inbound:
 		var mode := int(force.get("route_mode", 0))
-		var drop := "PARADROP " if bool(force.get("airdrop", false)) else ("ROAD " if mode == 1 else "RAIL " if mode == 2 else "AIR ")
+		var drop := "PARADROP " if bool(force.get("airdrop", false)) else ("ROAD " if mode == 1 else "RAIL " if mode == 2 else "SEA " if mode == 3 else "AIR ")
 		lines.append("%s%s  %.0f S" % [drop, String(_unit_names.get(int(force.type), "UNIT")).to_upper(), float(force.remaining_ms) / 1000.0])
 	_inbound_label.text = "INBOUND  //  " + ("   ·   ".join(lines) if not lines.is_empty() else "NONE")
 	_inbound_label.add_theme_color_override("font_color", Tokens.ACCENT_STRONG if not lines.is_empty() else Tokens.TEXT_MUTED)
@@ -325,7 +329,7 @@ func _add_card(entry: Dictionary) -> void:
 	var available := bool(entry.get("available", false))
 	var reason := String(entry.get("reason", ""))
 	if _tab == TAB_GROUND and _ground_transport_mode > 0:
-		reason = String(entry.get("road_reason" if _ground_transport_mode == 1 else "rail_reason", ""))
+		reason = String(entry.get("road_reason" if _ground_transport_mode == 1 else "rail_reason" if _ground_transport_mode == 2 else "sea_reason", ""))
 		available = reason.is_empty()
 	var holder := VBoxContainer.new()
 	holder.name = "Card_%d" % int(entry.get("type", -1))
@@ -357,7 +361,7 @@ func _add_card(entry: Dictionary) -> void:
 	cost.insufficient = reason == "INSUFFICIENT MATERIALS"
 	stats.add_child(cost)
 	var time := Label.new()
-	time.text = "%.0f S + %s" % [float(entry.get("build_seconds", 0.0)), "FLIGHT" if is_air or _ground_transport_mode == 0 else "ROAD" if _ground_transport_mode == 1 else "RAIL"]
+	time.text = "%.0f S + %s" % [float(entry.get("build_seconds", 0.0)), "FLIGHT" if is_air or _ground_transport_mode == 0 else "ROAD" if _ground_transport_mode == 1 else "RAIL" if _ground_transport_mode == 2 else "SEA"]
 	time.theme_type_variation = "MutedLabel"
 	time.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	time.tooltip_text = "Build time before the transport departs, then its flight time."
@@ -375,7 +379,7 @@ func _add_card(entry: Dictionary) -> void:
 	order.variant = "primary"
 	order.disabled = not available
 	order.custom_minimum_size.y = 40
-	order.tooltip_text = "Order %s for %d Materials via %s." % [String(entry.get("name", "unit")), int(float(entry.get("material", 0.0))), "air" if is_air or _ground_transport_mode == 0 else "road" if _ground_transport_mode == 1 else "rail"]
+	order.tooltip_text = "Order %s for %d Materials via %s." % [String(entry.get("name", "unit")), int(float(entry.get("material", 0.0))), "air" if is_air or _ground_transport_mode == 0 else "road" if _ground_transport_mode == 1 else "rail" if _ground_transport_mode == 2 else "sea"]
 	order.pressed.connect(func(): order_unit.emit(int(entry.get("type", -1)), 0 if is_air else _ground_transport_mode))
 	order.mouse_entered.connect(show_description.bind(entry))
 	holder.add_child(order)

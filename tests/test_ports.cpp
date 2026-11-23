@@ -204,3 +204,40 @@ TEST(a_hidden_enemy_ship_does_not_block_the_lane) {
     verify(simulation.sea_delivery_refusal(FactionId::MASS_WARFARE, UnitType::MASS_SWARM_TANK, 0).empty(),
            "a ship nobody can see does not give itself away by blocking the lane");
 }
+
+TEST(the_ai_sends_a_squad_to_take_a_port_and_holds_it) {
+    PortTheater theater;
+    auto& simulation = theater.simulation;
+    simulation.begin_match(theater.player_post, theater.enemy_post);
+    simulation.ai_manager().configure_assault(-19500.0f, -19000.0f, -5500.0f, 19000.0f, 3, 4, 200);
+    // The first wave takes whatever is ready. Fresh units arriving after it has
+    // gone are the army the AI can spare for a port.
+    for (int unit = 0; unit < 4; ++unit) theater.tank(-15000.0f + unit * 12.0f, -6460.0f, FactionId::MASS_WARFARE);
+    theater.run(20 * 10);
+    verify(simulation.ai_manager().waves_launched() >= 1, "the first wave has gone");
+    for (int unit = 0; unit < 5; ++unit) theater.tank(-15000.0f + unit * 12.0f, -6420.0f, FactionId::MASS_WARFARE);
+    theater.run(20 * 10);
+    verify(simulation.ai_manager().port_target() != 0, "the AI picks a port to take");
+    verify(simulation.ai_manager().port_squad_size() == 2, "it sends two units");
+    // The neutral port is taken before the one the player holds.
+    verify(simulation.ai_manager().port_target() == kNeutralPort, "a neutral port comes before an enemy one");
+    for (int tick = 0; tick < 20 * 60 * 12 && simulation.port_network().port(kNeutralPort)->owner != 1; ++tick) simulation.update(50.0f);
+    verify(simulation.port_network().port(kNeutralPort)->owner == 1, "the squad takes the port");
+}
+
+TEST(the_ai_ships_forces_in_through_a_port_it_holds) {
+    PortTheater theater;
+    auto& simulation = theater.simulation;
+    simulation.port_network().set_owner(kNeutralPort, 1);
+    simulation.begin_match(theater.player_post, theater.enemy_post);
+    simulation.ai_manager().configure_assault(-19500.0f, -19000.0f, -5500.0f, 19000.0f, 100, 4, 200);
+    int by_sea = 0;
+    for (int tick = 0; tick < 20 * 120; ++tick) {
+        simulation.update(50.0f);
+        for (const auto& force : simulation.inbound_forces()) {
+            if (force.faction == FactionId::MASS_WARFARE && force.route_mode == static_cast<uint8_t>(Simulation::GroundTransport::SEA)) ++by_sea;
+        }
+    }
+    verify(simulation.ai_manager().sea_orders() > 0, "the AI orders forces by sea");
+    verify(by_sea > 0, "its orders are on the sea route");
+}

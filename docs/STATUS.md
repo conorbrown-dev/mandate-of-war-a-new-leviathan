@@ -364,7 +364,45 @@ Known gaps: the AI does not
 use paratroop drops yet; Elite Precision has only the scout car to drop and Industrial
 none; a drop zone that is lost between order and landing is still used.
 
-Still not done under the transport rule: sea landings, and a refund if an airfield is
+## Ports and cargo ships (issue #23, 2026-11-23)
+
+Sea landings are done. A port is a coastal site (`src/simulation/ports.hpp`, `Simulation::add_port`).
+Broken Strait has five (`ports` in `commander_start_skirmish.json`, scaled with the map size): Eastern
+Pier (the player's), West Quay (the AI's) and three neutral, North Harbor, Central Quay and South Harbor.
+
+- **Capture.** Like depots and power stations: a ground unit within 140 m, with no enemy ground unit
+  there, takes the port after holding on for 8 s (`kPortHoldSeconds`). A claim fades if the unit leaves,
+  and a contested port is taken by neither side.
+- **Sea delivery.** `GroundTransport::SEA` (mode 3 in `order_ground_transport`, a SEA tab in Strategic
+  Command). A side with a port orders troops at the catalog price; after the unit's build time a real
+  cargo ship (Seaspan, Dockhorse or Bulkhead Freighter, unit ids 21 to 23, unarmed, 500 HP, 22 m/s)
+  sails from the start of the port's sea lane to its berth, unloads onto the quay and leaves. The order is
+  a recorded BUILD command (`SEA_DELIVERY_ORDER_FLAG`, port id in bits 8 to 15, 0 picks the nearest held
+  port with a clear lane).
+- **Seaway control.** A side ships only through a port it holds ("NO PORT HELD", "PORT NOT HELD"). An armed
+  enemy vessel that side can currently see within 700 m of the lane blocks new orders ("SEA LANE
+  CONTESTED"); a ship nobody can see never gives itself away. A cargo ship is a real vessel: ground and
+  naval weapons can sink it, its load is lost with it and the price is not refunded
+  (`delivery_state.ships_lost`). If the port changes hands while a ship is on its way, the ship waits at the
+  berth and unloads once its side holds the port again.
+- **The AI** keeps its air pipeline, because a ship takes minutes where an airlift takes seconds (an
+  early version that shipped from the start delayed its first wave from 69 s to 322 s). It orders by sea
+  only as a fallback when it has no prospect of an airfield (none, none queued, no engineer), and as
+  overflow when 22 of its 24 inbound slots are taken. After its first wave has gone, a two-unit squad
+  (once it has four fighting units to spare) drives to the nearest port it does not hold, neutral ports
+  before enemy ones, and stays until it is taken. Port positions are treated as public coastal sites.
+- **Presentation.** `ports_view.gd` draws the quay model, a holder ring and a name label with capture
+  progress. A port's holder is updated only while the quay is in sight (or held), then remembered.
+- **Evidence.** 11 native tests in `tests/test_ports.cpp` (capture, contest, refusals, a full voyage, a sunk
+  ship, a port lost in transit, recorded command, lane blocked by a visible armed ship, a hidden one, the
+  AI taking a port, the AI shipping in) and `test_ports.gd` through the real match scene, which also
+  proves the narrow strip along the west coast is sailable. Not seen on screen.
+- **Known gaps.** One ship per order (no convoys), no escort or patrol boat for Mass or Industrial yet (only
+  Elite's Breakwater Patrol Boat can contest a lane), cargo ship and port are generated placeholder models
+  (no weapons, no animation, no wake), ports cannot be destroyed, no sea supply of fuel yet, and the
+  strategic map has no port icon beyond the 3D label.
+
+Still not done under the transport rule: a refund if an airfield is
 destroyed with forces in the air (they wait for a landing site instead). The legacy
 single-package `reinforcement_delivery_*` native calls remain, and only anchor the
 parked F-15C.

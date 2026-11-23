@@ -116,6 +116,7 @@ const RadioFeedScript := preload("res://ui/components/radio_feed.gd")
 const StrategicCommandPanelScript := preload("res://ui/components/strategic_command_panel.gd")
 const CommandPostModel := preload("res://structures/command_post_model.gd")
 const PowerGridViewScript := preload("res://power_grid_view.gd")
+const PortsViewScript := preload("res://ports_view.gd")
 const CommandPostPanelScript := preload("res://ui/components/command_post_panel.gd")
 const MagnifierViewScript := preload("res://ui/components/magnifier_view.gd")
 const ArmorTexture := preload("res://assets/units/near_future_armor_tile_v1.png")
@@ -329,6 +330,7 @@ var queued_build_markers: Node3D
 var material_site_state: Dictionary = {}
 var fuel_depot_state: Dictionary = {}
 var power_grid_view: Node3D
+var ports_view: Node3D
 var fuel_supply_status := ""
 var fuel_supply_reason_seen := ""
 var fuel_supply_status_expires_msec := 0
@@ -806,11 +808,11 @@ func _on_strategic_command_order_unit(unit_type: int, mode: int = 0) -> void:
 	if not accepted:
 		for entry in extension.call("get_build_catalog", HUMAN_PLAYER_ID):
 			if int(entry.get("type", -1)) == unit_type:
-				var reason_key := "reason" if mode == 0 else "road_reason" if mode == 1 else "rail_reason"
+				var reason_key := "reason" if mode == 0 else "road_reason" if mode == 1 else "rail_reason" if mode == 2 else "sea_reason"
 				refusal = String(entry.get(reason_key, ""))
 		reinforcement_delivery_status = refusal if not refusal.is_empty() else "ORDER REFUSED"
 	else:
-		reinforcement_delivery_status = "FORCES ORDERED // %s INBOUND" % ["AIR", "ROAD", "RAIL"][clampi(mode, 0, 2)]
+		reinforcement_delivery_status = "FORCES ORDERED // %s INBOUND" % ["AIR", "ROAD", "RAIL", "SEA"][clampi(mode, 0, 3)]
 	_sync_strategic_command()
 	_update_hud()
 
@@ -1427,6 +1429,7 @@ func _on_start_skirmish_pressed() -> void:
 	_spawn_material_sites()
 	_spawn_fuel_depots()
 	_spawn_power_grid()
+	_spawn_ports()
 	_spawn_civilian_buildings()
 	_begin_battle()
 	_set_selected(_player_engineer_id(), true)
@@ -2035,6 +2038,34 @@ func _spawn_power_grid() -> void:
 		return
 	if not power_grid_view.load_grid(path, map_scale):
 		push_warning("Power grid data is unavailable: %s" % path)
+
+
+# Coastal ports: the side that holds one can ship forces in by cargo ship.
+# ports_view.gd draws them; the simulation owns who holds each and whether the
+# sea lane is open.
+func _spawn_ports() -> void:
+	if ports_view == null:
+		ports_view = PortsViewScript.new()
+		ports_view.name = "Ports"
+		ports_view.friendly_color = PLAYER_FACTION_COLOR
+		ports_view.hostile_color = AI_FACTION_COLOR
+		add_child(ports_view)
+	ports_view.setup(extension, HUMAN_PLAYER_ID, _terrain_height_at,
+		func(x: float, y: float) -> bool: return bool(extension.call("can_see", HUMAN_PLAYER_ID, x, y)))
+	var definitions: Array = scenario_definition.get("ports", [])
+	if definitions.is_empty():
+		ports_view.clear()
+		return
+	ports_view.load_ports(definitions)
+
+
+func _sync_ports() -> void:
+	if ports_view == null or not ports_view.active:
+		return
+	ports_view.sync()
+	var notice := String(ports_view.take_notice())
+	if not notice.is_empty():
+		_announce_intel(notice)
 
 
 func _sync_power_grid() -> void:
@@ -2699,6 +2730,9 @@ func _spawn_civilian_buildings() -> void:
 	# transport routes (a blocked cell would make a route invalid).
 	for depot in fuel_depot_state.values():
 		spawn_origins.append(depot.position)
+	if ports_view != null:
+		for port in ports_view.ports.values():
+			spawn_origins.append(port.quay)
 	if power_grid_view != null:
 		for node in power_grid_view.nodes.values():
 			spawn_origins.append(node.position)
@@ -5437,6 +5471,7 @@ func _update_hud() -> void:
 		_sync_terrain_edits()
 		_sync_fuel_supply()
 		_sync_power_grid()
+		_sync_ports()
 		_sync_strategic_command()
 		_sync_paradrop_markers()
 	_activate_reinforcement_delivery_from_airfield()

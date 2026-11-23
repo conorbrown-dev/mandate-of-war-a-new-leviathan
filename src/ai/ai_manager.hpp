@@ -66,6 +66,9 @@ public:
     const AIDifficulty& difficulty() const { return difficulty_; }
     int next_wave_size() const { return next_wave_size_; }
     bool is_home_guard(EntityId unit) const { return home_guard_.contains(unit); }
+    int port_squad_size() const { return static_cast<int>(port_squad_.size()); }
+    uint32_t port_target() const { return port_target_; }
+    int sea_orders() const { return sea_orders_; }
 
 private:
     Simulation* simulation_ = nullptr;
@@ -123,6 +126,10 @@ private:
     AIDoctrine doctrine_;
     AIDifficulty difficulty_;
     std::unordered_set<EntityId> home_guard_;
+    // The units sent to take a port, and the port they are bound for (0 if none).
+    std::unordered_set<EntityId> port_squad_;
+    uint32_t port_target_ = 0;
+    int sea_orders_ = 0;
     // When each enemy now in sight was first seen, for the reaction delay.
     std::unordered_map<EntityId, uint32_t> first_seen_;
     size_t order_cursor_ = 0;
@@ -149,6 +156,7 @@ private:
     bool find_airfield_site(EntityId base, float& site_x, float& site_y) const;
     // False when the transport rule would refuse this unit now.
     bool can_receive(UnitType type) const;
+    bool airfield_expected() const;
     size_t stalest_sector(float x, float y, EntityId scout = INVALID_ENTITY, EntityId group = INVALID_ENTITY) const;
     static EntityId sweep_group(EntityId unit) { return unit / 3; }
     bool sweep_target(EntityId unit, float& x, float& y) const;
@@ -156,6 +164,7 @@ private:
     bool is_recon_asset(EntityId unit) const;
     bool nearest_contact(float x, float y, float& contact_x, float& contact_y) const;
     void update_waves();
+    void update_port_squad();
     bool home_threatened(EntityId base) const;
     void update_operational_plan();
     void plan_expansion();

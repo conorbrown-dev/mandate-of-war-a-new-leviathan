@@ -50,6 +50,10 @@ static func scale_definition(definition: Dictionary, size_m: float) -> Dictionar
 			for key in ["entry", "terminal"]:
 				if mode.has(key):
 					mode[key] = point(mode[key], scale)
+	for port: Dictionary in scaled.get("ports", []):
+		for key in ["quay", "berth", "entry"]:
+			if port.has(key):
+				port[key] = point(port[key], scale)
 	scaled["map_scale"] = scale
 	return scaled
 

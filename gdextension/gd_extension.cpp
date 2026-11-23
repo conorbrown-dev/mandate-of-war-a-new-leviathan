@@ -302,6 +302,8 @@ protected:
         ClassDB::bind_method(D_METHOD("configure_transport_route", "faction_id", "mode", "entry_x", "entry_y", "terminal_x", "terminal_y"), &RtsExtension::configure_transport_route);
         ClassDB::bind_method(D_METHOD("transport_route", "faction_id", "mode"), &RtsExtension::transport_route);
         ClassDB::bind_method(D_METHOD("order_ground_transport", "faction_id", "unit_type", "mode"), &RtsExtension::order_ground_transport);
+        ClassDB::bind_method(D_METHOD("port_add", "id", "x", "y", "berth_x", "berth_y", "entry_x", "entry_y", "owner"), &RtsExtension::port_add);
+        ClassDB::bind_method(D_METHOD("ports_state"), &RtsExtension::ports_state);
         ClassDB::bind_method(D_METHOD("landing_zone_set", "faction_id", "x", "y"), &RtsExtension::landing_zone_set);
         ClassDB::bind_method(D_METHOD("delivery_state", "faction_id"), &RtsExtension::delivery_state);
         ClassDB::bind_method(D_METHOD("ground_fuel_burn_set", "enabled"), &RtsExtension::ground_fuel_burn_set);
@@ -1109,6 +1111,8 @@ public:
                     rts::Simulation::GroundTransport::ROAD).c_str());
                 entry["rail_reason"] = String(simulation.delivery_refusal_via(faction, type,
                     rts::Simulation::GroundTransport::RAIL).c_str());
+                entry["sea_reason"] = String(simulation.delivery_refusal_via(faction, type,
+                    rts::Simulation::GroundTransport::SEA).c_str());
             }
             entry["airdrop"] = delivered && prototype.airdrop;
             entry["is_structure"] = false;
@@ -1344,11 +1348,44 @@ public:
     }
 
     bool order_ground_transport(int64_t faction_id, int64_t unit_type, int64_t mode) const {
-        if (faction_id < 0 || faction_id >= 3 || unit_type < 0 || unit_type > 255 || mode < 1 || mode > 2) return false;
+        if (faction_id < 0 || faction_id >= 3 || unit_type < 0 || unit_type > 255 || mode < 1 || mode > 3) return false;
         record_action("order_ground_transport", {static_cast<double>(faction_id), static_cast<double>(unit_type), static_cast<double>(mode)});
+        if (mode == 3) {
+            // A sea order picks the best port the side holds (port 0).
+            return rts::runtime_simulation()->issue_sea_delivery_command(
+                static_cast<rts::FactionId>(faction_id), static_cast<rts::UnitType>(unit_type), 0) == 1;
+        }
         return rts::runtime_simulation()->issue_ground_transport_command(
             static_cast<rts::FactionId>(faction_id), static_cast<rts::UnitType>(unit_type),
             static_cast<rts::Simulation::GroundTransport>(mode)) == 1;
+    }
+
+    // Scenario setup: a coastal port, its quay, berth and the start of its sea
+    // lane, and who holds it (-1 neutral).
+    bool port_add(int64_t id, double x, double y, double berth_x, double berth_y, double entry_x, double entry_y, int64_t owner) const {
+        if (id <= 0 || id > 255 || owner < -1 || owner > 2) return false;
+        record_action("port_add", {static_cast<double>(id), x, y, berth_x, berth_y, entry_x, entry_y, static_cast<double>(owner)});
+        return rts::runtime_simulation()->add_port(static_cast<uint32_t>(id), static_cast<float>(x), static_cast<float>(y),
+            static_cast<float>(berth_x), static_cast<float>(berth_y), static_cast<float>(entry_x), static_cast<float>(entry_y),
+            static_cast<int>(owner));
+    }
+
+    // Every port's true state, for the presentation to remember what it saw.
+    Array ports_state() const {
+        Array ports;
+        for (const auto& [id, port] : rts::runtime_simulation()->port_network().ports()) {
+            Dictionary entry;
+            entry["id"] = static_cast<int64_t>(id);
+            entry["x"] = port.x;
+            entry["y"] = port.y;
+            entry["berth"] = Vector2(port.berth_x, port.berth_y);
+            entry["entry"] = Vector2(port.entry_x, port.entry_y);
+            entry["owner"] = port.owner;
+            entry["claimant"] = port.claimant;
+            entry["hold"] = std::clamp(static_cast<double>(port.hold_ms) / (rts::kPortHoldSeconds * 1000.0), 0.0, 1.0);
+            ports.append(entry);
+        }
+        return ports;
     }
 
     // Every Materials site's true holder, for the presentation to remember;
@@ -1460,12 +1497,21 @@ public:
                 entry["progress"] = std::clamp(static_cast<double>(elapsed) / static_cast<double>(duration), 0.0, 1.0);
                 entry["in_transit"] = simulation.simulation_tick() >= force.launch_tick;
             }
+            if (force.route_mode == 3) {
+                entry["port_id"] = static_cast<int64_t>(force.port_id);
+                if (const auto* port = simulation.port_network().port(force.port_id)) {
+                    entry["entry"] = Vector2(port->entry_x, port->entry_y);
+                    entry["terminal"] = Vector2(port->berth_x, port->berth_y);
+                }
+                entry["in_transit"] = force.transport != rts::INVALID_ENTITY;
+            }
             entry["remaining_ms"] = force.arrive_tick > simulation.simulation_tick()
                 ? static_cast<double>(force.arrive_tick - simulation.simulation_tick()) * 50.0 : 0.0;
             inbound.append(entry);
         }
         state["inbound"] = inbound;
         state["airdrops_lost"] = simulation.paradrops_lost(faction);
+        state["ships_lost"] = simulation.ships_lost(faction);
         return state;
     }
 

@@ -90,6 +90,7 @@ void AIManager::update(float delta_ms) {
         plan_expansion();
         update_scouts();
         update_waves();
+        update_port_squad();
         update_sweep();
         update_operational_plan();
         defend_base();
@@ -119,6 +120,8 @@ void AIManager::reset() {
     sweep_tasks_.clear();
     scenario_first_wave_ = scenario_wave_growth_ = scenario_max_wave_ = 0;
     home_guard_.clear();
+    port_squad_.clear();
+    port_target_ = 0;
     first_seen_.clear();
     order_cursor_ = mixed_cursor_ = 0;
     scouts_on_order_ = 0;
@@ -159,6 +162,8 @@ void AIManager::configure_assault(float min_x, float min_y, float max_x, float m
     apply_wave_plan();
     committed_.clear();
     home_guard_.clear();
+    port_squad_.clear();
+    port_target_ = 0;
 }
 
 bool AIManager::is_recon_asset(EntityId unit) const {
@@ -334,6 +339,62 @@ bool AIManager::nearest_contact(float x, float y, float& contact_x, float& conta
     return std::isfinite(best);
 }
 
+// A small squad drives to the nearest port the AI does not hold and stays until
+// it is taken, so the AI can ship forces in and deny the enemy a landing point.
+// Ports are public coastal sites, so their positions are not hidden knowledge.
+void AIManager::update_port_squad() {
+    port_target_ = 0;
+    // The opening is spent on the first wave; ports come after it has gone.
+    if (!assault_active_ || waves_launched_ < 1 || !simulation_->port_network().active()) return;
+    const auto base = simulation_->production_manager().faction_line(faction_id_);
+    if (base == INVALID_ENTITY) return;
+    for (auto member = port_squad_.begin(); member != port_squad_.end();) {
+        const bool lost = !std::binary_search(visible_units_.begin(), visible_units_.end(), *member);
+        member = lost ? port_squad_.erase(member) : std::next(member);
+    }
+    const float base_x = simulation_->get_unit_x(base), base_y = simulation_->get_unit_y(base);
+    float best_score = std::numeric_limits<float>::infinity();
+    for (const auto& [id, port] : simulation_->port_network().ports()) {
+        if (port.owner == static_cast<int>(faction_id_)) continue;
+        // Neutral ports first: taking one costs nobody a fight.
+        const float score = std::hypot(port.x - base_x, port.y - base_y) + (port.owner >= 0 ? 4000.0f : 0.0f);
+        if (score < best_score) {
+            best_score = score;
+            port_target_ = id;
+        }
+    }
+    if (port_target_ == 0) {
+        port_squad_.clear();
+        return;
+    }
+    const Port& target = *simulation_->port_network().port(port_target_);
+    // Top the squad up from idle fighting units, once there is an army to spare.
+    std::vector<EntityId> idle;
+    for (EntityId unit : visible_units_) {
+        if (unit == base || unit == expansion_unit_ || committed_.contains(unit) || home_guard_.contains(unit) ||
+            port_squad_.contains(unit) || is_recon_asset(unit)) continue;
+        const auto* data = simulation_->component_manager().get_component<UnitData>(unit);
+        if (!data || data->speed <= 0.0f || !simulation_->component_manager().get_component<Weapon>(unit)) continue;
+        const auto prototype = get_unit_prototypes().find(static_cast<UnitType>(data->unit_type));
+        if (prototype != get_unit_prototypes().end() && (prototype->second.is_naval || prototype->second.is_aircraft)) continue;
+        idle.push_back(unit);
+    }
+    constexpr size_t kSquadSize = 2;
+    constexpr size_t kArmyToSpare = 4;
+    if (idle.size() >= kArmyToSpare) {
+        while (port_squad_.size() < kSquadSize && !idle.empty()) {
+            port_squad_.insert(idle.back());
+            idle.pop_back();
+        }
+    }
+    for (EntityId unit : port_squad_) {
+        const float dx = simulation_->get_unit_x(unit) - target.x, dy = simulation_->get_unit_y(unit) - target.y;
+        if (dx * dx + dy * dy > 60.0f * 60.0f) {
+            simulation_->issue_commands({unit}, faction_id_, CommandType::MOVE, target.x, target.y);
+        }
+    }
+}
+
 void AIManager::update_waves() {
     if (!assault_active_) return;
     const auto base = simulation_->production_manager().faction_line(faction_id_);
@@ -345,7 +406,7 @@ void AIManager::update_waves() {
     }
     std::vector<EntityId> ready;
     for (EntityId unit : visible_units_) {
-        if (unit == base || unit == expansion_unit_ || committed_.contains(unit) || home_guard_.contains(unit) || is_recon_asset(unit)) continue;
+        if (unit == base || unit == expansion_unit_ || committed_.contains(unit) || home_guard_.contains(unit) || port_squad_.contains(unit) || is_recon_asset(unit)) continue;
         const auto* data = simulation_->component_manager().get_component<UnitData>(unit);
         if (!data || data->speed <= 0.0f || !simulation_->component_manager().get_component<Weapon>(unit)) continue;
         if (static_cast<int>(home_guard_.size()) < doctrine_.home_guard) home_guard_.insert(unit);
@@ -565,6 +626,20 @@ void AIManager::produce_for_assault(EntityId base) {
     if (holding_for_fuel(production.get_unit_metal_cost(faction_id_, choice))) return;
     if (doctrine_.save_for_recon_flight && enemy_unknown && storage != production.storages().end() &&
         storage->second.tactical.materials.current - price < flight_price) return;
+    // A ship takes minutes where an airlift takes seconds, so the sea is the
+    // fallback for a side with no prospect of an airfield, and the overflow when
+    // the air route is nearly full.
+    if (simulation_->needs_delivery(choice) && simulation_->sea_delivery_refusal(faction_id_, choice, 0).empty()) {
+        const bool air_open = simulation_->delivery_refusal(faction_id_, choice).empty();
+        constexpr int kAirQueueBeforeSea = Simulation::kMaxInboundForces - 2;
+        if ((!air_open && !airfield_expected()) || simulation_->inbound_count(faction_id_) >= kAirQueueBeforeSea) {
+            if (simulation_->issue_sea_delivery_command(faction_id_, choice, 0) > 0) {
+                ++sea_orders_;
+                ++mixed_cursor_;
+                return;
+            }
+        }
+    }
     if (simulation_->issue_build_commands({base}, faction_id_, base_x, base_y, static_cast<int>(choice)) > 0) ++mixed_cursor_;
 }
 
@@ -626,7 +701,21 @@ bool AIManager::holding_for_fuel(float price) const {
 }
 
 bool AIManager::can_receive(UnitType type) const {
-    return !simulation_->needs_delivery(type) || simulation_->delivery_refusal(faction_id_, type).empty();
+    return !simulation_->needs_delivery(type) || simulation_->delivery_refusal(faction_id_, type).empty() ||
+        (!airfield_expected() && simulation_->sea_delivery_refusal(faction_id_, type, 0).empty());
+}
+
+// True while the AI has an airfield, is building one, or has an engineer that
+// can. Only a side with no prospect of one falls back on the sea alone; a ship
+// takes minutes where an airlift takes seconds, so money is not spent on ships
+// while an airfield is about to open.
+bool AIManager::airfield_expected() const {
+    constexpr uint8_t kAirfield = 2;
+    if (simulation_->territorial_control_manager().has_active_installation(faction_id_, InstallationType::AIRFIELD) ||
+        simulation_->structure_queued(faction_id_, kAirfield)) return true;
+    return std::any_of(visible_units_.begin(), visible_units_.end(), [this](EntityId unit) {
+        return simulation_->is_construction_unit(unit);
+    });
 }
 
 // Under the transport rule ground forces land only at an airfield. The AI
