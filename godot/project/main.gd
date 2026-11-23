@@ -98,6 +98,7 @@ const TERRAIN_MASKS_PATH := "res://scenarios/terrain_masks.png"
 const TREE_INSTANCE_TARGET := 960
 const TREE_CLUSTER_COUNT := 9
 const SkirmishConfigLoader := preload("res://skirmish_config.gd")
+const MapScale := preload("res://map_scale.gd")
 const ControlPointPresentationScript := preload("res://control_point_presentation.gd")
 const ReinforcementPresentationScript := preload("res://reinforcement_delivery_presentation.gd")
 const RangeEnvelopeRendererScript := preload("res://range_envelope_renderer.gd")
@@ -181,6 +182,14 @@ var terrain_mesh_arrays: Array = []
 var terrain_revision_seen := 0
 var terrain_vegetation: TerrainVegetation
 var terrain_world_width := 320.0
+# The scenario as authored (40 km), and the map size chosen on the startup screen.
+var base_scenario_definition: Dictionary = {}
+var map_size_km := MapScale.DEFAULT_SIZE_KM
+var map_scale := 1.0
+var camera_max_distance := CAMERA_MAX_DISTANCE
+var camera_zoom_levels: Array = CAMERA_ZOOM_LEVELS.duplicate()
+var aircraft_visible_distance := AIRCRAFT_VISIBLE_DISTANCE
+var map_size_picker: OptionButton
 var terrain_world_height := 320.0
 
 var mesh_cache := {}
@@ -549,8 +558,9 @@ func _ready() -> void:
 		start_button.disabled = true
 		return
 
-	scenario_definition = scenario_result.definition
-	_configure_scenario_theater()
+	base_scenario_definition = scenario_result.definition
+	_apply_map_size(MapScale.DEFAULT_SIZE_KM)
+	_add_map_size_picker()
 	scenario_title.text = String(scenario_definition.display_name).to_upper()
 	# Sentence case for prose: easier to read than all-caps paragraphs.
 	scenario_description.text = String(scenario_definition.description)
@@ -1221,6 +1231,51 @@ func _extract_ai_from_map(map_data: Dictionary) -> Dictionary:
 	return {"faction_id": 1, "spawn": [0.0, 0.0], "units": []}
 
 
+# Redraws the authored scenario at the chosen size. Only before the match starts.
+func _apply_map_size(size_km: int) -> void:
+	map_size_km = size_km
+	var size_m := MapScale.size_meters(size_km)
+	map_scale = MapScale.factor(size_m)
+	scenario_definition = MapScale.scale_definition(base_scenario_definition, size_m)
+	camera_zoom_levels = MapScale.camera_levels(map_scale)
+	camera_max_distance = float(camera_zoom_levels.back())
+	aircraft_visible_distance = camera_max_distance * 0.5
+	target_camera_distance = minf(target_camera_distance, camera_max_distance)
+	camera_distance = minf(camera_distance, camera_max_distance)
+	_configure_scenario_theater()
+
+
+func _add_map_size_picker() -> void:
+	if map_size_picker != null:
+		return
+	var row := start_button.get_parent()
+	var label := Label.new()
+	label.text = "MAP SIZE"
+	label.theme_type_variation = &"MutedLabel"
+	label.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	map_size_picker = OptionButton.new()
+	map_size_picker.custom_minimum_size = Vector2(150, 48)
+	map_size_picker.tooltip_text = "Size of the battlefield. The layout scales with it: small maps are quick fights, large maps are long marches."
+	var selected := 0
+	for index in range(MapScale.SIZES_KM.size()):
+		var km: int = MapScale.SIZES_KM[index]
+		map_size_picker.add_item("%d km x %d km" % [km, km], km)
+		if km == map_size_km:
+			selected = index
+	map_size_picker.select(selected)
+	map_size_picker.item_selected.connect(_on_map_size_selected)
+	row.add_child(label)
+	row.add_child(map_size_picker)
+	row.move_child(label, start_button.get_index())
+	row.move_child(map_size_picker, start_button.get_index())
+
+
+func _on_map_size_selected(index: int) -> void:
+	if match_started:
+		return
+	_apply_map_size(map_size_picker.get_item_id(index))
+
+
 func _configure_scenario_theater() -> void:
 	var landmass_nodes: Array[MeshInstance3D] = [west_landmass, east_landmass]
 	var landmasses: Array = scenario_definition.theater.landmasses
@@ -1245,6 +1300,10 @@ func _configure_scenario_theater() -> void:
 	if terrain.has("data") and terrain.data != "":
 		var heights := HeightMap.load_from_file(terrain.data)
 		if !heights.is_empty():
+			# Heights scale with the map so slopes match the authored 40 km theater.
+			if not is_equal_approx(map_scale, 1.0):
+				for height_index in range(heights.size()):
+					heights[height_index] *= map_scale
 			terrain_heights = heights
 			print("Loaded heightmap with %d values" % heights.size())
 			# A heightmap covers the complete theater.  Assigning it to each
@@ -1295,7 +1354,7 @@ func _on_start_skirmish_pressed() -> void:
 		float(east_theater_landmass.center[0]), float(east_theater_landmass.center[1]), float(east_theater_landmass.size[0]), float(east_theater_landmass.size[1]))
 	var theater_terrain: Dictionary = scenario_definition.theater.get("terrain", {})
 	if theater_terrain.get("data", "") != "":
-		extension.call("load_terrain_heightmap", theater_terrain.get("data", ""))
+		extension.call("load_terrain_heightmap", theater_terrain.get("data", ""), map_scale)
 	terrain_revision_seen = int(extension.call("get_terrain_revision"))
 	extension.call("start_simulation")
 	match_started = true
@@ -1910,6 +1969,7 @@ func _spawn_material_sites() -> void:
 	_clear_material_sites()
 	for definition in MATERIAL_SITES:
 		var site: Dictionary = definition.duplicate(true)
+		site.position = MapScale.vec(site.position, map_scale)
 		site.discovered = false
 		site.known_owner = -1
 		material_site_state[int(site.id)] = site
@@ -1936,7 +1996,7 @@ func _spawn_fuel_depots() -> void:
 		return
 	for definition in content.get("depots", []):
 		var coordinates: Array = definition.get("position", [0, 0])
-		var position := Vector2(float(coordinates[0]), float(coordinates[1]))
+		var position := Vector2(float(coordinates[0]), float(coordinates[1])) * map_scale
 		var stock := float(definition.get("stock", 0.0))
 		var id := int(definition.get("id", 0))
 		var owner := int(definition.get("owner", -1))
@@ -1973,7 +2033,7 @@ func _spawn_power_grid() -> void:
 	if path.is_empty():
 		power_grid_view.clear()
 		return
-	if not power_grid_view.load_grid(path):
+	if not power_grid_view.load_grid(path, map_scale):
 		push_warning("Power grid data is unavailable: %s" % path)
 
 
@@ -2444,13 +2504,13 @@ func _spawn_civilian_buildings() -> void:
 		var spawn: Array = faction.get("spawn", [0.0, 0.0])
 		spawn_origins.append(Vector2(float(spawn[0]), float(spawn[1])))
 	for site in MATERIAL_SITES:
-		spawn_origins.append(site.position)
+		spawn_origins.append(MapScale.vec(site.position, map_scale))
 	var clusters: Array = dressing.get("clusters", [])
 	for cluster in clusters:
 		var rng := RandomNumberGenerator.new()
 		rng.seed = int(cluster.get("seed", 1))
-		var center := Vector2(float(cluster.center[0]), float(cluster.center[1]))
-		var spread := Vector2(float(cluster.spread[0]), float(cluster.spread[1]))
+		var center := Vector2(float(cluster.center[0]), float(cluster.center[1])) * map_scale
+		var spread := Vector2(float(cluster.spread[0]), float(cluster.spread[1])) * clampf(map_scale, 0.5, 2.0)
 		var attempts := int(cluster.get("count", 0)) * 24
 		var placed := 0
 		for _attempt in range(attempts):
@@ -2878,7 +2938,7 @@ func _sync_unit_transforms() -> Vector2:
 				basis = Basis(Quaternion(Vector3.UP, _terrain_normal_at(x, z))) * basis
 			wrapper.set_ranges_airborne(airborne[index] != 0)
 			if _is_aircraft_type(int(entity_unit_types.get(entity_id, -1))):
-				wrapper.set_aircraft_presentation(AIRCRAFT_VISIBLE_DISTANCE)
+				wrapper.set_aircraft_presentation(aircraft_visible_distance)
 				wrapper.set_presentation_scale(camera_distance / AIRCRAFT_SIZE_REFERENCE_DISTANCE)
 			wrapper.apply_simulation_transform(Transform3D(basis, Vector3(x, height, z)))
 			wrapper.update_lod(unit_lod_distance)
@@ -3101,7 +3161,7 @@ func _update_camera(delta: float) -> void:
 	camera.cull_mask = (camera.cull_mask | model_layer) if camera_distance < UnitVisualRoot.MODEL_HIDE_DISTANCE else (camera.cull_mask & ~model_layer)
 	# Aircraft stay in the main view much farther out, to half of full zoom.
 	var aircraft_layer := int(UnitVisualRoot.AIRCRAFT_LAYER)
-	camera.cull_mask = (camera.cull_mask | aircraft_layer) if camera_distance < AIRCRAFT_VISIBLE_DISTANCE else (camera.cull_mask & ~aircraft_layer)
+	camera.cull_mask = (camera.cull_mask | aircraft_layer) if camera_distance < aircraft_visible_distance else (camera.cull_mask & ~aircraft_layer)
 	if zoom_focus_pending:
 		var under_cursor: Vector2 = _screen_to_world(zoom_focus_screen)
 		var correction := zoom_focus_world - under_cursor
@@ -3117,8 +3177,8 @@ func _update_camera(delta: float) -> void:
 
 
 func _cycle_camera_zoom() -> void:
-	var next_distance: float = CAMERA_ZOOM_LEVELS[0]
-	for level: float in CAMERA_ZOOM_LEVELS:
+	var next_distance: float = camera_zoom_levels[0]
+	for level: float in camera_zoom_levels:
 		if level > target_camera_distance + 0.01:
 			next_distance = level
 			break
@@ -3166,7 +3226,7 @@ func _zoom_toward_cursor(screen_position: Vector2, multiplier: float) -> void:
 	zoom_focus_world = anchor
 	zoom_focus_screen = screen_position
 	zoom_focus_pending = true
-	target_camera_distance = clampf(target_camera_distance * multiplier, CAMERA_MIN_DISTANCE, CAMERA_MAX_DISTANCE)
+	target_camera_distance = clampf(target_camera_distance * multiplier, CAMERA_MIN_DISTANCE, camera_max_distance)
 
 
 func _camera_clearance_height(target: Vector3, desired: Vector3) -> float:

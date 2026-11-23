@@ -193,6 +193,20 @@ minutes, and the match ends the same minute. Before the AI was held to player
 limits it started with a position estimate and won at about 7.9 minutes. A tank
 takes about 6 minutes to reach the enemy.
 
+Map sizes (issue #14, 2026-11-23): the startup screen has a MAP SIZE picker (5, 10, 20, 40 or
+80 km square, default 40). `godot/project/map_scale.gd` redraws the authored 40 km Broken Strait at
+the chosen size: every coordinate (theater, landmasses, spawns, the AI's search area, transport
+routes, Materials sites, fuel depots, civilian clusters, power grid) scales by size/40,000, so
+spawns are 0.9 km apart at 5 km and 14 km apart at 80 km. Terrain heights scale by the same
+factor (`Terrain::load_from_file(path, height_scale)`, `load_terrain_heightmap(path, scale)`) so
+slopes stay as authored. Camera zoom stops end at the whole map for each size. Native tests cover
+height scaling and a match with the AI wave at all five sizes
+(`terrain_height_scale_keeps_slopes_at_every_map_size`,
+`a_match_runs_and_the_ai_searches_at_every_supported_map_size`). NOT verified: the Godot side
+(`main.gd` picker, `map_scale.gd`, `test_map_scale.gd`, `power_grid_view.gd`) was written without a
+Godot binary and has not been run or screenshotted. Unit sizes, weapon ranges and the 2,000-unit
+cap do not scale, and 80 km is not benchmarked.
+
 Wave search (issue #18, 2026-11-23): a wave with no contact used to head for one shared
 sector at a time, so a blind wave swept the briefing sector far too slowly. Waves are now
 split into groups of about three (`AIManager::sweep_group`), and each group searches its own

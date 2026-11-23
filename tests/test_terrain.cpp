@@ -239,3 +239,29 @@ TEST(earthworks_flatten_the_terrain_and_spend_materials_and_fuel) {
     verify(position && std::abs(position->z - level) < 0.01f, "units stand on the flattened ground");
     simulation.stop();
 }
+
+TEST(terrain_height_scale_keeps_slopes_at_every_map_size) {
+    // The authored 40 km theater, redrawn at each supported size with heights
+    // scaled by the same factor, must keep every slope and the same shape.
+    const float reference = 40000.0f;
+    Terrain authored;
+    authored.set_world_bounds(reference, reference);
+    authored.load_from_file("godot/project/scenarios/terrain.json");
+    for (const float size : {5000.0f, 10000.0f, 20000.0f, 40000.0f, 80000.0f}) {
+        const float scale = size / reference;
+        Terrain scaled;
+        scaled.set_world_bounds(size, size);
+        scaled.load_from_file("godot/project/scenarios/terrain.json", scale);
+        verify(scaled.data().size() == authored.data().size(), "scaled terrain keeps its grid");
+        for (const float fx : {-0.4f, -0.1f, 0.0f, 0.23f, 0.45f}) {
+            for (const float fy : {-0.45f, -0.2f, 0.0f, 0.3f, 0.41f}) {
+                const float expected = authored.height_at(fx * reference, fy * reference) * scale;
+                verify(std::abs(scaled.height_at(fx * size, fy * size) - expected) < 0.01f + std::abs(expected) * 1e-4f,
+                       "the same relative point has a proportionally scaled height");
+            }
+        }
+    }
+    bool rejected = false;
+    try { Terrain bad; bad.load_from_file("godot/project/scenarios/terrain.json", 0.0f); } catch (const std::exception&) { rejected = true; }
+    verify(rejected, "a zero height scale is refused");
+}

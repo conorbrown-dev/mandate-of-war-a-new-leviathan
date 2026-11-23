@@ -200,7 +200,7 @@ protected:
         ClassDB::bind_method(D_METHOD("reset_simulation"), &RtsExtension::reset_simulation);
         ClassDB::bind_method(D_METHOD("configure_world_size", "width", "height"), &RtsExtension::configure_world_size);
         ClassDB::bind_method(D_METHOD("configure_theater_landmasses", "first_center_x", "first_center_y", "first_width", "first_height", "second_center_x", "second_center_y", "second_width", "second_height"), &RtsExtension::configure_theater_landmasses);
-        ClassDB::bind_method(D_METHOD("load_terrain_heightmap", "path"), &RtsExtension::load_terrain_heightmap);
+        ClassDB::bind_method(D_METHOD("load_terrain_heightmap", "path", "height_scale"), &RtsExtension::load_terrain_heightmap, DEFVAL(1.0));
         ClassDB::bind_method(D_METHOD("get_structure_site", "structure_type", "x", "y"), &RtsExtension::get_structure_site);
         ClassDB::bind_method(D_METHOD("get_terrain_revision"), &RtsExtension::get_terrain_revision);
         ClassDB::bind_method(D_METHOD("get_terrain_heights"), &RtsExtension::get_terrain_heights);
@@ -1040,13 +1040,13 @@ public:
         rts::runtime_simulation()->enable_ai(enabled);
     }
 
-    bool load_terrain_heightmap(const String& path) const {
+    bool load_terrain_heightmap(const String& path, double height_scale = 1.0) const {
         String resolved_path = path;
         if (path.begins_with("res://")) {
             resolved_path = ProjectSettings::get_singleton()->globalize_path(path);
         }
         try {
-            rts::runtime_simulation()->terrain().load_from_file(resolved_path.utf8().get_data());
+            rts::runtime_simulation()->terrain().load_from_file(resolved_path.utf8().get_data(), static_cast<float>(height_scale));
             return true;
         } catch (const std::exception&) {
             return false;

@@ -1239,3 +1239,37 @@ TEST(a_wave_with_no_contact_searches_in_groups_on_different_ground) {
     for (const auto& a : targets) for (const auto& b : targets) widest = std::max(widest, std::hypot(a.first - b.first, a.second - b.second));
     verify(widest > 400.0f, "the wave's groups head for different sectors rather than one point");
 }
+
+TEST(a_match_runs_and_the_ai_searches_at_every_supported_map_size) {
+    // The Broken Strait layout, scaled from its authored 40 km to each size.
+    for (const float size : {5000.0f, 10000.0f, 20000.0f, 40000.0f, 80000.0f}) {
+        const float scale = size / 40000.0f;
+        Simulation simulation;
+        simulation.configure_world_size(size, size);
+        simulation.start();
+        const EntityId player_post = simulation.create_faction_base(FactionId::ELITE_PRECISION, -12500.0f * scale, 0.0f);
+        const EntityId enemy_post = simulation.create_faction_base(FactionId::MASS_WARFARE, -15000.0f * scale, -6500.0f * scale);
+        verify(player_post != INVALID_ENTITY && enemy_post != INVALID_ENTITY, "both command posts fit on the map");
+        simulation.begin_match(player_post, enemy_post);
+        simulation.ai_manager().configure_assault(-19500.0f * scale, -19000.0f * scale, -5500.0f * scale, 19000.0f * scale, 3, 2, 8);
+        std::vector<EntityId> wave;
+        for (int unit = 0; unit < 4; ++unit) {
+            const EntityId id = simulation.create_unit_with_type(-15000.0f * scale + unit * 15.0f, -6500.0f * scale + 80.0f,
+                UnitType::MASS_SWARM_TANK, FactionId::MASS_WARFARE);
+            verify(id != INVALID_ENTITY, "a unit can be placed at this size");
+            simulation.stop_unit(id);
+            wave.push_back(id);
+        }
+        for (int tick = 0; tick < 20 * 90; ++tick) simulation.update(50.0f);
+        verify(simulation.ai_manager().waves_launched() >= 1, "the AI launches its wave");
+        bool moved = false;
+        for (const EntityId id : wave) {
+            if (simulation.get_unit_is_dead(id)) continue;
+            const float x = simulation.get_unit_x(id), y = simulation.get_unit_y(id);
+            verify(std::abs(x) <= size * 0.5f && std::abs(y) <= size * 0.5f, "the wave stays on the map");
+            moved = moved || std::hypot(x - (-15000.0f * scale), y - (-6500.0f * scale)) > 30.0f;
+        }
+        verify(moved, "the wave leaves home to search");
+        simulation.stop();
+    }
+}

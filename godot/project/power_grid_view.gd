@@ -68,7 +68,7 @@ func clear() -> void:
 
 
 ## Reads a scenario's grid, hands it to the simulation and prepares the views.
-func load_grid(path: String) -> bool:
+func load_grid(path: String, scale := 1.0) -> bool:
 	clear()
 	var file := FileAccess.open(path, FileAccess.READ)
 	if file == null:
@@ -81,7 +81,7 @@ func load_grid(path: String) -> bool:
 		var id := int(definition.get("id", 0))
 		var kind := int(KIND_NAMES.get(String(definition.get("kind", "junction")), 1))
 		var coordinates: Array = definition.get("position", [0, 0])
-		var position := Vector2(float(coordinates[0]), float(coordinates[1]))
+		var position := Vector2(float(coordinates[0]), float(coordinates[1])) * scale
 		var owner := int(definition.get("owner", -1))
 		if not bool(extension.call("power_add_node", id, kind, position.x, position.y, owner,
 				float(definition.get("output_mw", 0.0)), float(definition.get("demand_mw", 0.0)))):
@@ -102,8 +102,8 @@ func load_grid(path: String) -> bool:
 		var owner := int(definition.get("owner", -1))
 		var via := PackedFloat32Array()
 		for point: Array in definition.get("via", []):
-			via.append(float(point[0]))
-			via.append(float(point[1]))
+			via.append(float(point[0]) * scale)
+			via.append(float(point[1]) * scale)
 		if not nodes.has(from) or not nodes.has(to) or \
 				not bool(extension.call("power_add_line", id, from, to, kind, owner, via)):
 			push_error("Power grid line %d was refused" % id)
