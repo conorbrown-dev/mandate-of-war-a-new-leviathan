@@ -51,6 +51,7 @@ set(SIMULATION_SOURCES
     src/simulation/terrain.cpp
     src/simulation/road_network.cpp
     src/simulation/power_grid.cpp
+    src/simulation/ports.cpp
     src/simulation/off_road.cpp
     src/simulation/command_manager.cpp
     src/simulation/control_point_battle.cpp
@@ -222,6 +223,7 @@ add_executable(rts_integration_tests
     tests/test_terrain.cpp
     tests/test_fuel_supply.cpp
     tests/test_power_grid.cpp
+    tests/test_ports.cpp
     tests/test_radio_events.cpp
     tests/test_match_flow.cpp
     tests/test_ai_doctrine.cpp

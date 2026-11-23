@@ -266,6 +266,75 @@ def hauler():
     return m, "Hauler Airlifter"
 
 
+
+# ------------------------------------------------------------------ Cargo ships
+
+def cargo_ship(prefix):
+    """A freighter: flared bow, aft deckhouse and funnel, stacked containers."""
+    hull, dark, mark = f"{prefix}_hull", f"{prefix}_dark", f"{prefix}_mark"
+    m = Model()
+    # Hull below the waterline is dark; the topsides carry the faction paint.
+    solid(m, dark, [(-6.0, 0.0, -34.0), (6.0, 0.0, -34.0), (6.0, 0.0, 38.0), (-6.0, 0.0, 38.0),
+                    (-7.0, 3.0, -36.0), (7.0, 3.0, -36.0), (7.0, 3.0, 38.0), (-7.0, 3.0, 38.0)])
+    solid(m, hull, [(-7.0, 3.0, -36.0), (7.0, 3.0, -36.0), (7.0, 3.0, 38.0), (-7.0, 3.0, 38.0),
+                    (-7.2, 6.0, -42.0), (7.2, 6.0, -42.0), (7.2, 6.0, 38.0), (-7.2, 6.0, 38.0)])
+    # The bow rises to a sharp stem.
+    solid(m, hull, [(-7.0, 3.0, -36.0), (7.0, 3.0, -36.0), (0.4, 3.0, -48.0), (-0.4, 3.0, -48.0),
+                    (-7.2, 6.0, -42.0), (7.2, 6.0, -42.0), (0.4, 6.8, -49.0), (-0.4, 6.8, -49.0)])
+    m.box(dark, (0.0, 6.05, -8.0), (13.8, 0.1, 80.0))  # main deck
+    # Deckhouse, bridge wing and funnel aft.
+    m.box(hull, (0.0, 9.5, 28.0), (11.0, 7.0, 9.0))
+    m.box(hull, (0.0, 14.0, 27.0), (12.4, 2.4, 6.0))
+    m.box("optic", (0.0, 14.1, 24.0), (11.0, 1.2, 0.2))
+    m.cylinder(mark, (0.0, 13.0, 31.5), (0.0, 19.0, 31.5), 1.6, 1.3, 10)
+    m.box(mark, (0.0, 9.5, 23.4), (11.1, 1.0, 0.2))
+    # Container stacks forward of the deckhouse, in three paints.
+    colours = (hull, mark, dark)
+    for row, z in enumerate((-30.0, -21.0, -12.0, -3.0, 6.0, 15.0)):
+        for column, x in enumerate((-4.2, 0.0, 4.2)):
+            for tier in range(2 if (row + column) % 3 else 3):
+                m.box(colours[(row + column + tier) % 3], (x, 6.1 + 1.3 + tier * 2.6, z), (3.6, 2.5, 8.0))
+    # Two deck cranes.
+    for z in (-26.0, 2.0):
+        m.beam("metal", (-6.0, 6.1, z), (-6.0, 15.0, z), 0.5)
+        m.beam("metal", (-6.0, 15.0, z), (0.0, 16.0, z), 0.4)
+    return m, "Cargo Ship"
+
+
+def elite_cargo_ship():
+    model, _ = cargo_ship("elite")
+    return model, "Seaspan Freighter"
+
+
+def mass_cargo_ship():
+    model, _ = cargo_ship("mass")
+    return model, "Dockhorse Freighter"
+
+
+def industrial_cargo_ship():
+    model, _ = cargo_ship("ind")
+    return model, "Bulkhead Freighter"
+
+
+def port():
+    """A quay with a warehouse, two container gantries and mooring bollards.
+    The quay edge is at +X (the water side); the dock runs along Z."""
+    m = Model()
+    m.box("concrete", (-30.0, 0.5, 0.0), (100.0, 1.0, 120.0))  # apron
+    m.box("concrete", (22.0, 0.0, 0.0), (6.0, 2.0, 120.0))  # quay wall
+    m.box("metal", (-60.0, 5.0, -30.0), (24.0, 10.0, 50.0))  # warehouse
+    m.box("ind_dark", (-60.0, 10.3, -30.0), (25.0, 0.6, 51.0))
+    m.box("metal", (-60.0, 4.0, 35.0), (18.0, 8.0, 30.0))
+    for z in (-35.0, 25.0):  # container gantries
+        for side in (-1, 1):
+            m.beam("ind_mark", (side * 7.0 + 10.0, 1.0, z), (side * 7.0 + 10.0, 22.0, z), 0.9)
+        m.beam("ind_mark", (3.0, 22.0, z), (30.0, 22.0, z), 1.0)
+    for z in range(-50, 60, 20):
+        m.box("ind_dark", (16.5, 3.0, float(z)), (1.2, 0.8, 1.2))  # bollards
+    for index, z in enumerate((-20.0, 0.0, 14.0, 40.0)):
+        m.box((hull := ("mass_hull", "elite_hull", "ind_hull", "mass_mark"))[index], (-20.0, 2.8, z), (6.0, 2.5, 8.0))
+    return m, "Port"
+
 MODELS = {
     "mass_swarm_tank": swarm_tank,
     "mass_assault_vehicle": assault_vehicle,
@@ -274,6 +343,10 @@ MODELS = {
     "elite_airlifter": skybridge,
     "mass_airlifter": packhorse,
     "industrial_airlifter": hauler,
+    "elite_cargo_ship": elite_cargo_ship,
+    "mass_cargo_ship": mass_cargo_ship,
+    "industrial_cargo_ship": industrial_cargo_ship,
+    "port": port,
 }
 
 
@@ -292,7 +365,7 @@ def main() -> None:
         model.write(OUTPUT / f"{name}.glb")
         low, high = bounds_of(model)
         meta = {
-            "category": "air" if "airlifter" in name else "ground",
+            "category": "air" if "airlifter" in name else "naval" if "cargo_ship" in name else "structure" if name == "port" else "ground",
             "godot_forward": "-Z",
             "godot_up": "+Y",
             "bounds_m": {"x": round(high[0] - low[0], 3), "y": round(high[1] - low[1], 3), "z": round(high[2] - low[2], 3)},

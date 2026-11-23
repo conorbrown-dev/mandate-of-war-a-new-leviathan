@@ -23,6 +23,7 @@
 #include "airfield_approach.hpp"
 #include "road_network.hpp"
 #include "power_grid.hpp"
+#include "ports.hpp"
 #include "off_road.hpp"
 #include "../ecs/components/off_road.hpp"
 #include "../ecs/components/factions.hpp"
@@ -369,8 +370,10 @@ public:
         // ground corridors and unload at their respective terminal.
         uint8_t route_mode = 0;
         uint32_t order_id = 0;
+        // SEA: the port the cargo ship is bound for.
+        uint32_t port_id = 0;
     };
-    enum class GroundTransport : uint8_t { AIR = 0, ROAD = 1, RAIL = 2 };
+    enum class GroundTransport : uint8_t { AIR = 0, ROAD = 1, RAIL = 2, SEA = 3 };
     struct TransportRoute {
         bool enabled = false;
         float entry_x = 0.0f, entry_y = 0.0f;
@@ -413,6 +416,9 @@ public:
     static constexpr uint32_t PARADROP_ORDER_FLAG = 0x20000000u;
     static constexpr uint32_t ROAD_DELIVERY_ORDER_FLAG = 0x08000000u;
     static constexpr uint32_t RAIL_DELIVERY_ORDER_FLAG = 0x04000000u;
+    // A sea delivery: this bit, the port id (0 for the best one) in bits 8 to 15
+    // and the unit type in the low byte.
+    static constexpr uint32_t SEA_DELIVERY_ORDER_FLAG = 0x02000000u;
     // A BUILD from the command post with this bit asks for a fuel shipment,
     // so a shipment order is recorded and plays back like any other order.
     static constexpr uint32_t FUEL_SHIPMENT_ORDER_FLAG = 0x10000000u;
@@ -432,6 +438,24 @@ public:
     // Seconds from the order until the unit is on the ground at this point.
     float paradrop_seconds(UnitType type, float x) const;
     int inbound_count(FactionId faction) const;
+
+    // Ports and the sea lanes. A side ships in only through a port it holds;
+    // an armed enemy ship it can see in the lane blocks the order. Cargo ships
+    // are real unarmed vessels: shoot one down and its load is lost.
+    bool add_port(uint32_t id, float x, float y, float berth_x, float berth_y, float entry_x, float entry_y, int owner);
+    PortNetwork& port_network() { return port_network_; }
+    const PortNetwork& port_network() const { return port_network_; }
+    std::optional<UnitType> cargo_ship_type(FactionId faction) const;
+    // The held port with a clear lane nearest the side's command post, or 0.
+    uint32_t choose_port(FactionId faction) const;
+    bool sea_lane_contested(FactionId faction, uint32_t port_id) const;
+    // Empty when the side can ship this unit in now (port 0 picks the best port).
+    std::string sea_delivery_refusal(FactionId faction, UnitType type, uint32_t port_id) const;
+    bool order_sea_delivery(FactionId faction, UnitType type, uint32_t port_id);
+    size_t issue_sea_delivery_command(FactionId faction, UnitType type, uint32_t port_id);
+    // Cargo ships shot down on their way, since the match began.
+    int ships_lost(FactionId faction) const { return ships_lost_[static_cast<size_t>(faction)]; }
+    static constexpr float kSeaLaneClearance = 700.0f;
     const std::vector<InboundForce>& inbound_forces() const { return inbound_forces_; }
 
     // Arms the win condition: a side loses when its command post is destroyed.
@@ -662,6 +686,11 @@ private:
      std::array<std::array<TransportRoute, 2>, FACTION_COUNT> transport_routes_{};
      uint32_t next_transport_order_id_ = 1;
      uint32_t paradrop_sequence_ = 0;
+    PortNetwork port_network_;
+    std::array<int, FACTION_COUNT> ships_lost_{};
+    EntityId launch_cargo_ship(FactionId faction, const Port& port);
+    bool unload_at_port(const InboundForce& force, const Port& port);
+    void update_ports(float delta_ms);
      std::array<int, FACTION_COUNT> paradrops_lost_{};
      // Puts a side's cargo aircraft in the air at the west map edge, level with
      // its destination, flying straight there. INVALID_ENTITY if it cannot.
