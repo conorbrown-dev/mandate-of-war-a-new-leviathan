@@ -5385,6 +5385,18 @@ func _issue_attack_order(screen_position: Vector2) -> int:
 	if enemy_post > 0 and seen_enemy_ids.has(enemy_post) and _native_unit_position(enemy_post).distance_to(Vector2(mouse_x, mouse_z)) < nearest_distance:
 		nearest_enemy_id = enemy_post
 
+	# A visible enemy port is a target too: a unit nearer the click wins, but
+	# with none within 150 m the click is on the port.
+	if nearest_enemy_id < 0 or nearest_distance > 150.0:
+		var port_target := int(extension.call("port_attack_target", HUMAN_PLAYER_ID, mouse_x, mouse_z))
+		if port_target >= 0:
+			var port_orders: int = extension.call("issue_attack_commands", selected_ids, HUMAN_PLAYER_ID, port_target)
+			if port_orders != selected_ids.size():
+				push_warning("Attack order on a port rejected by authoritative command validation")
+				return -1
+			_announce_intel("ATTACKING PORT // MOVE INTO RANGE OF THE QUAY")
+			return port_target
+
 	if nearest_enemy_id >= 0:
 		var accepted_count: int = extension.call("issue_attack_commands", selected_ids, HUMAN_PLAYER_ID, nearest_enemy_id)
 		if accepted_count != selected_ids.size():

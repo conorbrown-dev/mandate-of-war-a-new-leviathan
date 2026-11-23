@@ -824,6 +824,21 @@ bool Simulation::sea_lane_contested(FactionId faction, uint32_t port_id) const {
     return false;
 }
 
+EntityId Simulation::port_attack_target(FactionId faction, float x, float y, float radius) const {
+    EntityId best = INVALID_ENTITY;
+    float best_distance = radius;
+    for (const auto& [id, port] : port_network_.ports()) {
+        if (port.owner < 0 || port.owner == static_cast<int>(faction) || port.destroyed || port.entity == INVALID_ENTITY) continue;
+        if (!is_visible_to(faction, port.entity)) continue;
+        const float distance = std::hypot(port.x - x, port.y - y);
+        if (distance <= best_distance) {
+            best_distance = distance;
+            best = port.entity;
+        }
+    }
+    return best;
+}
+
 uint32_t Simulation::choose_port(FactionId faction) const {
     const EntityId line = production_manager_.faction_line(faction);
     const auto storage = production_manager_.storages().find(line);

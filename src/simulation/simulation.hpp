@@ -455,6 +455,10 @@ public:
     // The held port with a clear lane nearest the side's command post, or 0.
     uint32_t choose_port(FactionId faction) const;
     bool sea_lane_contested(FactionId faction, uint32_t port_id) const;
+    // The facility to attack for the enemy port whose quay is nearest (x, y) and
+    // within `radius`, if this side can see it now and it is still standing.
+    // INVALID_ENTITY otherwise. The result is an ordinary ATTACK target.
+    EntityId port_attack_target(FactionId faction, float x, float y, float radius = 220.0f) const;
     // Empty when the side can ship this unit in now (port 0 picks the best port).
     std::string sea_delivery_refusal(FactionId faction, UnitType type, uint32_t port_id) const;
     bool order_sea_delivery(FactionId faction, UnitType type, uint32_t port_id);

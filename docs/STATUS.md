@@ -421,8 +421,19 @@ Pier (the player's), West Quay (the AI's) and three neutral, North Harbor, Centr
   `test_ports.gd` through the real scene (47 checks). `ports_view.gd` shows HP and DESTROYED and hides the quay
   model while it is rubble. Pacing effect: a held port is now a visible enemy structure, so the AI's waves find and
   engage the player's Eastern Pier on their way, and in `test_match_flow` (idle player) first contact moved from 491 s
-  to 922 s and the defeat from 509 s to 955 s. The player cannot yet order an attack on a port by clicking it (units auto-fire at ports
-  they can see), and the AI does not repair its own ports.
+  to 922 s and the defeat from 509 s to 955 s.
+- **Attacking and repairing ports.** Ctrl + right-click on a visible, standing enemy port (a unit nearer the click
+  wins, otherwise a click within 220 m of the quay) gives the selected units an ordinary ATTACK on the port's
+  facility (`Simulation::port_attack_target`, bridge `port_attack_target`). Like any attack order it does not move
+  units into range: they must already be within weapon range, outside the 140 m capture radius if the aim is to ruin
+  the port rather than take it. Units also still auto-fire at ports they see. The AI's engineer rebuilds a battered
+  (below 70%) or ruined port of its own (`AIManager::update_port_repair`): not before two minutes in, only while the
+  engineer is idle, it drives to the quay and the simulation's repair rule does the work; the AI holds back the
+  Materials the repair needs instead of spending them on units (`holding_for_repair`), though scouts and recon
+  flights are not held, so a poorly funded AI can leave a rebuild part-done until money arrives. The AI never
+  repairs a port it does not hold. Evidence: 4 more native tests (pick and attack a port, the AI rebuilding a ruin,
+  not touching the enemy's) and a check in `test_ports.gd`. The click handler in `main.gd` has no UI test (it needs a
+  camera and selection); the native pick and order it calls are tested.
 - **Known gaps.** The AI does not build warships or escort its cargo ships. The ships and boats are generated placeholder models with no wake or
   animation, the strategic map has no port icon beyond the 3D label, and nothing has been seen on screen or
   hand-played. Boat speed, cost and the 5 minute voyage are untuned guesses.

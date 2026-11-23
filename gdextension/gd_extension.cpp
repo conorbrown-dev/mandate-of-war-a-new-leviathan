@@ -303,6 +303,7 @@ protected:
         ClassDB::bind_method(D_METHOD("transport_route", "faction_id", "mode"), &RtsExtension::transport_route);
         ClassDB::bind_method(D_METHOD("order_ground_transport", "faction_id", "unit_type", "mode"), &RtsExtension::order_ground_transport);
         ClassDB::bind_method(D_METHOD("order_naval_unit", "faction_id", "unit_type"), &RtsExtension::order_naval_unit);
+        ClassDB::bind_method(D_METHOD("port_attack_target", "faction_id", "x", "y"), &RtsExtension::port_attack_target);
         ClassDB::bind_method(D_METHOD("port_add", "id", "x", "y", "berth_x", "berth_y", "entry_x", "entry_y", "owner"), &RtsExtension::port_add);
         ClassDB::bind_method(D_METHOD("ports_state"), &RtsExtension::ports_state);
         ClassDB::bind_method(D_METHOD("landing_zone_set", "faction_id", "x", "y"), &RtsExtension::landing_zone_set);
@@ -1366,6 +1367,14 @@ public:
         return rts::runtime_simulation()->issue_ground_transport_command(
             static_cast<rts::FactionId>(faction_id), static_cast<rts::UnitType>(unit_type),
             static_cast<rts::Simulation::GroundTransport>(mode)) == 1;
+    }
+
+    // The attackable facility of the visible enemy port nearest a point, or -1.
+    int64_t port_attack_target(int64_t faction_id, double x, double y) const {
+        if (faction_id < 0 || faction_id >= 3) return -1;
+        const auto target = rts::runtime_simulation()->port_attack_target(
+            static_cast<rts::FactionId>(faction_id), static_cast<float>(x), static_cast<float>(y));
+        return target == rts::INVALID_ENTITY ? -1 : static_cast<int64_t>(target);
     }
 
     // A warship ordered at the nearest port the side holds.

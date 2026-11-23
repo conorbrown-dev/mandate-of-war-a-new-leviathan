@@ -146,6 +146,9 @@ func _run() -> void:
 		check(gun > 0, "an artillery piece is placed")
 	_tick(view, 20 * 200)
 	var after: Array = native.call("ports_state")
+	# The player cannot attack a port it cannot see; a scout that sees it makes it a target.
+	var picked := int(native.call("port_attack_target", PLAYER, enemy_quay.x, enemy_quay.y))
+	check(picked == -1 or bool(after[4].destroyed), "a port is only a target while the player can see it and it stands (%d)" % picked)
 	check(bool(after[4].destroyed), "the shelled enemy port is rubble")
 	check(int(after[4].owner) == ENEMY, "rubble still belongs to its owner")
 	check(not bool(after[3].destroyed), "the player's own port stands")

@@ -91,6 +91,7 @@ void AIManager::update(float delta_ms) {
         update_scouts();
         update_waves();
         update_port_squad();
+        update_port_repair();
         update_sweep();
         update_operational_plan();
         defend_base();
@@ -122,6 +123,9 @@ void AIManager::reset() {
     home_guard_.clear();
     port_squad_.clear();
     port_target_ = 0;
+    port_repair_target_ = 0;
+    next_repair_order_tick_ = 0;
+    port_repair_orders_ = 0;
     first_seen_.clear();
     order_cursor_ = mixed_cursor_ = 0;
     scouts_on_order_ = 0;
@@ -164,6 +168,9 @@ void AIManager::configure_assault(float min_x, float min_y, float max_x, float m
     home_guard_.clear();
     port_squad_.clear();
     port_target_ = 0;
+    port_repair_target_ = 0;
+    next_repair_order_tick_ = 0;
+    port_repair_orders_ = 0;
 }
 
 bool AIManager::is_recon_asset(EntityId unit) const {
@@ -337,6 +344,47 @@ bool AIManager::nearest_contact(float x, float y, float& contact_x, float& conta
         }
     }
     return std::isfinite(best);
+}
+
+// The AI's engineer rebuilds a damaged or ruined port of its own, once the
+// opening is over (two minutes in, after the airfield), and only while the
+// engineer has nothing else to do. It drives to the quay and stays; the work itself is
+// the simulation's repair rule (an engineer of the owner at the quay).
+void AIManager::update_port_repair() {
+    port_repair_target_ = 0;
+    if (!assault_active_ || !simulation_->port_network().active()) return;
+    EntityId engineer = INVALID_ENTITY;
+    for (EntityId unit : visible_units_) {
+        if (simulation_->is_construction_unit(unit)) {
+            engineer = unit;
+            break;
+        }
+    }
+    if (engineer == INVALID_ENTITY) return;
+    const float ex = simulation_->get_unit_x(engineer), ey = simulation_->get_unit_y(engineer);
+    float best = std::numeric_limits<float>::infinity();
+    for (const auto& [id, port] : simulation_->port_network().ports()) {
+        if (port.owner != static_cast<int>(faction_id_)) continue;
+        // A port that is merely scratched is left alone; a ruin or a battered one is worth the trip.
+        if (!port.destroyed && port.hp > kPortMaxHealth * 0.7f) continue;
+        const float distance = std::hypot(port.x - ex, port.y - ey);
+        if (distance < best) {
+            best = distance;
+            port_repair_target_ = id;
+        }
+    }
+    if (port_repair_target_ == 0) return;
+    const Port& port = *simulation_->port_network().port(port_repair_target_);
+    // The opening belongs to the airfield, which the same engineer builds; the
+    // money for the repair is held from the start, the trip waits.
+    if (simulation_->simulation_tick() < seconds_to_ticks(120.0f)) return;
+    if (best <= kPortCaptureRadius * 0.6f) return; // already there, repairing
+    // Someone else is using the engineer: wait until it is free.
+    if (simulation_->has_move_target(engineer)) return;
+    const uint32_t tick = simulation_->simulation_tick();
+    if (tick < next_repair_order_tick_) return;
+    next_repair_order_tick_ = tick + seconds_to_ticks(10.0f);
+    if (simulation_->issue_commands({engineer}, faction_id_, CommandType::MOVE, port.x, port.y) > 0) ++port_repair_orders_;
 }
 
 // A small squad drives to the nearest port the AI does not hold and stays until
@@ -623,7 +671,7 @@ void AIManager::produce_for_assault(EntityId base) {
     // unknown the price of the next flight stays in the bank.
     const auto storage = production.storages().find(line->second.storage_id);
     const float price = get_unit_prototypes().at(choice).material_cost;
-    if (holding_for_fuel(production.get_unit_metal_cost(faction_id_, choice))) return;
+    if (holding_for_fuel(production.get_unit_metal_cost(faction_id_, choice)) || holding_for_repair(production.get_unit_metal_cost(faction_id_, choice))) return;
     if (doctrine_.save_for_recon_flight && enemy_unknown && storage != production.storages().end() &&
         storage->second.tactical.materials.current - price < flight_price) return;
     // A ship takes minutes where an airlift takes seconds, so the sea is the
@@ -700,6 +748,18 @@ bool AIManager::holding_for_fuel(float price) const {
     const auto& storages = simulation_->production_manager().storages();
     const auto store = storages.find(simulation_->production_manager().faction_storage(faction_id_));
     return store == storages.end() || store->second.tactical.materials.current - price < kFuelShipmentMaterialCost;
+}
+
+// While its engineer is rebuilding a port, the price of the work stays in the
+// bank: a ruin is worth more than the next unit.
+bool AIManager::holding_for_repair(float price) const {
+    if (port_repair_target_ == 0) return false;
+    const Port* port = simulation_->port_network().port(port_repair_target_);
+    if (!port) return false;
+    const float needed = (kPortMaxHealth - port->hp) * kPortRepairCostPerHealth;
+    const auto& storages = simulation_->production_manager().storages();
+    const auto store = storages.find(simulation_->production_manager().faction_storage(faction_id_));
+    return store == storages.end() || store->second.tactical.materials.current - price < needed;
 }
 
 bool AIManager::can_receive(UnitType type) const {

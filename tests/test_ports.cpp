@@ -523,3 +523,90 @@ TEST(engineers_also_mend_a_damaged_port_that_is_still_standing) {
     verify(simulation.port_network().port(kHomePort)->hp > 1500.0f, "an engineer at the quay mends it");
     verify(simulation.component_manager().get_component<Health>(facility_of(simulation, kHomePort))->current > 1500.0f, "the target's hit points follow");
 }
+
+TEST(a_visible_enemy_port_can_be_picked_as_an_attack_target) {
+    PortTheater theater;
+    auto& simulation = theater.simulation;
+    simulation.begin_match(theater.player_post, theater.enemy_post);
+    simulation.enable_ai(false);
+    theater.run(2);
+    // Nobody on the Mass side can see the Elite home port yet.
+    verify(simulation.port_attack_target(FactionId::MASS_WARFARE, kQuayX, 3000.0f) == INVALID_ENTITY, "an unseen port is not a target");
+    const auto scout = static_cast<EntityId>(simulation.create_unit_with_type(kQuayX - 350.0f, 3000.0f, static_cast<UnitType>(15), FactionId::MASS_WARFARE));
+    simulation.stop_unit(scout);
+    theater.run(40);
+    const EntityId facility = simulation.port_attack_target(FactionId::MASS_WARFARE, kQuayX - 30.0f, 3040.0f);
+    verify(facility != INVALID_ENTITY && facility == facility_of(simulation, kHomePort), "a seen enemy port is found near the click");
+    verify(simulation.port_attack_target(FactionId::MASS_WARFARE, kQuayX - 2000.0f, 3000.0f) == INVALID_ENTITY, "a click far from it finds nothing");
+    verify(simulation.port_attack_target(FactionId::ELITE_PRECISION, kQuayX, 3000.0f) == INVALID_ENTITY, "your own port is never an attack target");
+    verify(simulation.port_attack_target(FactionId::MASS_WARFARE, kQuayX, -4000.0f) == INVALID_ENTITY, "a neutral port is not one either");
+    // The ordinary attack command takes it, and shelling with it ruins the port.
+    simulation.port_network().set_owner(kHomePort, 1);
+    simulation.port_network().set_owner(kNeutralPort, 0);
+    theater.run(2);
+    const auto gun = static_cast<EntityId>(simulation.create_unit_with_type(kQuayX - 165.0f, -4000.0f - 0.0f, UnitType::ELITE_LONG_RANGE_ARTILLERY, FactionId::ELITE_PRECISION));
+    simulation.stop_unit(gun);
+    verify(simulation.port_attack_target(FactionId::ELITE_PRECISION, kQuayX, 3000.0f) == INVALID_ENTITY ||
+           simulation.port_attack_target(FactionId::ELITE_PRECISION, kQuayX, 3000.0f) == facility_of(simulation, kHomePort),
+           "the target is the facility");
+}
+
+TEST(an_attack_order_on_a_port_is_accepted_and_the_guns_obey_it) {
+    PortTheater theater;
+    auto& simulation = theater.simulation;
+    simulation.begin_match(theater.player_post, theater.enemy_post);
+    simulation.enable_ai(false);
+    simulation.port_network().set_owner(kHomePort, 1); // Mass holds it; Elite shells it
+    theater.run(2);
+    const auto gun = static_cast<EntityId>(simulation.create_unit_with_type(kQuayX - 165.0f, 3000.0f, UnitType::ELITE_LONG_RANGE_ARTILLERY, FactionId::ELITE_PRECISION));
+    simulation.stop_unit(gun);
+    theater.run(40);
+    const EntityId facility = simulation.port_attack_target(FactionId::ELITE_PRECISION, kQuayX, 3000.0f);
+    verify(facility == facility_of(simulation, kHomePort) && facility != INVALID_ENTITY, "the Elite side sees and can pick the Mass port");
+    verify(simulation.issue_attack_commands({gun}, FactionId::ELITE_PRECISION, facility) == 1, "the attack order is accepted");
+    const float before = simulation.port_network().port(kHomePort)->hp;
+    theater.run(20 * 20);
+    verify(simulation.port_network().port(kHomePort)->hp < before, "the gun fires on the port it was ordered onto");
+}
+
+TEST(the_ai_sends_its_engineer_to_rebuild_a_battered_port) {
+    PortTheater theater;
+    auto& simulation = theater.simulation;
+    simulation.port_network().set_owner(kNeutralPort, 1);
+    simulation.begin_match(theater.player_post, theater.enemy_post);
+    theater.run(2);
+    simulation.port_network().mutable_port(kNeutralPort)->destroyed = true;
+    simulation.port_network().mutable_port(kNeutralPort)->hp = 0.0f;
+    const auto engineer = static_cast<EntityId>(simulation.create_unit_with_type(kQuayX - 1200.0f, -4000.0f, static_cast<UnitType>(8), FactionId::MASS_WARFARE));
+    simulation.stop_unit(engineer);
+    simulation.ai_manager().configure_assault(-19500.0f, -19000.0f, -5500.0f, 19000.0f, 100, 4, 200);
+    // Not during the opening: the trip waits for the airfield, but the money is held.
+    theater.run(20 * 60);
+    verify(simulation.ai_manager().port_repair_orders() == 0, "the opening is left to the airfield");
+    verify(simulation.ai_manager().port_repair_target() == kNeutralPort, "the ruined port is already marked for repair");
+    // The engineer gets there and starts the work with what the AI has in hand.
+    for (int tick = 0; tick < 20 * 60 * 6 && simulation.port_network().port(kNeutralPort)->destroyed; ++tick) simulation.update(50.0f);
+    verify(simulation.ai_manager().port_repair_orders() >= 1, "the AI sent its engineer");
+    verify(!simulation.port_network().port(kNeutralPort)->destroyed, "the ruin is back in service");
+    // This test world has no income; top the AI up as an income would, and the work finishes.
+    simulation.production_manager().update_storage(simulation.production_manager().faction_storage(FactionId::MASS_WARFARE), 600.0f, 0.0f);
+    for (int tick = 0; tick < 20 * 60 * 2 && simulation.port_network().port(kNeutralPort)->hp < kPortMaxHealth - 0.5f; ++tick) simulation.update(50.0f);
+    const Port* port = simulation.port_network().port(kNeutralPort);
+    verify(!port->destroyed, "the port is back in service");
+    verify(port->hp >= kPortMaxHealth - 0.5f, "and fully rebuilt");
+}
+
+TEST(the_ai_does_not_repair_a_port_it_does_not_hold) {
+    PortTheater theater;
+    auto& simulation = theater.simulation;
+    simulation.begin_match(theater.player_post, theater.enemy_post);
+    theater.run(2);
+    simulation.port_network().mutable_port(kHomePort)->destroyed = true;
+    simulation.port_network().mutable_port(kHomePort)->hp = 0.0f; // the player's port
+    const auto engineer = static_cast<EntityId>(simulation.create_unit_with_type(kQuayX - 1200.0f, 3000.0f, static_cast<UnitType>(8), FactionId::MASS_WARFARE));
+    simulation.stop_unit(engineer);
+    simulation.ai_manager().configure_assault(-19500.0f, -19000.0f, -5500.0f, 19000.0f, 100, 4, 200);
+    theater.run(20 * 200);
+    verify(simulation.ai_manager().port_repair_orders() == 0, "the AI leaves the enemy's ruined port alone");
+    verify(simulation.port_network().port(kHomePort)->destroyed, "it stays in ruins");
+}
