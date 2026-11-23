@@ -2455,6 +2455,64 @@ func _add_fuel_depot_view(site: Dictionary) -> void:
 		_add_cylinder_model(root, 1.2, 0.18, offset + Vector3(0, 1.9, 0), signal_material)
 
 
+# Feeders to the generated villages. Each village hangs off the nearest node of
+# the scenario's grid by wooden lines, as a branch with no way back into the
+# grid: the lines are real (they can be seen, captured, cut and repaired) but
+# they open no new route between existing nodes, so how much power each side
+# starts with does not change.
+const FEEDER_FIRST_ID := 500
+const FEEDER_MAX_LENGTH := 5000.0
+var power_feeder_count := 0
+
+
+func _extend_power_grid(clusters: Array) -> void:
+	power_feeder_count = 0
+	if power_grid_view == null or not power_grid_view.active:
+		return
+	# Nearest-first, like Prim's algorithm from the grid's existing nodes. Every
+	# village joins by exactly one line, so each branch ends at one existing node.
+	var connected: Array[Dictionary] = []
+	for node: Dictionary in power_grid_view.nodes.values():
+		connected.append({"id": int(node.id), "position": node.position, "station": int(node.kind) == 0})
+	var remaining: Array = range(clusters.size())
+	var new_nodes: Array = []
+	var new_lines: Array = []
+	var next_id := FEEDER_FIRST_ID
+	while not remaining.is_empty() and next_id < 60000:
+		var pick := -1
+		var join := -1
+		var shortest := FEEDER_MAX_LENGTH + 4000.0 * clampf(map_scale, 0.5, 2.0)
+		for remaining_index in range(remaining.size()):
+			var village: Vector2 = clusters[remaining[remaining_index]].center
+			for connected_index in range(connected.size()):
+				var distance := village.distance_to(connected[connected_index].position)
+				if distance < shortest and distance >= 60.0:
+					shortest = distance
+					pick = remaining_index
+					join = connected_index
+		if pick < 0:
+			break
+		var position: Vector2 = clusters[remaining[pick]].center
+		new_nodes.append({"id": next_id, "kind": "junction", "name": "VILLAGE FEEDER", "position": [position.x, position.y], "owner": -1})
+		# Steel leaves a station or crosses water, as on the scenario's own lines.
+		var kind := "steel" if bool(connected[join].station) else "wood"
+		var span := position.distance_to(connected[join].position)
+		for step in range(0, ceili(span / 30.0) + 1):
+			var along: Vector2 = connected[join].position.lerp(position, minf(1.0, float(step) * 30.0 / span))
+			if _terrain_height_at(along.x, along.y) < 0.0:
+				kind = "steel"
+				break
+		new_lines.append({"id": next_id, "from": int(connected[join].id), "to": next_id, "kind": kind, "owner": -1,
+			"reason": "feeds a village from the grid"})
+		connected.append({"id": next_id, "position": position, "station": false})
+		remaining.remove_at(pick)
+		next_id += 1
+	if new_nodes.is_empty():
+		return
+	power_grid_view.append_grid({"nodes": new_nodes, "lines": new_lines})
+	power_feeder_count = new_lines.size()
+
+
 # Roads the map starts with, joining towns, bases, sites, depots and power
 # stations. They are real: units drive faster on them (see Simulation::add_public_road).
 const PUBLIC_ROAD_CLEARANCE := 40.0
@@ -2657,6 +2715,7 @@ func _spawn_civilian_buildings() -> void:
 				corridor_points.append(entry.lerp(terminal, float(step) / float(steps)))
 	var clusters: Array = _civilian_clusters(dressing.get("clusters", []), spawn_origins + corridor_points)
 	var road_points := _spawn_public_roads(clusters, spawn_origins)
+	_extend_power_grid(clusters)
 	var scene_budget := CIVILIAN_SCENE_BUDGET
 	for cluster in clusters:
 		var rng := RandomNumberGenerator.new()

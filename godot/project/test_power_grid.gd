@@ -65,7 +65,10 @@ func _run() -> void:
 	var stations := 0
 	for node: Dictionary in state.get("nodes", []):
 		stations += 1 if int(node.kind) == 0 else 0
-	check(stations == 3 and (state.get("lines", []) as Array).size() == 10, "the scenario's three stations and ten lines reach the simulation")
+	var scenario_lines := 0
+	for line: Dictionary in state.get("lines", []):
+		scenario_lines += 1 if int(line.id) < 500 else 0 # ids from 500 are the villages' feeders
+	check(stations == 3 and scenario_lines == 10, "the scenario's three stations and ten lines reach the simulation")
 	var power := _power(native, post)
 	check(is_equal_approx(power[0], 320.0) and is_equal_approx(power[1], 40.0),
 		"the player's post draws 40 MW from the two stations joined to it (320 MW)")

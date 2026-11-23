@@ -7,6 +7,7 @@ var checks := 0
 var failures := 0
 var buildings_by_size := {}
 var roads_by_size := {}
+var feeders_by_size := {}
 
 
 func check(condition: bool, reason: String) -> void:
@@ -58,15 +59,23 @@ func _run() -> void:
 		check(int(view.public_road_count) >= 3, "%d km: the map has roads (%d)" % [size_km, int(view.public_road_count)])
 		var drawn_roads: PackedFloat32Array = view.extension.call("get_road_segments")
 		check(drawn_roads.size() / 6 >= int(view.public_road_count), "%d km: every road is reported to the view" % size_km)
+		feeders_by_size[size_km] = int(view.power_feeder_count)
+		check(int(view.power_feeder_count) >= 2, "%d km: villages are fed from the grid (%d lines)" % [size_km, int(view.power_feeder_count)])
 		buildings_by_size[size_km] = int(view.civilian_building_instance_count)
 		check(int(view.civilian_building_instance_count) >= 30, "%d km: the land has buildings (%d)" % [size_km, int(view.civilian_building_instance_count)])
 		for _tick_index in range(200):
 			view.extension.call("update_simulation", 50.0)
 			view._update_match_state()
 		check(not view.match_finished, "%d km: ten seconds in, the match is still running" % size_km)
+		# The villages' feeders must not change what each side starts with.
+		var enemy_post := int(view.commander_ids.get(1, -1))
+		var player_power: Array = view.extension.call("economy_get_tactical_resources", player_post)
+		var enemy_power: Array = view.extension.call("economy_get_tactical_resources", enemy_post)
+		check(is_equal_approx(float(player_power[4]), 320.0) and is_equal_approx(float(player_power[5]), 40.0), "%d km: the player starts with 320 MW against 40 MW" % size_km)
+		check(is_equal_approx(float(enemy_power[4]), 120.0) and is_equal_approx(float(enemy_power[5]), 40.0), "%d km: the AI starts with 120 MW against 40 MW" % size_km)
 		view.queue_free()
 		await process_frame
-	print("MAP_SIZES buildings by size: ", buildings_by_size, " roads by size: ", roads_by_size)
+	print("MAP_SIZES buildings by size: ", buildings_by_size, " roads by size: ", roads_by_size, " feeders by size: ", feeders_by_size)
 	check(buildings_by_size[80] > buildings_by_size[20] and buildings_by_size[20] > buildings_by_size[5], "bigger maps get more buildings")
 	print("MAP_SIZES checks=%d failures=%d" % [checks, failures])
 	quit(1 if failures > 0 else 0)

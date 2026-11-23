@@ -77,6 +77,18 @@ func load_grid(path: String, scale := 1.0) -> bool:
 	if not content is Dictionary:
 		push_warning("Power grid data is malformed")
 		return false
+	_add_content(content, scale)
+	return _finish_loading()
+
+
+## Adds more nodes and lines to a grid that is already loaded, for example the
+## feeders to generated villages. Positions are in world metres, as given.
+func append_grid(content: Dictionary) -> bool:
+	_add_content(content, 1.0)
+	return _finish_loading()
+
+
+func _add_content(content: Dictionary, scale: float) -> void:
 	for definition: Dictionary in content.get("nodes", []):
 		var id := int(definition.get("id", 0))
 		var kind := int(KIND_NAMES.get(String(definition.get("kind", "junction")), 1))
@@ -123,6 +135,9 @@ func load_grid(path: String, scale := 1.0) -> bool:
 			"work": 0, "length": 0.0, "supports": _support_points(path_points, kind, from, to),
 			"view": null, "sparks": null, "label": null,
 		}
+
+
+func _finish_loading() -> bool:
 	active = not nodes.is_empty()
 	for node: Dictionary in nodes.values():
 		_rebuild_node_view(node)

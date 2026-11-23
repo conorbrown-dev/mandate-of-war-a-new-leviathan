@@ -210,7 +210,18 @@ engineer-built roads (pathfinding cost 0.68, so units drive about 1.47x faster o
 and wear 12x slower on them). Effect on the Broken Strait match flow (`test_match_flow.gd`, idle player):
 a tank now reaches the enemy in 307 s, and the AI's first contact moved from 519 s to 469 s. Native test:
 `a_public_road_is_real_it_is_kept_on_land_and_speeds_units_up` (a 6 km drive is at least 15% quicker on
-a road). Not seen on screen. STILL TO DO for #22: more power lines.
+a road). Not seen on screen.
+
+Village power feeders (issue #22): each generated village is now a real node in the power grid
+(`main.gd` `_extend_power_grid`, `power_grid_view.gd` `append_grid`; ids from 500). Nearest-first, every
+village joins by exactly one line to the scenario's grid or to a village already joined, so each branch
+ends at a single existing node: the lines are real (seen once scouted, capturable, cuttable, repairable
+by an engineer, steel when they leave a station or cross water, wood otherwise) but open no new route
+between existing nodes, so each side's starting power is unchanged (player 320 MW against 40 MW, AI
+120 MW against 40 MW, checked at all five map sizes). 4 feeders at 5 km up to 49 at 80 km. Redundant
+loops between stations would make the lines matter to supply, but would change that balance (the
+civilian stations could feed the AI), so they were left out. `test_power_grid.gd` now counts only the
+scenario's own ten lines. Not seen on screen.
 
 Map sizes (issue #14, 2026-11-23): the startup screen has a MAP SIZE picker (5, 10, 20, 40 or
 80 km square, default 40). `godot/project/map_scale.gd` redraws the authored 40 km Broken Strait at
