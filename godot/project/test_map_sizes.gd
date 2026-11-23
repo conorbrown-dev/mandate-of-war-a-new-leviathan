@@ -5,6 +5,7 @@ extends SceneTree
 
 var checks := 0
 var failures := 0
+var buildings_by_size := {}
 
 
 func check(condition: bool, reason: String) -> void:
@@ -49,11 +50,18 @@ func _run() -> void:
 			for height_index in range(0, native_heights.size(), 257):
 				worst = maxf(worst, absf(native_heights[height_index] - view.terrain_heights[height_index]))
 			check(worst < 0.01, "%d km: native and view heights match (worst %.4f)" % [size_km, worst])
+		for mode in [1, 2]:
+			check(bool(view.extension.call("transport_route", 0, mode).get("enabled", false)), "%d km: the player's transport route %d is usable" % [size_km, mode])
+			check(bool(view.extension.call("transport_route", 1, mode).get("enabled", false)), "%d km: the enemy's transport route %d is usable" % [size_km, mode])
+		buildings_by_size[size_km] = int(view.civilian_building_instance_count)
+		check(int(view.civilian_building_instance_count) >= 30, "%d km: the land has buildings (%d)" % [size_km, int(view.civilian_building_instance_count)])
 		for _tick_index in range(200):
 			view.extension.call("update_simulation", 50.0)
 			view._update_match_state()
 		check(not view.match_finished, "%d km: ten seconds in, the match is still running" % size_km)
 		view.queue_free()
 		await process_frame
+	print("MAP_SIZES buildings by size: ", buildings_by_size)
+	check(buildings_by_size[80] > buildings_by_size[20] and buildings_by_size[20] > buildings_by_size[5], "bigger maps get more buildings")
 	print("MAP_SIZES checks=%d failures=%d" % [checks, failures])
 	quit(1 if failures > 0 else 0)

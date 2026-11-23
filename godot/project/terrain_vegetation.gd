@@ -48,10 +48,14 @@ const TREE_CELL_SIZE := 100.0
 # Grid record: variant, x, ground height, z, scale, width, yaw, tint r, g, b.
 const TREE_RECORD_FLOATS := 10
 # Grown heights in metres; the far layer is drawn larger, see size_factor.
-const CONIFER_HEIGHTS := Vector2(15.0, 28.0)
-const BROADLEAF_HEIGHTS := Vector2(12.0, 22.0)
+const CONIFER_HEIGHTS := Vector2(8.0, 38.0)
+const BROADLEAF_HEIGHTS := Vector2(7.0, 30.0)
 const SHRUB_HEIGHTS := Vector2(1.6, 4.2)
 const SAPLING_HEIGHTS := Vector2(2.5, 6.0)
+# Within the range above, each stand has its own age (woods read young or old
+# from a distance) and a few single trees stand out as veterans.
+const STAND_AGE_RANGE := Vector2(0.35, 1.0)
+const VETERAN_SHARE := 0.05
 # The atlases hold unlit colour from sources shot under different light. Each
 # kind is drawn at a target brightness, so a pale source and a dark one match.
 const KIND_LUMINANCE := {"conifer": 0.2, "broadleaf": 0.3, "sapling": 0.22, "shrub": 0.27}
@@ -421,7 +425,8 @@ func _place_impostor_trees(area: Rect2, attempts: int, view_range: float, size_f
 			continue
 		var variant := _stand_variant(pool, position, rng)
 		var heights: Vector2 = {"conifer": CONIFER_HEIGHTS, "broadleaf": BROADLEAF_HEIGHTS, "sapling": SAPLING_HEIGHTS}.get(String(_impostors[variant].kind), BROADLEAF_HEIGHTS)
-		var scale := rng.randf_range(heights.x, heights.y) * size_factor / float(_impostors[variant].height)
+		var grown := tree_height(heights, position, rng)
+		var scale := grown * size_factor / float(_impostors[variant].height)
 		# Crowns differ in build as well as size: some trees grow lean, some broad.
 		var width := rng.randf_range(0.82, 1.22)
 		var yaw := rng.randf_range(0.0, TAU)
@@ -432,6 +437,19 @@ func _place_impostor_trees(area: Rect2, attempts: int, view_range: float, size_f
 			_record_tree(variant, position, height - 0.3, scale, width, yaw, tint)
 	for variant in range(_impostors.size()):
 		_add_batch(_impostor_quad, buffers[variant], counts[variant], area, view_range, _impostors[variant].material)
+
+
+# A tree's grown height in metres. Each stand (see STAND_SIZE) has an age that
+# sets where in the kind's range its trees mostly fall, individuals scatter
+# widely around it, and a few are veterans at the top of the range.
+static func tree_height(heights: Vector2, position: Vector2, rng: RandomNumberGenerator) -> float:
+	var cell := Vector2i(floori(position.x / STAND_SIZE), floori(position.y / STAND_SIZE))
+	var hash_value := absi((cell.x * 2654435761) ^ (cell.y * 40503) ^ 0x5bd1e995)
+	var age := lerpf(STAND_AGE_RANGE.x, STAND_AGE_RANGE.y, float(hash_value % 1000) / 999.0)
+	if rng.randf() < VETERAN_SHARE:
+		return heights.y
+	var spread := clampf(age + rng.randf_range(-0.3, 0.3), 0.0, 1.0)
+	return lerpf(heights.x, heights.y, spread)
 
 
 # The species favoured in the stand around a point, or now and then another.

@@ -2455,6 +2455,66 @@ func _add_fuel_depot_view(site: Dictionary) -> void:
 		_add_cylinder_model(root, 1.2, 0.18, offset + Vector3(0, 1.9, 0), signal_material)
 
 
+# Settlements per square kilometre of land, and the most that are generated.
+# Buildings use fixed real sizes, so a bigger map gets more towns, not bigger ones.
+const GENERATED_SETTLEMENTS_PER_KM2 := 0.012
+const MAX_GENERATED_SETTLEMENTS := 48
+const SETTLEMENT_SPACING := 1300.0
+# Detailed building models are separate scene nodes, so only this many are used;
+# every building past it is drawn as a batched box of the same size.
+const CIVILIAN_SCENE_BUDGET := 350
+
+
+# The authored towns, scaled to the map, plus generated villages and farms so the
+# land is not bare. Deterministic: the same map size always gets the same ones.
+func _civilian_clusters(authored: Array, protected: Array[Vector2]) -> Array:
+	var clusters: Array = []
+	var scale_spread := clampf(map_scale, 0.5, 2.0)
+	for cluster in authored:
+		clusters.append({
+			"center": Vector2(float(cluster.center[0]), float(cluster.center[1])) * map_scale,
+			"spread": Vector2(float(cluster.spread[0]), float(cluster.spread[1])) * scale_spread,
+			"count": int(cluster.get("count", 0)), "seed": int(cluster.get("seed", 1)),
+		})
+	var land_km2 := 0.0
+	var landmasses: Array = scenario_definition.get("theater", {}).get("landmasses", [])
+	for landmass: Dictionary in landmasses:
+		land_km2 += float(landmass.size[0]) * float(landmass.size[1]) / 1000000.0
+	if landmasses.is_empty():
+		return clusters
+	var wanted := clampi(roundi(land_km2 * GENERATED_SETTLEMENTS_PER_KM2), 2, MAX_GENERATED_SETTLEMENTS)
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 91000 + map_size_km
+	var generated := 0
+	for _attempt in range(wanted * 60):
+		if generated >= wanted:
+			break
+		var landmass: Dictionary = landmasses[rng.randi_range(0, landmasses.size() - 1)]
+		var half := Vector2(float(landmass.size[0]), float(landmass.size[1])) * 0.5 * 0.92
+		var point := Vector2(float(landmass.center[0]), float(landmass.center[1])) + \
+			Vector2(rng.randf_range(-half.x, half.x), rng.randf_range(-half.y, half.y))
+		if not bool(extension.call("is_land_position", point.x, point.y)):
+			continue
+		var blocked := false
+		for avoid in protected:
+			if point.distance_to(avoid) < 1200.0:
+				blocked = true
+				break
+		for other: Dictionary in clusters:
+			if not blocked and point.distance_to(other.center) < SETTLEMENT_SPACING:
+				blocked = true
+		if blocked:
+			continue
+		var size_scale := clampf(map_scale, 0.4, 1.5)
+		clusters.append({
+			"center": point,
+			"spread": Vector2(rng.randf_range(220.0, 650.0), rng.randf_range(200.0, 600.0)) * size_scale,
+			"count": rng.randi_range(6, 24), "seed": 9000 + generated,
+		})
+		generated += 1
+	return clusters
+
+
 func _spawn_civilian_buildings() -> void:
 	for child in civilian_buildings.get_children():
 		child.queue_free()
@@ -2505,12 +2565,31 @@ func _spawn_civilian_buildings() -> void:
 		spawn_origins.append(Vector2(float(spawn[0]), float(spawn[1])))
 	for site in MATERIAL_SITES:
 		spawn_origins.append(MapScale.vec(site.position, map_scale))
-	var clusters: Array = dressing.get("clusters", [])
+	# Sites, depots and power stations stay clear of buildings, and so do the
+	# transport routes (a blocked cell would make a route invalid).
+	for depot in fuel_depot_state.values():
+		spawn_origins.append(depot.position)
+	if power_grid_view != null:
+		for node in power_grid_view.nodes.values():
+			spawn_origins.append(node.position)
+	var corridor_points: Array[Vector2] = []
+	for route: Dictionary in scenario_definition.get("transport_routes", []):
+		for mode_name in ["road", "rail"]:
+			var mode: Dictionary = route.get(mode_name, {})
+			if not mode.has("entry") or not mode.has("terminal"):
+				continue
+			var entry := Vector2(float(mode.entry[0]), float(mode.entry[1]))
+			var terminal := Vector2(float(mode.terminal[0]), float(mode.terminal[1]))
+			var steps := maxi(1, ceili(entry.distance_to(terminal) / 100.0))
+			for step in range(steps + 1):
+				corridor_points.append(entry.lerp(terminal, float(step) / float(steps)))
+	var clusters: Array = _civilian_clusters(dressing.get("clusters", []), spawn_origins + corridor_points)
+	var scene_budget := CIVILIAN_SCENE_BUDGET
 	for cluster in clusters:
 		var rng := RandomNumberGenerator.new()
 		rng.seed = int(cluster.get("seed", 1))
-		var center := Vector2(float(cluster.center[0]), float(cluster.center[1])) * map_scale
-		var spread := Vector2(float(cluster.spread[0]), float(cluster.spread[1])) * clampf(map_scale, 0.5, 2.0)
+		var center: Vector2 = cluster.center
+		var spread: Vector2 = cluster.spread
 		var attempts := int(cluster.get("count", 0)) * 24
 		var placed := 0
 		for _attempt in range(attempts):
@@ -2538,12 +2617,17 @@ func _spawn_civilian_buildings() -> void:
 				if candidate.distance_to(protected) < 650.0:
 					too_close = true
 					break
+			for corridor_point in corridor_points:
+				if too_close or candidate.distance_to(corridor_point) < 160.0:
+					too_close = true
+					break
 			if too_close:
 				continue
 			var scale := rng.randf_range(0.82, 1.16)
 			var height := _terrain_height_at(candidate.x, candidate.y)
 			var angle := rng.randf_range(0.0, TAU)
-			if scenes[type_index] != null and scene_bounds[type_index].size.y > 0.0:
+			if scenes[type_index] != null and scene_bounds[type_index].size.y > 0.0 and scene_budget > 0:
+				scene_budget -= 1
 				var view := Node3D.new()
 				view.name = "Civilian_%s_%d" % [String(type_definitions[type_index].get("id", type_index)), civilian_building_instance_count]
 				view.position = Vector3(candidate.x, height, candidate.y)

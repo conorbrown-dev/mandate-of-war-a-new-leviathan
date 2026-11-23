@@ -193,6 +193,17 @@ minutes, and the match ends the same minute. Before the AI was held to player
 limits it started with a position estimate and won at about 7.9 minutes. A tank
 takes about 6 minutes to reach the enemy.
 
+Scenery density (issue #22, 2026-11-23, first slice): trees now vary much more in size
+(`TerrainVegetation.tree_height`: conifers 8 to 38 m, broadleaves 7 to 30 m; each 350 m stand has
+its own age and 5% of trees are veterans). Villages and farms are generated on top of the authored
+towns (`main.gd` `_civilian_clusters`, about 0.012 settlements per km2 of land, 2 to 48, deterministic
+per map size) with two new small building types, so a map has about 46 buildings at 5 km, 227 at 40 km
+and 591 at 80 km (was about 64 at every size). They keep clear of spawns, sites, depots, power stations
+and transport routes; only 350 buildings use detailed models, the rest are batched boxes. Checked
+headless (`test_tree_sizes.gd`, `test_map_sizes.gd`), not seen on screen. STILL TO DO for #22: more
+pre-built roads and more power lines (and whether new roads should be real, speed-giving roads or
+scenery only).
+
 Map sizes (issue #14, 2026-11-23): the startup screen has a MAP SIZE picker (5, 10, 20, 40 or
 80 km square, default 40). `godot/project/map_scale.gd` redraws the authored 40 km Broken Strait at
 the chosen size: every coordinate (theater, landmasses, spawns, the AI's search area, transport
