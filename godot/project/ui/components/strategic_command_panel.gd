@@ -14,6 +14,7 @@ extends Control
 signal order_unit(unit_type: int, mode: int)
 signal order_paradrop(unit_type: int)
 signal request_fuel
+signal request_fuel_by_sea
 signal request_recon
 signal dismissed
 
@@ -32,6 +33,7 @@ const DESCRIPTION_HINT := "HOVER A CARD FOR THE UNIT'S ROLE AND WHAT IT ENGAGES"
 
 const TAB_GROUND := 0
 const TAB_AIR := 1
+const TAB_NAVAL := 2
 const WINDOW_WIDTH := 1120.0
 const CARD_WIDTH := 252.0
 ## The status line above the cards already explains a shared refusal at length.
@@ -44,6 +46,7 @@ const SHORT_REASONS := {
 	"PORT NOT HELD": "NEEDS A PORT",
 	"SEA LANE CONTESTED": "SEA LANE BLOCKED",
 	"NO CARGO SHIP": "NO CARGO SHIP",
+	"UNKNOWN WARSHIP": "UNAVAILABLE",
 }
 
 var _tab := TAB_GROUND
@@ -128,7 +131,7 @@ func _ready() -> void:
 	_tabs = TabsComponent.new()
 	_tabs.name = "Tabs"
 	tab_row.add_child(_tabs)
-	_tabs.set_tabs(PackedStringArray(["GROUND", "AIR"]))
+	_tabs.set_tabs(PackedStringArray(["GROUND", "AIR", "NAVAL"]))
 	_tabs.tab_selected.connect(_select_tab)
 	_transport_tabs = TabsComponent.new()
 	_transport_tabs.name = "GroundTransportTabs"
@@ -194,6 +197,14 @@ func _ready() -> void:
 	fuel_button.tooltip_text = "Fly in a fuel shipment on an unarmed cargo aircraft. It can be shot down.  [J]"
 	fuel_button.pressed.connect(request_fuel.emit)
 	footer.add_child(fuel_button)
+	var sea_fuel_button := ButtonComponent.new()
+	sea_fuel_button.name = "RequestFuelBySea"
+	sea_fuel_button.text = "SHIP FUEL BY SEA"
+	sea_fuel_button.variant = "secondary"
+	sea_fuel_button.icon_id = &"resource.fuel"
+	sea_fuel_button.tooltip_text = "Sail in a fuel shipment on an unarmed cargo ship to a port you hold. It needs no airfield and can be sunk."
+	sea_fuel_button.pressed.connect(request_fuel_by_sea.emit)
+	footer.add_child(sea_fuel_button)
 	var recon_button := ButtonComponent.new()
 	recon_button.name = "RequestRecon"
 	recon_button.text = "PLOT RECON FLIGHT"
@@ -259,7 +270,8 @@ func tab_entries() -> Array:
 			continue
 		var is_air := bool(entry.get("is_aircraft", false))
 		var delivered := bool(entry.get("delivered", false))
-		if (_tab == TAB_AIR and is_air) or (_tab == TAB_GROUND and delivered and not is_air):
+		var is_warship := bool(entry.get("is_warship", false))
+		if (_tab == TAB_AIR and is_air) or (_tab == TAB_GROUND and delivered and not is_air) or (_tab == TAB_NAVAL and is_warship):
 			entries.append(entry)
 	entries.sort_custom(func(left, right): return int(left.get("type", -1)) < int(right.get("type", -1)))
 	return entries
@@ -315,7 +327,7 @@ func _refresh() -> void:
 		child.queue_free()
 	if entries.is_empty():
 		var empty := Label.new()
-		empty.text = "NO FORCES AVAILABLE" if _tab == TAB_GROUND else "NO AIRCRAFT AVAILABLE"
+		empty.text = "NO FORCES AVAILABLE" if _tab == TAB_GROUND else "NO AIRCRAFT AVAILABLE" if _tab == TAB_AIR else "NO WARSHIPS AVAILABLE"
 		empty.theme_type_variation = "MutedLabel"
 		_cards.add_child(empty)
 		return
@@ -328,7 +340,10 @@ func _refresh() -> void:
 func _add_card(entry: Dictionary) -> void:
 	var available := bool(entry.get("available", false))
 	var reason := String(entry.get("reason", ""))
-	if _tab == TAB_GROUND and _ground_transport_mode > 0:
+	if _tab == TAB_NAVAL:
+		reason = String(entry.get("naval_reason", ""))
+		available = reason.is_empty()
+	elif _tab == TAB_GROUND and _ground_transport_mode > 0:
 		reason = String(entry.get("road_reason" if _ground_transport_mode == 1 else "rail_reason" if _ground_transport_mode == 2 else "sea_reason", ""))
 		available = reason.is_empty()
 	var holder := VBoxContainer.new()
@@ -339,7 +354,7 @@ func _add_card(entry: Dictionary) -> void:
 	var card := CardComponent.new()
 	card.title = String(entry.get("name", "UNIT")).to_upper()
 	var is_air := bool(entry.get("is_aircraft", false))
-	card.subtitle = ("AIRCRAFT" if is_air else "GROUND FORCE") + ("  ·  PARADROP CAPABLE" if bool(entry.get("airdrop", false)) else "")
+	card.subtitle = ("AIRCRAFT" if is_air else "WARSHIP" if _tab == TAB_NAVAL else "GROUND FORCE") + ("  ·  PARADROP CAPABLE" if bool(entry.get("airdrop", false)) else "")
 	card.disabled = not available
 	card.accent = Tokens.ACCENT if available else Tokens.BORDER_STRONG
 	var symbol := StringName(String(entry.get("nato_symbol_id", "")))
@@ -361,7 +376,7 @@ func _add_card(entry: Dictionary) -> void:
 	cost.insufficient = reason == "INSUFFICIENT MATERIALS"
 	stats.add_child(cost)
 	var time := Label.new()
-	time.text = "%.0f S + %s" % [float(entry.get("build_seconds", 0.0)), "FLIGHT" if is_air or _ground_transport_mode == 0 else "ROAD" if _ground_transport_mode == 1 else "RAIL" if _ground_transport_mode == 2 else "SEA"]
+	time.text = "%.0f S + %s" % [float(entry.get("build_seconds", 0.0)), "AT PORT" if _tab == TAB_NAVAL else "FLIGHT" if is_air or _ground_transport_mode == 0 else "ROAD" if _ground_transport_mode == 1 else "RAIL" if _ground_transport_mode == 2 else "SEA"]
 	time.theme_type_variation = "MutedLabel"
 	time.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	time.tooltip_text = "Build time before the transport departs, then its flight time."
@@ -379,8 +394,8 @@ func _add_card(entry: Dictionary) -> void:
 	order.variant = "primary"
 	order.disabled = not available
 	order.custom_minimum_size.y = 40
-	order.tooltip_text = "Order %s for %d Materials via %s." % [String(entry.get("name", "unit")), int(float(entry.get("material", 0.0))), "air" if is_air or _ground_transport_mode == 0 else "road" if _ground_transport_mode == 1 else "rail" if _ground_transport_mode == 2 else "sea"]
-	order.pressed.connect(func(): order_unit.emit(int(entry.get("type", -1)), 0 if is_air else _ground_transport_mode))
+	order.tooltip_text = "Order %s for %d Materials via %s." % [String(entry.get("name", "unit")), int(float(entry.get("material", 0.0))), "the nearest port you hold" if _tab == TAB_NAVAL else "air" if is_air or _ground_transport_mode == 0 else "road" if _ground_transport_mode == 1 else "rail" if _ground_transport_mode == 2 else "sea"]
+	order.pressed.connect(func(): order_unit.emit(int(entry.get("type", -1)), 4 if _tab == TAB_NAVAL else 0 if is_air else _ground_transport_mode))
 	order.mouse_entered.connect(show_description.bind(entry))
 	holder.add_child(order)
 	if bool(entry.get("airdrop", false)):

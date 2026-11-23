@@ -241,3 +241,147 @@ TEST(the_ai_ships_forces_in_through_a_port_it_holds) {
     verify(simulation.ai_manager().sea_orders() > 0, "the AI orders forces by sea");
     verify(by_sea > 0, "its orders are on the sea route");
 }
+
+TEST(orders_for_one_port_sail_together_in_one_ship) {
+    PortTheater theater;
+    auto& simulation = theater.simulation;
+    theater.run(1);
+    for (int order = 0; order < 3; ++order)
+        verify(simulation.order_sea_delivery(FactionId::ELITE_PRECISION, UnitType::ELITE_MAIN_BATTLE_TANK, kHomePort), "ordered");
+    theater.run(20 * 25);
+    int ships = 0;
+    for (const auto id : simulation.get_entity_list()) {
+        const auto* data = simulation.component_manager().get_component<UnitData>(id);
+        if (data && data->unit_type == 21) ++ships;
+    }
+    verify(ships == 1, "three orders share one cargo ship");
+    theater.run(20 * 150);
+    verify(simulation.inbound_count(FactionId::ELITE_PRECISION) == 0, "all three come ashore");
+    int tanks = 0;
+    for (const auto id : simulation.get_entity_list()) {
+        const auto* data = simulation.component_manager().get_component<UnitData>(id);
+        if (data && data->unit_type == static_cast<int>(UnitType::ELITE_MAIN_BATTLE_TANK)) ++tanks;
+    }
+    verify(tanks == 3, "three tanks are ashore");
+}
+
+TEST(a_ship_holds_four_orders_and_a_fifth_takes_the_next_ship) {
+    PortTheater theater;
+    auto& simulation = theater.simulation;
+    theater.run(1);
+    for (int order = 0; order < 5; ++order)
+        verify(simulation.order_sea_delivery(FactionId::ELITE_PRECISION, UnitType::ELITE_MAIN_BATTLE_TANK, kHomePort), "ordered");
+    theater.run(20 * 40);
+    int ships = 0;
+    for (const auto id : simulation.get_entity_list()) {
+        const auto* data = simulation.component_manager().get_component<UnitData>(id);
+        if (data && data->unit_type == 21) ++ships;
+    }
+    verify(ships == 2, "four orders fill a ship and the fifth sails in a second");
+}
+
+TEST(a_sunk_convoy_ship_loses_every_order_aboard_and_counts_once) {
+    PortTheater theater;
+    auto& simulation = theater.simulation;
+    theater.run(1);
+    for (int order = 0; order < 3; ++order)
+        verify(simulation.order_sea_delivery(FactionId::ELITE_PRECISION, UnitType::ELITE_MAIN_BATTLE_TANK, kHomePort), "ordered");
+    theater.run(20 * 25);
+    EntityId ship = INVALID_ENTITY;
+    for (const auto id : simulation.get_entity_list()) {
+        const auto* data = simulation.component_manager().get_component<UnitData>(id);
+        if (data && data->unit_type == 21) ship = id;
+    }
+    verify(ship != INVALID_ENTITY, "the ship sails");
+    simulation.destroy_unit(ship);
+    theater.run(20 * 5);
+    verify(simulation.ships_lost(FactionId::ELITE_PRECISION) == 1, "one ship is lost");
+    verify(simulation.inbound_count(FactionId::ELITE_PRECISION) == 0, "all three orders are gone with it");
+}
+
+TEST(fuel_comes_by_sea_through_a_held_port_and_a_sunk_ship_loses_it) {
+    PortTheater theater;
+    auto& simulation = theater.simulation;
+    theater.run(1);
+    const auto fuel = [&]() { return simulation.production_manager().storages().at(theater.player_post).tactical.fuel.current; };
+    const float fuel_before = fuel();
+    verify(!simulation.request_sea_fuel_shipment(FactionId::MASS_WARFARE), "a side with no port cannot");
+    verify(simulation.request_sea_fuel_shipment(FactionId::ELITE_PRECISION), "a side with a port can");
+    verify(simulation.fuel_shipment(FactionId::ELITE_PRECISION) != nullptr, "the shipment is inbound");
+    theater.run(20 * 150);
+    verify(simulation.fuel_shipment(FactionId::ELITE_PRECISION) == nullptr, "the voyage is over");
+    verify(fuel() >= fuel_before + 1999.0f, "the fuel is delivered");
+    const float fuel_after = fuel();
+    verify(simulation.request_sea_fuel_shipment(FactionId::ELITE_PRECISION), "a second shipment is accepted");
+    theater.run(20 * 5);
+    EntityId ship = INVALID_ENTITY;
+    for (const auto id : simulation.get_entity_list()) {
+        const auto* data = simulation.component_manager().get_component<UnitData>(id);
+        if (data && data->unit_type == 21) ship = id;
+    }
+    verify(ship != INVALID_ENTITY, "the fuel ship sails");
+    simulation.destroy_unit(ship);
+    theater.run(20 * 150);
+    verify(fuel() <= fuel_after + 0.5f, "a sunk fuel ship delivers nothing");
+    verify(simulation.fuel_supply_reason(FactionId::ELITE_PRECISION) == "FUEL SHIPMENT SUNK", "the loss is reported");
+}
+
+TEST(a_sea_fuel_shipment_is_a_recorded_command) {
+    PortTheater theater;
+    auto& simulation = theater.simulation;
+    verify(simulation.issue_fuel_shipment_command(FactionId::ELITE_PRECISION, true) == 1, "the command is accepted");
+    theater.run(2);
+    verify(simulation.fuel_shipment(FactionId::ELITE_PRECISION) != nullptr, "the command sends the shipment");
+}
+
+TEST(a_patrol_boat_is_built_at_a_held_port_and_launched_at_its_berth) {
+    PortTheater theater;
+    auto& simulation = theater.simulation;
+    theater.run(1);
+    const auto boat = UnitType::ELITE_PATROL_BOAT;
+    verify(simulation.naval_order_refusal(FactionId::MASS_WARFARE, static_cast<UnitType>(24)) == "NO PORT HELD", "no port, no boat");
+    verify(simulation.naval_order_refusal(FactionId::ELITE_PRECISION, UnitType::ELITE_MAIN_BATTLE_TANK) == "UNKNOWN WARSHIP", "a tank is not a warship");
+    verify(simulation.naval_order_refusal(FactionId::ELITE_PRECISION, boat).empty(), "a side with a port can order one");
+    const float before = simulation.production_manager().storages().at(theater.player_post).tactical.materials.current;
+    verify(simulation.issue_naval_command(FactionId::ELITE_PRECISION, boat) == 1, "the order is a recorded command");
+    theater.run(2);
+    verify(simulation.production_manager().storages().at(theater.player_post).tactical.materials.current < before, "it is paid for at once");
+    verify(simulation.inbound_count(FactionId::ELITE_PRECISION) == 1, "the boat is being built");
+    theater.run(20 * 20);
+    verify(simulation.inbound_count(FactionId::ELITE_PRECISION) == 0, "the boat is launched");
+    bool afloat = false;
+    for (const auto id : simulation.get_entity_list()) {
+        const auto* data = simulation.component_manager().get_component<UnitData>(id);
+        if (data && data->unit_type == static_cast<int>(boat) &&
+            std::hypot(simulation.get_unit_x(id) - kBerthX, simulation.get_unit_y(id) - 3000.0f) < 300.0f) afloat = true;
+    }
+    verify(afloat, "it is on the water beside the home port's berth");
+}
+
+TEST(a_warship_is_never_carried_as_cargo) {
+    PortTheater theater;
+    auto& simulation = theater.simulation;
+    theater.run(1);
+    verify(simulation.order_naval_unit(FactionId::ELITE_PRECISION, UnitType::ELITE_PATROL_BOAT), "a boat is ordered");
+    verify(simulation.order_sea_delivery(FactionId::ELITE_PRECISION, UnitType::ELITE_MAIN_BATTLE_TANK, kHomePort), "and a tank by sea");
+    theater.run(20 * 25);
+    int ships = 0, boats = 0;
+    for (const auto id : simulation.get_entity_list()) {
+        const auto* data = simulation.component_manager().get_component<UnitData>(id);
+        if (!data) continue;
+        ships += data->unit_type == 21 ? 1 : 0;
+        boats += data->unit_type == static_cast<int>(UnitType::ELITE_PATROL_BOAT) ? 1 : 0;
+    }
+    verify(boats == 1, "the boat was launched on its own");
+    verify(ships == 1, "the tank sails in its own cargo ship");
+}
+
+TEST(each_faction_has_a_patrol_boat_to_contest_a_lane) {
+    for (const auto faction : {FactionId::ELITE_PRECISION, FactionId::MASS_WARFARE, FactionId::INDUSTRIAL_EXPERIMENTAL}) {
+        int boats = 0;
+        for (const auto& [type, prototype] : get_unit_prototypes()) {
+            if (prototype.faction == faction && prototype.is_naval && !prototype.cargo_transport && prototype.weapon.damage > 0.0f) ++boats;
+        }
+        verify(boats >= 1, "every faction has an armed warship");
+    }
+}

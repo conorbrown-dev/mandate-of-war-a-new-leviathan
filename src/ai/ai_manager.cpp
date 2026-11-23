@@ -683,13 +683,15 @@ void AIManager::order_paradrop(EntityId base) {
 void AIManager::order_fuel(EntityId base) {
     (void)base;
     const uint32_t tick = simulation_->simulation_tick();
-    if (tick < next_fuel_order_tick_ || own_fuel() >= kLowFuel || simulation_->fuel_shipment(faction_id_) ||
-        !simulation_->territorial_control_manager().has_active_installation(faction_id_, InstallationType::AIRFIELD)) return;
+    const bool by_air = simulation_->territorial_control_manager().has_active_installation(faction_id_, InstallationType::AIRFIELD);
+    // With no prospect of an airfield, fuel comes by sea through a port it holds.
+    const bool by_sea = !by_air && !airfield_expected() && simulation_->choose_port(faction_id_) != 0;
+    if (tick < next_fuel_order_tick_ || own_fuel() >= kLowFuel || simulation_->fuel_shipment(faction_id_) || (!by_air && !by_sea)) return;
     const auto& storages = simulation_->production_manager().storages();
     const auto store = storages.find(simulation_->production_manager().faction_storage(faction_id_));
     if (store == storages.end() || store->second.tactical.materials.current < kFuelShipmentMaterialCost) return;
     next_fuel_order_tick_ = tick + seconds_to_ticks(5.0f);
-    if (simulation_->issue_fuel_shipment_command(faction_id_) > 0) ++fuel_shipments_ordered_;
+    if (simulation_->issue_fuel_shipment_command(faction_id_, by_sea) > 0) ++fuel_shipments_ordered_;
 }
 
 // Short of fuel with no shipment coming, the price of one is not spent on units.

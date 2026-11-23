@@ -736,6 +736,7 @@ func _setup_strategic_command_view() -> void:
 	strategic_command_view.visible = false
 	strategic_command_view.order_unit.connect(_on_strategic_command_order_unit)
 	strategic_command_view.request_fuel.connect(_request_fuel_shipment)
+	strategic_command_view.request_fuel_by_sea.connect(_request_fuel_shipment.bind(true))
 	strategic_command_view.request_recon.connect(_begin_recon_targeting)
 	strategic_command_view.order_paradrop.connect(_begin_paradrop_targeting)
 	strategic_command_view.dismissed.connect(_close_strategic_command)
@@ -802,17 +803,17 @@ func _on_strategic_command_order_unit(unit_type: int, mode: int = 0) -> void:
 			if int(entry.get("type", -1)) == unit_type and bool(entry.get("flight_plan", false)):
 				_begin_recon_targeting(unit_type)
 				return
-	var accepted := _order_unit_by_transport(unit_type) if mode == 0 else bool(extension.call("order_ground_transport", HUMAN_PLAYER_ID, unit_type, mode))
+	var accepted := _order_unit_by_transport(unit_type) if mode == 0 else bool(extension.call("order_naval_unit", HUMAN_PLAYER_ID, unit_type)) if mode == 4 else bool(extension.call("order_ground_transport", HUMAN_PLAYER_ID, unit_type, mode))
 	ui_audio.play_cue("order_accepted" if accepted else "order_refused")
 	var refusal := ""
 	if not accepted:
 		for entry in extension.call("get_build_catalog", HUMAN_PLAYER_ID):
 			if int(entry.get("type", -1)) == unit_type:
-				var reason_key := "reason" if mode == 0 else "road_reason" if mode == 1 else "rail_reason" if mode == 2 else "sea_reason"
+				var reason_key := "reason" if mode == 0 else "road_reason" if mode == 1 else "rail_reason" if mode == 2 else "sea_reason" if mode == 3 else "naval_reason"
 				refusal = String(entry.get(reason_key, ""))
 		reinforcement_delivery_status = refusal if not refusal.is_empty() else "ORDER REFUSED"
 	else:
-		reinforcement_delivery_status = "FORCES ORDERED // %s INBOUND" % ["AIR", "ROAD", "RAIL", "SEA"][clampi(mode, 0, 3)]
+		reinforcement_delivery_status = "FORCES ORDERED // %s INBOUND" % ["AIR", "ROAD", "RAIL", "SEA", "WARSHIP BUILDING"][clampi(mode, 0, 4)]
 	_sync_strategic_command()
 	_update_hud()
 
@@ -921,8 +922,8 @@ func _sync_paradrop_markers() -> void:
 		(marker.get_node("Countdown") as Label3D).text = "PARADROP  %.0f S" % float(active[key])
 
 
-func _request_fuel_shipment() -> bool:
-	var accepted := bool(extension.call("fuel_shipment_request", HUMAN_PLAYER_ID))
+func _request_fuel_shipment(by_sea := false) -> bool:
+	var accepted := bool(extension.call("fuel_shipment_request", HUMAN_PLAYER_ID, by_sea))
 	ui_audio.play_cue("order_accepted" if accepted else "order_refused")
 	_sync_fuel_supply()
 	_sync_strategic_command()

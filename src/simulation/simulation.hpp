@@ -372,6 +372,8 @@ public:
         uint32_t order_id = 0;
         // SEA: the port the cargo ship is bound for.
         uint32_t port_id = 0;
+        // A warship ordered at a port: it is launched at the berth, not shipped.
+        bool naval_build = false;
     };
     enum class GroundTransport : uint8_t { AIR = 0, ROAD = 1, RAIL = 2, SEA = 3 };
     struct TransportRoute {
@@ -419,10 +421,12 @@ public:
     // A sea delivery: this bit, the port id (0 for the best one) in bits 8 to 15
     // and the unit type in the low byte.
     static constexpr uint32_t SEA_DELIVERY_ORDER_FLAG = 0x02000000u;
+    // A warship ordered at a port: this bit and the unit type in the low byte.
+    static constexpr uint32_t NAVAL_ORDER_FLAG = 0x01000000u;
     // A BUILD from the command post with this bit asks for a fuel shipment,
     // so a shipment order is recorded and plays back like any other order.
     static constexpr uint32_t FUEL_SHIPMENT_ORDER_FLAG = 0x10000000u;
-    size_t issue_fuel_shipment_command(FactionId faction);
+    size_t issue_fuel_shipment_command(FactionId faction, bool by_sea = false);
     static constexpr float kParachuteSeconds = 12.0f;
     // The cargo aircraft releases the drop when it is this close to the zone.
     static constexpr float kParadropReleaseRadius = 100.0f;
@@ -453,9 +457,19 @@ public:
     std::string sea_delivery_refusal(FactionId faction, UnitType type, uint32_t port_id) const;
     bool order_sea_delivery(FactionId faction, UnitType type, uint32_t port_id);
     size_t issue_sea_delivery_command(FactionId faction, UnitType type, uint32_t port_id);
+    // Warships are not shipped in: they are built at a port the side holds and
+    // launched at its berth after their build time.
+    bool is_warship(UnitType type) const;
+    std::string naval_order_refusal(FactionId faction, UnitType type) const;
+    bool order_naval_unit(FactionId faction, UnitType type);
+    size_t issue_naval_command(FactionId faction, UnitType type);
     // Cargo ships shot down on their way, since the match began.
     int ships_lost(FactionId faction) const { return ships_lost_[static_cast<size_t>(faction)]; }
     static constexpr float kSeaLaneClearance = 700.0f;
+    // A cargo ship carries up to this many orders for the same port. Orders
+    // placed within kConvoyWindowSeconds of its departure share its hold.
+    static constexpr int kShipCapacity = 4;
+    static constexpr float kConvoyWindowSeconds = 12.0f;
     const std::vector<InboundForce>& inbound_forces() const { return inbound_forces_; }
 
     // Arms the win condition: a side loses when its command post is destroyed.
@@ -491,6 +505,8 @@ public:
     std::vector<EntityId> seen_enemies(FactionId faction) const;
 
     bool request_fuel_shipment(FactionId player);
+    // The same load by cargo ship to a port the side holds (needs no airfield).
+    bool request_sea_fuel_shipment(FactionId player);
     const FuelShipment* fuel_shipment(FactionId faction) const;
     const std::string& fuel_supply_reason(FactionId faction) const;
     bool assign_fuel_depot(EntityId depot, FactionId holder);

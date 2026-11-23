@@ -302,6 +302,7 @@ protected:
         ClassDB::bind_method(D_METHOD("configure_transport_route", "faction_id", "mode", "entry_x", "entry_y", "terminal_x", "terminal_y"), &RtsExtension::configure_transport_route);
         ClassDB::bind_method(D_METHOD("transport_route", "faction_id", "mode"), &RtsExtension::transport_route);
         ClassDB::bind_method(D_METHOD("order_ground_transport", "faction_id", "unit_type", "mode"), &RtsExtension::order_ground_transport);
+        ClassDB::bind_method(D_METHOD("order_naval_unit", "faction_id", "unit_type"), &RtsExtension::order_naval_unit);
         ClassDB::bind_method(D_METHOD("port_add", "id", "x", "y", "berth_x", "berth_y", "entry_x", "entry_y", "owner"), &RtsExtension::port_add);
         ClassDB::bind_method(D_METHOD("ports_state"), &RtsExtension::ports_state);
         ClassDB::bind_method(D_METHOD("landing_zone_set", "faction_id", "x", "y"), &RtsExtension::landing_zone_set);
@@ -315,7 +316,7 @@ protected:
         ClassDB::bind_method(D_METHOD("set_game_speed", "scale"), &RtsExtension::set_game_speed);
         ClassDB::bind_method(D_METHOD("get_game_speed"), &RtsExtension::get_game_speed);
         ClassDB::bind_method(D_METHOD("is_multiplayer_session"), &RtsExtension::is_multiplayer_session);
-        ClassDB::bind_method(D_METHOD("fuel_shipment_request", "faction_id"), &RtsExtension::fuel_shipment_request);
+        ClassDB::bind_method(D_METHOD("fuel_shipment_request", "faction_id", "by_sea"), &RtsExtension::fuel_shipment_request, DEFVAL(false));
         ClassDB::bind_method(D_METHOD("fuel_supply_state", "faction_id"), &RtsExtension::fuel_supply_state);
         ClassDB::bind_method(D_METHOD("economy_assign_fuel_depot", "depot_id", "faction_id"), &RtsExtension::economy_assign_fuel_depot);
         ClassDB::bind_method(D_METHOD("power_add_node", "id", "kind", "x", "y", "owner", "output_mw", "demand_mw"), &RtsExtension::power_add_node);
@@ -637,10 +638,11 @@ protected:
         rts::runtime_simulation()->record_external_action(name, std::move(args));
     }
 
-    bool fuel_shipment_request(int64_t faction_id) const {
+    bool fuel_shipment_request(int64_t faction_id, bool by_sea = false) const {
         if (faction_id < 0 || faction_id > 2) return false;
-        record_action("fuel_shipment_request", {static_cast<double>(faction_id)});
-        return rts::runtime_simulation()->request_fuel_shipment(static_cast<rts::FactionId>(faction_id));
+        record_action("fuel_shipment_request", {static_cast<double>(faction_id), by_sea ? 1.0 : 0.0});
+        return by_sea ? rts::runtime_simulation()->request_sea_fuel_shipment(static_cast<rts::FactionId>(faction_id))
+                      : rts::runtime_simulation()->request_fuel_shipment(static_cast<rts::FactionId>(faction_id));
     }
 
     bool economy_assign_material_site(int64_t site_id, int64_t faction_id) const {
@@ -1115,6 +1117,12 @@ public:
                     rts::Simulation::GroundTransport::SEA).c_str());
             }
             entry["airdrop"] = delivered && prototype.airdrop;
+            entry["is_warship"] = simulation.is_warship(type);
+            if (simulation.is_warship(type)) {
+                const std::string naval_refusal = simulation.naval_order_refusal(faction, type);
+                entry["naval_reason"] = String(naval_refusal.c_str());
+                entry["available"] = naval_refusal.empty();
+            }
             entry["is_structure"] = false;
             entry["nato_symbol_id"] = String(prototype.nato_symbol.c_str());
             catalog.append(entry);
@@ -1358,6 +1366,14 @@ public:
         return rts::runtime_simulation()->issue_ground_transport_command(
             static_cast<rts::FactionId>(faction_id), static_cast<rts::UnitType>(unit_type),
             static_cast<rts::Simulation::GroundTransport>(mode)) == 1;
+    }
+
+    // A warship ordered at the nearest port the side holds.
+    bool order_naval_unit(int64_t faction_id, int64_t unit_type) const {
+        if (faction_id < 0 || faction_id >= 3 || unit_type < 0 || unit_type > 255) return false;
+        record_action("order_naval_unit", {static_cast<double>(faction_id), static_cast<double>(unit_type)});
+        return rts::runtime_simulation()->issue_naval_command(
+            static_cast<rts::FactionId>(faction_id), static_cast<rts::UnitType>(unit_type)) == 1;
     }
 
     // Scenario setup: a coastal port, its quay, berth and the start of its sea

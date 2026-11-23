@@ -397,10 +397,22 @@ Pier (the player's), West Quay (the AI's) and three neutral, North Harbor, Centr
   ship, a port lost in transit, recorded command, lane blocked by a visible armed ship, a hidden one, the
   AI taking a port, the AI shipping in) and `test_ports.gd` through the real match scene, which also
   proves the narrow strip along the west coast is sailable. Not seen on screen.
-- **Known gaps.** One ship per order (no convoys), no escort or patrol boat for Mass or Industrial yet (only
-  Elite's Breakwater Patrol Boat can contest a lane), cargo ship and port are generated placeholder models
-  (no weapons, no animation, no wake), ports cannot be destroyed, no sea supply of fuel yet, and the
-  strategic map has no port icon beyond the 3D label.
+- **Convoys.** A cargo ship carries up to four orders (`kShipCapacity`) for the same port. Orders placed
+  within 12 s of its departure share its hold (they all leave at the first order's build time; each further
+  ship leaves 8 s later). Sink the ship and every order aboard is lost; it counts as one loss.
+- **Fuel by sea.** `request_sea_fuel_shipment` (`fuel_shipment_request(faction, true)`, a SHIP FUEL BY SEA button)
+  sends the usual 2,000 fuel for 300 Materials in a cargo ship to a held port, with no airfield needed. A
+  sunk fuel ship delivers nothing ("FUEL SHIPMENT SUNK"). The AI uses it only when it has no prospect of an
+  airfield.
+- **Warships.** Warships are not shipped in: `order_naval_unit` (NAVAL tab) builds one at the nearest port
+  the side holds and launches it at the berth after its build time (15 s). Every faction now has an armed
+  patrol boat to contest a lane: Breakwater (Elite, 400, 300 HP), Pike (Mass, 250, 180 HP, 36 damage) and
+  Sentinel (Industrial, 350, 260 HP, 35 damage), all 12 m/s with a generated placeholder model each. The
+  Elite boat could not be built in Broken Strait before, because production spawns on land.
+- **Known gaps.** The AI does not build warships or escort its cargo ships. Ports cannot be destroyed (a
+  design decision, not yet taken), the ships and boats are generated placeholder models with no wake or
+  animation, the strategic map has no port icon beyond the 3D label, and nothing has been seen on screen or
+  hand-played. Boat speed, cost and the 5 minute voyage are untuned guesses.
 
 Still not done under the transport rule: a refund if an airfield is
 destroyed with forces in the air (they wait for a landing site instead). The legacy

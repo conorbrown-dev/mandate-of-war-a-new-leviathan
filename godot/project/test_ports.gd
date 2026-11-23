@@ -107,6 +107,34 @@ func _run() -> void:
 	check(int(native.call("delivery_state", PLAYER).get("ships_lost", 0)) == 1, "the sinking is counted")
 	_tick(view, 20 * 420)
 	check(_units_near(view, ELITE_MBT, player_quay, 300.0) == tanks_before + 1, "the sunk ship's tank never arrives")
+
+	# Orders for one port share a ship: three tanks, one hull.
+	var tanks_now := _units_near(view, ELITE_MBT, player_quay, 300.0)
+	for _order in range(3):
+		check(bool(native.call("order_ground_transport", PLAYER, ELITE_MBT, 3)), "a convoy order is accepted")
+	_tick(view, 20 * 25)
+	check(_ships(view, 21).size() == 1, "three orders sail in one cargo ship (%d)" % _ships(view, 21).size())
+	_tick(view, 20 * 420)
+	check(_units_near(view, ELITE_MBT, player_quay, 300.0) == tanks_now + 3, "all three tanks come ashore together")
+
+	# Fuel by sea needs no airfield, only a held port.
+	var catalog: Array = native.call("get_build_catalog", PLAYER)
+	var warships := 0
+	for entry: Dictionary in catalog:
+		if bool(entry.get("is_warship", false)):
+			warships += 1
+			check(String(entry.get("naval_reason", "x")).is_empty(), "the player can order the %s" % String(entry.get("name", "")))
+	check(warships >= 1, "Strategic Command lists a warship for the player")
+	check(bool(native.call("fuel_shipment_request", PLAYER, true)), "a sea fuel shipment is accepted")
+	check(_ships(view, 21).size() == 1, "a fuel ship is on the water")
+	_tick(view, 20 * 420)
+	check(String(native.call("fuel_supply_state", PLAYER).get("reason", "")) == "FUEL SHIPMENT DELIVERED", "the fuel arrives by sea")
+
+	# A patrol boat is built at the port and launched at its berth.
+	var boats_before := _entities_of_type(view, 11).size()
+	check(bool(native.call("order_naval_unit", PLAYER, 11)), "a patrol boat is ordered")
+	_tick(view, 20 * 25)
+	check(_entities_of_type(view, 11).size() == boats_before + 1, "the patrol boat is afloat")
 	view.queue_free()
 	await process_frame
 	print("PORTS checks=%d failures=%d" % [checks, failures])

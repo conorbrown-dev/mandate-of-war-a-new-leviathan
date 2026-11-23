@@ -316,6 +316,42 @@ def industrial_cargo_ship():
     return model, "Bulkhead Freighter"
 
 
+
+def patrol_boat(prefix):
+    """A small patrol boat: a sharp hull, wheelhouse, a forward gun and a radar mast."""
+    hull, dark, mark = f"{prefix}_hull", f"{prefix}_dark", f"{prefix}_mark"
+    m = Model()
+    solid(m, dark, [(-2.2, 0.0, -8.0), (2.2, 0.0, -8.0), (2.4, 0.0, 9.0), (-2.4, 0.0, 9.0),
+                    (-2.8, 1.4, -9.0), (2.8, 1.4, -9.0), (3.0, 1.4, 9.5), (-3.0, 1.4, 9.5)])
+    solid(m, hull, [(-2.8, 1.4, -9.0), (2.8, 1.4, -9.0), (3.0, 1.4, 9.5), (-3.0, 1.4, 9.5),
+                    (-2.9, 2.4, -7.0), (2.9, 2.4, -7.0), (3.0, 2.4, 9.5), (-3.0, 2.4, 9.5)])
+    solid(m, hull, [(-2.8, 1.4, -9.0), (2.8, 1.4, -9.0), (0.2, 1.4, -14.0), (-0.2, 1.4, -14.0),
+                    (-2.9, 2.4, -7.0), (2.9, 2.4, -7.0), (0.2, 2.2, -13.0), (-0.2, 2.2, -13.0)])
+    m.box(hull, (0.0, 4.0, 2.5), (4.6, 3.0, 5.0))  # wheelhouse
+    m.box("optic", (0.0, 4.4, -0.05), (4.4, 1.0, 0.1))
+    m.box(dark, (0.0, 5.6, 2.5), (4.8, 0.2, 5.2))  # roof
+    m.cylinder(dark, (0.0, 2.4, -5.5), (0.0, 3.1, -5.5), 1.0, 0.9, 10)  # gun mount
+    m.box(dark, (0.0, 3.4, -5.5), (1.2, 0.8, 1.8))
+    m.cylinder("metal", (0.0, 3.4, -6.4), (0.0, 3.4, -9.4), 0.12, 0.1, 6)  # gun barrel
+    m.cylinder("metal", (0.0, 5.6, 3.5), (0.0, 8.0, 3.5), 0.06, 0.05, 5)  # mast
+    m.box("optic", (0.0, 8.2, 3.5), (1.6, 0.3, 0.2))  # radar bar
+    m.box(mark, (0.0, 2.45, 6.5), (5.0, 0.05, 1.6))  # recognition stripe aft
+    m.box(dark, (0.0, 3.0, 7.5), (2.4, 1.2, 1.5))  # rear deck housing
+    return m, "Patrol Boat"
+
+
+def elite_patrol_boat():
+    return patrol_boat("elite")[0], "Breakwater Patrol Boat"
+
+
+def mass_patrol_boat():
+    return patrol_boat("mass")[0], "Pike Patrol Boat"
+
+
+def industrial_patrol_boat():
+    return patrol_boat("ind")[0], "Sentinel Patrol Boat"
+
+
 def port():
     """A quay with a warehouse, two container gantries and mooring bollards.
     The quay edge is at +X (the water side); the dock runs along Z."""
@@ -346,6 +382,9 @@ MODELS = {
     "elite_cargo_ship": elite_cargo_ship,
     "mass_cargo_ship": mass_cargo_ship,
     "industrial_cargo_ship": industrial_cargo_ship,
+    "elite_patrol_boat": elite_patrol_boat,
+    "mass_patrol_boat": mass_patrol_boat,
+    "industrial_patrol_boat": industrial_patrol_boat,
     "port": port,
 }
 
@@ -365,7 +404,7 @@ def main() -> None:
         model.write(OUTPUT / f"{name}.glb")
         low, high = bounds_of(model)
         meta = {
-            "category": "air" if "airlifter" in name else "naval" if "cargo_ship" in name else "structure" if name == "port" else "ground",
+            "category": "air" if "airlifter" in name else "naval" if ("cargo_ship" in name or "patrol_boat" in name) else "structure" if name == "port" else "ground",
             "godot_forward": "-Z",
             "godot_up": "+Y",
             "bounds_m": {"x": round(high[0] - low[0], 3), "y": round(high[1] - low[1], 3), "z": round(high[2] - low[2], 3)},
