@@ -202,9 +202,10 @@ factor (`Terrain::load_from_file(path, height_scale)`, `load_terrain_heightmap(p
 slopes stay as authored. Camera zoom stops end at the whole map for each size. Native tests cover
 height scaling and a match with the AI wave at all five sizes
 (`terrain_height_scale_keeps_slopes_at_every_map_size`,
-`a_match_runs_and_the_ai_searches_at_every_supported_map_size`). NOT verified: the Godot side
-(`main.gd` picker, `map_scale.gd`, `test_map_scale.gd`, `power_grid_view.gd`) was written without a
-Godot binary and has not been run or screenshotted. Unit sizes, weapon ranges and the 2,000-unit
+`a_match_runs_and_the_ai_searches_at_every_supported_map_size`). Godot side checked headless on Godot 4.7.2 (2026-11-23): `test_map_scale.gd` passes and
+`test_map_sizes.gd` (50 checks) starts a match through the picker's code path at all five sizes;
+`test_camera_zoom_input`, `test_aircraft_presentation` and `test_match_flow` still pass. NOT
+verified: how the picker, terrain and fog look on screen at each size (no GPU or screenshots). Unit sizes, weapon ranges and the 2,000-unit
 cap do not scale, and 80 km is not benchmarked.
 
 Wave search (issue #18, 2026-11-23): a wave with no contact used to head for one shared
