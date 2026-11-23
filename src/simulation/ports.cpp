@@ -34,6 +34,19 @@ bool PortNetwork::set_owner(uint32_t id, int owner) {
     return true;
 }
 
+Port* PortNetwork::mutable_port(uint32_t id) {
+    const auto found = ports_.find(id);
+    return found == ports_.end() ? nullptr : &found->second;
+}
+
+std::vector<uint32_t> PortNetwork::usable_by(int faction) const {
+    std::vector<uint32_t> usable;
+    for (const auto& [id, port] : ports_) {
+        if (port.owner == faction && !port.destroyed) usable.push_back(id);
+    }
+    return usable;
+}
+
 std::vector<uint32_t> PortNetwork::owned_by(int faction) const {
     std::vector<uint32_t> owned;
     for (const auto& [id, port] : ports_) {

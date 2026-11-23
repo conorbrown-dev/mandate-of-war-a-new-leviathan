@@ -68,6 +68,8 @@ func _run() -> void:
 	for state: Dictionary in states:
 		check(bool(native.call("is_land_position", float(state.x), float(state.y))), "port %d has its quay on land" % int(state.id))
 	check(int(states[3].owner) == PLAYER and int(states[4].owner) == ENEMY, "each side starts with one port")
+	for state: Dictionary in states:
+		check(float(state.hp) == float(state.max_hp) and not bool(state.destroyed), "port %d starts undamaged" % int(state.id))
 	# The player's panel offers sea delivery, and says why when it cannot.
 	var sea_reason := ""
 	var player_catalog: Array = native.call("get_build_catalog", PLAYER)
@@ -135,6 +137,18 @@ func _run() -> void:
 	check(bool(native.call("order_naval_unit", PLAYER, 11)), "a patrol boat is ordered")
 	_tick(view, 20 * 25)
 	check(_entities_of_type(view, 11).size() == boats_before + 1, "the patrol boat is afloat")
+
+	# A held port can be shelled to rubble, and the player is told.
+	var enemy_post := int(view.commander_ids.get(1, -1))
+	check(enemy_post > 0, "the enemy commander exists")
+	for index in range(6):
+		var gun := int(native.call("create_unit_with_type", enemy_quay.x + 165.0 + float(index) * 4.0, enemy_quay.y + float(index) * 6.0, 1, PLAYER))
+		check(gun > 0, "an artillery piece is placed")
+	_tick(view, 20 * 200)
+	var after: Array = native.call("ports_state")
+	check(bool(after[4].destroyed), "the shelled enemy port is rubble")
+	check(int(after[4].owner) == ENEMY, "rubble still belongs to its owner")
+	check(not bool(after[3].destroyed), "the player's own port stands")
 	view.queue_free()
 	await process_frame
 	print("PORTS checks=%d failures=%d" % [checks, failures])

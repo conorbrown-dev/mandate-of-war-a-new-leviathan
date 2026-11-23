@@ -204,7 +204,9 @@ public:
     int render_get_instance_count() const { return renderer_.get_instance_count(); }
 
     size_t entity_count() const { return entity_manager_.entity_count(); }
-    std::vector<EntityId> get_entity_list() const { return entity_manager_.get_entities(); }
+    // Every unit and structure. A port's facility entity is not one: it exists
+    // only so weapons can shoot at a held port.
+    std::vector<EntityId> get_entity_list() const;
     float last_tick_ms() const { return last_tick_ms_; }
 
     bool get_unit_position(EntityId entity, float& x, float& y);
@@ -707,6 +709,8 @@ private:
     EntityId launch_cargo_ship(FactionId faction, const Port& port);
     bool unload_at_port(const InboundForce& force, const Port& port);
     void update_ports(float delta_ms);
+    void sync_port_facilities();
+    void repair_ports(float delta_ms);
      std::array<int, FACTION_COUNT> paradrops_lost_{};
      // Puts a side's cargo aircraft in the air at the west map edge, level with
      // its destination, flying straight there. INVALID_ENTITY if it cannot.

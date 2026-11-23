@@ -60,6 +60,7 @@ func load_ports(definitions: Array) -> bool:
 		ports[id] = {
 			"id": id, "name": String(definition.get("name", "PORT")), "quay": quay, "berth": berth, "entry": entry,
 			"owner": owner, "known_owner": owner if owner == viewer else -1, "hold": 0.0, "claimant": -1,
+			"hp": 1.0, "known_hp": 1.0, "destroyed": false, "known_destroyed": false,
 			"view": null, "label": null, "ring": null,
 		}
 	active = not ports.is_empty()
@@ -94,6 +95,13 @@ func sync() -> void:
 		port.owner = truth
 		port.hold = float(entry.hold)
 		port.claimant = int(entry.claimant)
+		port.hp = float(entry.hp) / maxf(float(entry.max_hp), 1.0)
+		port.destroyed = bool(entry.destroyed)
+		if watching and bool(port.known_destroyed) != bool(port.destroyed):
+			pending_notice = "%s: %s" % [String(port.name), "DESTROYED" if bool(port.destroyed) else "BACK IN SERVICE"]
+		if watching:
+			port.known_hp = port.hp
+			port.known_destroyed = port.destroyed
 		if watching and int(port.known_owner) != truth:
 			if int(port.known_owner) != -1 or truth != -1:
 				pending_notice = "%s: %s" % [String(port.name), "NOW HELD BY YOU" if truth == viewer else "NOW HELD BY THE ENEMY" if truth >= 0 else "NOW NEUTRAL"]
@@ -148,8 +156,18 @@ func _refresh_view(port: Dictionary, watching: bool) -> void:
 	var progress := ""
 	if watching and int(port.claimant) >= 0 and float(port.hold) > 0.0:
 		progress = "  ·  TAKING %d%%" % int(float(port.hold) * 100.0)
-	label.text = "%s  ·  %s%s" % [String(port.name), holder_text(shown_owner), progress]
+	var condition := ""
+	if bool(port.known_destroyed):
+		condition = "  ·  DESTROYED"
+		color = color.darkened(0.45)
+	elif float(port.known_hp) < 0.995:
+		condition = "  ·  %d%% HP" % int(float(port.known_hp) * 100.0)
+	label.text = "%s  ·  %s%s%s" % [String(port.name), holder_text(shown_owner), condition, progress]
 	label.modulate = color
+	# Rubble is drawn flat: the quay model is hidden until the port is rebuilt.
+	for child in (port.view as Node3D).get_children():
+		if child is Node3D and child != port.ring and child != port.label:
+			(child as Node3D).visible = not bool(port.known_destroyed)
 	label.outline_modulate = Color(0.04, 0.05, 0.06, 0.9)
 	var ring: MeshInstance3D = port.ring
 	(ring.material_override as StandardMaterial3D).albedo_color = color

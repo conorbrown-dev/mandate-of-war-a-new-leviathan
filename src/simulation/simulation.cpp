@@ -829,7 +829,7 @@ uint32_t Simulation::choose_port(FactionId faction) const {
     const auto storage = production_manager_.storages().find(line);
     uint32_t best = 0;
     float best_distance = std::numeric_limits<float>::infinity();
-    for (const uint32_t id : port_network_.owned_by(static_cast<int>(faction))) {
+    for (const uint32_t id : port_network_.usable_by(static_cast<int>(faction))) {
         if (sea_lane_contested(faction, id)) continue;
         const Port& port = *port_network_.port(id);
         const float distance = storage == production_manager_.storages().end() ? 0.0f
@@ -848,9 +848,11 @@ std::string Simulation::sea_delivery_refusal(FactionId faction, UnitType type, u
         !needs_delivery(type)) return "UNKNOWN GROUND FORCE";
     if (!cargo_ship_type(faction)) return "NO CARGO SHIP";
     if (port_network_.owned_by(static_cast<int>(faction)).empty()) return "NO PORT HELD";
+    if (port_network_.usable_by(static_cast<int>(faction)).empty()) return "PORT DESTROYED";
     if (port_id != 0) {
         const Port* port = port_network_.port(port_id);
         if (!port || port->owner != static_cast<int>(faction)) return "PORT NOT HELD";
+        if (port->destroyed) return "PORT DESTROYED";
         if (sea_lane_contested(faction, port_id)) return "SEA LANE CONTESTED";
     } else if (choose_port(faction) == 0) {
         return "SEA LANE CONTESTED";
@@ -901,6 +903,7 @@ std::string Simulation::naval_order_refusal(FactionId faction, UnitType type) co
     if (!forces_by_transport_ || proto == get_unit_prototypes().end() || proto->second.faction != faction || !is_warship(type))
         return "UNKNOWN WARSHIP";
     if (port_network_.owned_by(static_cast<int>(faction)).empty()) return "NO PORT HELD";
+    if (port_network_.usable_by(static_cast<int>(faction)).empty()) return "PORT DESTROYED";
     if (inbound_count(faction) >= kMaxInboundForces) return "TRANSPORT QUEUE FULL";
     if (unit_count(faction) + inbound_count(faction) >= unit_cap_per_player_) return "UNIT CAP REACHED";
     const EntityId line = production_manager_.faction_line(faction);
@@ -920,7 +923,7 @@ bool Simulation::order_naval_unit(FactionId faction, UnitType type) {
     const auto storage = production_manager_.storages().find(line);
     uint32_t port_id = 0;
     float best = std::numeric_limits<float>::infinity();
-    for (const uint32_t id : port_network_.owned_by(static_cast<int>(faction))) {
+    for (const uint32_t id : port_network_.usable_by(static_cast<int>(faction))) {
         const Port& port = *port_network_.port(id);
         const float distance = storage == production_manager_.storages().end() ? 0.0f
             : std::hypot(port.x - storage->second.x, port.y - storage->second.y);
@@ -982,6 +985,12 @@ bool Simulation::unload_at_port(const InboundForce& force, const Port& port) {
     return false;
 }
 
+std::vector<EntityId> Simulation::get_entity_list() const {
+    auto entities = entity_manager_.get_entities();
+    std::erase_if(entities, [this](EntityId entity) { return component_manager_.get_component<PortFacility>(entity) != nullptr; });
+    return entities;
+}
+
 void Simulation::update_ports(float delta_ms) {
     if (!port_network_.active()) return;
     std::vector<PortPresence> presence;
@@ -996,6 +1005,92 @@ void Simulation::update_ports(float delta_ms) {
         }
     }
     port_network_.update(delta_ms, presence);
+    repair_ports(delta_ms);
+    sync_port_facilities();
+}
+
+// Engineers of the side that holds a port rebuild it, at a price in Materials.
+// Rubble comes back into service once repair passes kPortServiceFraction.
+void Simulation::repair_ports(float delta_ms) {
+    const float seconds = delta_ms / 1000.0f;
+    for (const auto& [id, held] : port_network_.ports()) {
+        if (held.owner < 0 || held.hp >= kPortMaxHealth) continue;
+        int engineers = 0;
+        for (const auto unit : component_manager_.entities_with<Position, Faction, GroundSteering>(entity_manager_.get_entities())) {
+            const auto* position = component_manager_.get_component<Position>(unit);
+            const auto* faction = component_manager_.get_component<Faction>(unit);
+            const auto* health = component_manager_.get_component<Health>(unit);
+            if (!position || !faction || static_cast<int>(faction->faction_id) != held.owner || (health && health->is_dead) ||
+                !is_construction_unit(unit)) continue;
+            if (std::hypot(position->x - held.x, position->y - held.y) <= kPortCaptureRadius) ++engineers;
+        }
+        if (engineers == 0) continue;
+        Port* port = port_network_.mutable_port(id);
+        const float repaired = std::min(kPortMaxHealth - port->hp, kPortRepairRate * static_cast<float>(engineers) * seconds);
+        if (repaired <= 0.0f || !production_manager_.deduct_faction_resources(static_cast<FactionId>(port->owner), repaired * kPortRepairCostPerHealth, 0.0f)) continue;
+        port->hp = std::min(kPortMaxHealth, port->hp + repaired);
+        // A standing port's hit points live on its facility; repair mends that.
+        if (port->entity != INVALID_ENTITY) {
+            if (auto* facility = component_manager_.get_component<Health>(port->entity))
+                facility->current = std::min(kPortMaxHealth, facility->current + repaired);
+        }
+        if (port->destroyed && port->hp >= kPortMaxHealth * kPortServiceFraction) port->destroyed = false;
+    }
+}
+
+// A held, standing port has a facility entity with the port's hit points and
+// its owner's faction, so enemy weapons see it and shoot it. Neutral and ruined
+// ports have none. When the facility is shot to nothing the port becomes rubble.
+void Simulation::sync_port_facilities() {
+    for (const auto& [id, held] : port_network_.ports()) {
+        Port* port = port_network_.mutable_port(id);
+        const bool alive = port->entity != INVALID_ENTITY && entity_manager_.is_alive(port->entity);
+        if (port->destroyed) {
+            // Rubble has no facility, whatever its hit points were a moment ago.
+            if (alive) destroy_unit(port->entity);
+            port->entity = INVALID_ENTITY;
+            continue;
+        }
+        if (alive) {
+            const auto* health = component_manager_.get_component<Health>(port->entity);
+            if (health) port->hp = std::clamp(health->current, 0.0f, kPortMaxHealth);
+            if (!health || health->is_dead || health->current <= 0.0f) {
+                port->hp = 0.0f;
+                port->destroyed = true;
+                destroy_unit(port->entity);
+                port->entity = INVALID_ENTITY;
+                continue;
+            }
+        } else if (port->entity != INVALID_ENTITY) {
+            // The facility was removed elsewhere: it was destroyed.
+            port->hp = 0.0f;
+            port->destroyed = true;
+            port->entity = INVALID_ENTITY;
+        }
+        const bool should_stand = port->owner >= 0 && !port->destroyed;
+        if (!should_stand) {
+            if (port->entity != INVALID_ENTITY) {
+                destroy_unit(port->entity);
+                port->entity = INVALID_ENTITY;
+            }
+            continue;
+        }
+        if (port->entity == INVALID_ENTITY) {
+            const Entity facility = entity_manager_.create_entity();
+            component_manager_.add_component(facility.id, Position{port->x, port->y, terrain_.height_at(port->x, port->y)});
+            component_manager_.add_component(facility.id, Health{port->hp, kPortMaxHealth});
+            component_manager_.add_component(facility.id, Faction{static_cast<FactionId>(port->owner)});
+            component_manager_.add_component(facility.id, PortFacility{id});
+            spatial_grid_.insert(facility.id, port->x, port->y);
+            port->entity = facility.id;
+        } else {
+            // Capture changes the faction the facility belongs to.
+            if (auto* faction = component_manager_.get_component<Faction>(port->entity)) {
+                faction->faction_id = static_cast<FactionId>(port->owner);
+            }
+            if (auto* health = component_manager_.get_component<Health>(port->entity)) health->max = kPortMaxHealth;
+        }
+    }
 }
 
 std::string Simulation::paradrop_refusal(FactionId faction, UnitType type, float x, float y) const {
@@ -1137,7 +1232,7 @@ void Simulation::deliver_inbound_forces() {
             // A warship is launched at its port's berth once it is built, on the
             // first free spot of water; it waits there if its port is lost.
             const Port* port = port_network_.port(force.port_id);
-            if (force.arrive_tick > tick_ || !port || port->owner != static_cast<int>(force.faction) ||
+            if (force.arrive_tick > tick_ || !port || port->owner != static_cast<int>(force.faction) || port->destroyed ||
                 unit_count(force.faction) >= unit_cap_per_player_) {
                 ++index;
                 continue;
@@ -1199,7 +1294,7 @@ void Simulation::deliver_inbound_forces() {
             const float speed = std::max(data ? data->speed : 7.0f, 1.0f);
             voyage.arrive_tick = tick_ + static_cast<uint32_t>(std::ceil(std::max(0.0f, distance - kPortBerthRadius) / speed * 20.0f));
             // A ship waits at the berth until its side holds the port and there is room.
-            if (distance <= kPortBerthRadius && port->owner == static_cast<int>(voyage.faction)) {
+            if (distance <= kPortBerthRadius && port->owner == static_cast<int>(voyage.faction) && !port->destroyed) {
                 bool all_ashore = true;
                 const size_t aboard_before = inbound_forces_.size();
                 for (size_t aboard = 0; aboard < inbound_forces_.size();) {
@@ -3427,7 +3522,7 @@ void Simulation::update_fuel_supply(float delta_ms) {
             const auto* ship = component_manager_.get_component<UnitData>(shipment.transport);
             shipment.remaining_ms = std::max(0.0f, distance - kPortBerthRadius) / std::max(ship ? ship->speed : 20.0f, 1.0f) * 1000.0f;
             // The ship waits at the berth until its side holds the port.
-            if (distance > kPortBerthRadius || port->owner != static_cast<int>(shipment.faction)) return false;
+            if (distance > kPortBerthRadius || port->owner != static_cast<int>(shipment.faction) || port->destroyed) return false;
             destroy_unit(shipment.transport);
             production_manager_.update_storage(production_manager_.faction_storage(shipment.faction), 0.0f, kFuelShipmentLoad);
             reason = "FUEL SHIPMENT DELIVERED";
@@ -3513,6 +3608,10 @@ bool Simulation::request_sea_fuel_shipment(FactionId player) {
     }
     if (port_network_.owned_by(static_cast<int>(player)).empty()) {
         reason = "NO PORT HELD";
+        return false;
+    }
+    if (port_network_.usable_by(static_cast<int>(player)).empty()) {
+        reason = "PORT DESTROYED";
         return false;
     }
     const uint32_t port_id = choose_port(player);

@@ -409,8 +409,21 @@ Pier (the player's), West Quay (the AI's) and three neutral, North Harbor, Centr
   patrol boat to contest a lane: Breakwater (Elite, 400, 300 HP), Pike (Mass, 250, 180 HP, 36 damage) and
   Sentinel (Industrial, 350, 260 HP, 35 damage), all 12 m/s with a generated placeholder model each. The
   Elite boat could not be built in Broken Strait before, because production spawns on land.
-- **Known gaps.** The AI does not build warships or escort its cargo ships. Ports cannot be destroyed (a
-  design decision, not yet taken), the ships and boats are generated placeholder models with no wake or
+- **Destructible ports.** A port that a side holds has 3,000 hit points and a hidden facility entity (`PortFacility`,
+  not in `get_entity_list`, not counted against the unit cap) with that side's faction, so enemy weapons find and
+  shoot it like any other target; neutral ports have none and cannot be damaged. At 0 HP the port is rubble: it still
+  belongs to its owner but serves nobody ("PORT DESTROYED": no sea delivery, warships or fuel by sea; a ship waits
+  off a ruined port). Engineers of the owner at the quay repair a standing or ruined port (60 HP/s each, 0.1 Materials
+  per HP, about 300 for a full rebuild); rubble returns to service past 20% (`kPortServiceFraction`). A ruined port
+  can still be captured; the new owner must repair it. Because the capture radius (140 m) is wider than most weapon
+  ranges, a force that reaches the quay captures the port rather than ruining it; only longer-range weapons (artillery
+  at 195 m, missiles) ruin a port without taking it. Evidence: 9 more native tests in `tests/test_ports.cpp` and
+  `test_ports.gd` through the real scene (47 checks). `ports_view.gd` shows HP and DESTROYED and hides the quay
+  model while it is rubble. Pacing effect: a held port is now a visible enemy structure, so the AI's waves find and
+  engage the player's Eastern Pier on their way, and in `test_match_flow` (idle player) first contact moved from 491 s
+  to 922 s and the defeat from 509 s to 955 s. The player cannot yet order an attack on a port by clicking it (units auto-fire at ports
+  they can see), and the AI does not repair its own ports.
+- **Known gaps.** The AI does not build warships or escort its cargo ships. The ships and boats are generated placeholder models with no wake or
   animation, the strategic map has no port icon beyond the 3D label, and nothing has been seen on screen or
   hand-played. Boat speed, cost and the 5 minute voyage are untuned guesses.
 

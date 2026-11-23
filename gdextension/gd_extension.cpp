@@ -1399,6 +1399,9 @@ public:
             entry["owner"] = port.owner;
             entry["claimant"] = port.claimant;
             entry["hold"] = std::clamp(static_cast<double>(port.hold_ms) / (rts::kPortHoldSeconds * 1000.0), 0.0, 1.0);
+            entry["hp"] = port.hp;
+            entry["max_hp"] = rts::kPortMaxHealth;
+            entry["destroyed"] = port.destroyed;
             ports.append(entry);
         }
         return ports;

@@ -1,6 +1,7 @@
 #include <cmath>
 #include "test_framework.hpp"
 #include "simulation/simulation.hpp"
+#include "ecs/components/faction.hpp"
 
 using namespace rts;
 
@@ -384,4 +385,141 @@ TEST(each_faction_has_a_patrol_boat_to_contest_a_lane) {
         }
         verify(boats >= 1, "every faction has an armed warship");
     }
+}
+
+namespace {
+EntityId facility_of(const Simulation& simulation, uint32_t port_id) {
+    const Port* port = simulation.port_network().port(port_id);
+    return port ? port->entity : INVALID_ENTITY;
+}
+}
+
+TEST(a_held_port_is_a_target_and_a_neutral_one_is_not) {
+    PortTheater theater;
+    auto& simulation = theater.simulation;
+    theater.run(2);
+    verify(facility_of(simulation, kHomePort) != INVALID_ENTITY, "a held port has a facility that weapons can hit");
+    verify(facility_of(simulation, kNeutralPort) == INVALID_ENTITY, "a neutral port has nothing to shoot at");
+    verify(simulation.port_network().port(kHomePort)->hp == kPortMaxHealth, "it starts undamaged");
+    // The facility is not a unit: it is not in the unit list and does not count against the cap.
+    for (const auto id : simulation.get_entity_list()) {
+        verify(simulation.component_manager().get_component<PortFacility>(id) == nullptr, "the facility stays out of the unit list");
+    }
+}
+
+TEST(enemy_weapons_wear_a_port_down_and_leave_rubble) {
+    PortTheater theater;
+    auto& simulation = theater.simulation;
+    simulation.enable_ai(false); // the guns stay where they are put
+    simulation.port_network().set_owner(kHomePort, 1); // a Mass-held port
+    theater.run(2);
+    // Elite artillery shells it from outside the 140 m capture radius.
+    for (int unit = 0; unit < 6; ++unit) {
+        const auto gun = static_cast<EntityId>(simulation.create_unit_with_type(kQuayX - 165.0f - unit * 4.0f, 3000.0f + unit * 6.0f,
+            UnitType::ELITE_LONG_RANGE_ARTILLERY, FactionId::ELITE_PRECISION));
+        simulation.stop_unit(gun);
+    }
+    theater.run(20 * 10);
+    verify(simulation.port_network().port(kHomePort)->hp < kPortMaxHealth, "shells reduce the port's hit points");
+    verify(simulation.port_network().port(kHomePort)->owner == 1, "shelling does not capture it");
+    for (int tick = 0; tick < 20 * 240 && !simulation.port_network().port(kHomePort)->destroyed; ++tick) simulation.update(50.0f);
+    const Port* port = simulation.port_network().port(kHomePort);
+    verify(port->destroyed && port->hp == 0.0f, "it ends as rubble");
+    verify(port->owner == 1, "a ruined port still belongs to its owner until it is captured");
+    verify(facility_of(simulation, kHomePort) == INVALID_ENTITY, "rubble is no longer a target");
+}
+
+TEST(a_ruined_port_serves_nobody) {
+    PortTheater theater;
+    auto& simulation = theater.simulation;
+    theater.run(2);
+    simulation.port_network().mutable_port(kHomePort)->destroyed = true;
+    simulation.port_network().mutable_port(kHomePort)->hp = 0.0f;
+    theater.run(2);
+    verify(simulation.sea_delivery_refusal(FactionId::ELITE_PRECISION, UnitType::ELITE_MAIN_BATTLE_TANK, 0) == "PORT DESTROYED", "no sea delivery");
+    verify(simulation.naval_order_refusal(FactionId::ELITE_PRECISION, UnitType::ELITE_PATROL_BOAT) == "PORT DESTROYED", "no warships");
+    verify(!simulation.request_sea_fuel_shipment(FactionId::ELITE_PRECISION), "no fuel by sea");
+    verify(simulation.fuel_supply_reason(FactionId::ELITE_PRECISION) == "PORT DESTROYED", "and it says why");
+}
+
+TEST(a_ship_waits_off_a_port_that_is_destroyed_while_it_sails) {
+    PortTheater theater;
+    auto& simulation = theater.simulation;
+    theater.run(1);
+    verify(simulation.order_sea_delivery(FactionId::ELITE_PRECISION, UnitType::ELITE_MAIN_BATTLE_TANK, kHomePort), "ordered");
+    theater.run(20 * 20);
+    simulation.port_network().mutable_port(kHomePort)->destroyed = true;
+    simulation.port_network().mutable_port(kHomePort)->hp = 0.0f;
+    theater.run(20 * 150);
+    verify(simulation.inbound_count(FactionId::ELITE_PRECISION) == 1, "the cargo is still aboard");
+    simulation.port_network().mutable_port(kHomePort)->destroyed = false;
+    simulation.port_network().mutable_port(kHomePort)->hp = kPortMaxHealth;
+    theater.run(20 * 10);
+    verify(simulation.inbound_count(FactionId::ELITE_PRECISION) == 0, "it unloads once the port is back in service");
+}
+
+TEST(engineers_repair_a_ruined_port_and_it_returns_to_service) {
+    PortTheater theater;
+    auto& simulation = theater.simulation;
+    theater.run(2);
+    simulation.port_network().mutable_port(kHomePort)->destroyed = true;
+    simulation.port_network().mutable_port(kHomePort)->hp = 0.0f;
+    theater.run(2);
+    const float before = simulation.production_manager().storages().at(theater.player_post).tactical.materials.current;
+    // Nobody to repair it: nothing changes.
+    theater.run(20 * 10);
+    verify(simulation.port_network().port(kHomePort)->hp == 0.0f, "an unattended ruin stays a ruin");
+    const auto engineer = static_cast<EntityId>(simulation.create_unit_with_type(kQuayX - 40.0f, 3000.0f, static_cast<UnitType>(8), FactionId::ELITE_PRECISION));
+    simulation.stop_unit(engineer);
+    // 600 hit points (20%) at 60 per second: back in service after about 10 seconds.
+    theater.run(20 * 8);
+    verify(simulation.port_network().port(kHomePort)->destroyed, "not yet");
+    theater.run(20 * 5);
+    verify(!simulation.port_network().port(kHomePort)->destroyed, "back in service once past 20%");
+    verify(facility_of(simulation, kHomePort) != INVALID_ENTITY, "and a target again");
+    theater.run(20 * 60);
+    verify(simulation.port_network().port(kHomePort)->hp >= kPortMaxHealth - 0.5f, "repair finishes at full hit points");
+    const float after = simulation.production_manager().storages().at(theater.player_post).tactical.materials.current;
+    verify(before - after > 250.0f && before - after < 350.0f, "repair costs about 300 Materials");
+}
+
+TEST(a_ruined_port_can_be_captured_and_the_new_owner_must_repair_it) {
+    PortTheater theater;
+    auto& simulation = theater.simulation;
+    theater.run(2);
+    simulation.port_network().mutable_port(kHomePort)->destroyed = true;
+    simulation.port_network().mutable_port(kHomePort)->hp = 0.0f;
+    theater.run(2);
+    theater.tank(kQuayX - 40.0f, 3000.0f, FactionId::MASS_WARFARE);
+    theater.run(20 * 12);
+    verify(simulation.port_network().port(kHomePort)->owner == 1, "the enemy takes the ruins");
+    verify(simulation.port_network().port(kHomePort)->destroyed, "they are still ruins");
+    verify(simulation.sea_delivery_refusal(FactionId::MASS_WARFARE, UnitType::MASS_SWARM_TANK, 0) == "PORT DESTROYED", "useless until repaired");
+}
+
+TEST(a_captured_port_belongs_to_its_new_owner_as_a_target) {
+    PortTheater theater;
+    auto& simulation = theater.simulation;
+    theater.run(2);
+    theater.tank(kQuayX - 40.0f, -4000.0f, FactionId::ELITE_PRECISION);
+    theater.run(20 * 12);
+    verify(simulation.port_network().port(kNeutralPort)->owner == 0, "the neutral port is taken");
+    verify(facility_of(simulation, kNeutralPort) != INVALID_ENTITY, "it becomes a target for the other side");
+    const auto* faction = simulation.component_manager().get_component<Faction>(facility_of(simulation, kNeutralPort));
+    verify(faction && faction->faction_id == FactionId::ELITE_PRECISION, "owned by the side that took it");
+}
+
+TEST(engineers_also_mend_a_damaged_port_that_is_still_standing) {
+    PortTheater theater;
+    auto& simulation = theater.simulation;
+    theater.run(2);
+    auto* health = simulation.component_manager().get_component<Health>(facility_of(simulation, kHomePort));
+    health->current = 1000.0f;
+    theater.run(2);
+    verify(simulation.port_network().port(kHomePort)->hp < 1100.0f, "the port is damaged");
+    const auto engineer = static_cast<EntityId>(simulation.create_unit_with_type(kQuayX - 40.0f, 3000.0f, static_cast<UnitType>(8), FactionId::ELITE_PRECISION));
+    simulation.stop_unit(engineer);
+    theater.run(20 * 10);
+    verify(simulation.port_network().port(kHomePort)->hp > 1500.0f, "an engineer at the quay mends it");
+    verify(simulation.component_manager().get_component<Health>(facility_of(simulation, kHomePort))->current > 1500.0f, "the target's hit points follow");
 }
