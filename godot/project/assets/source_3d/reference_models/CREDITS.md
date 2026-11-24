@@ -14,8 +14,8 @@ user-provided reference pack whose licences are not recorded here.
 | `chinook_ch47_lowpoly.glb` | Helicopter Low Poly - Chinook CH-47 (1.6k triangles) | Machine Meza (maurib98) | [Sketchfab](https://sketchfab.com/3d-models/helicopter-low-poly-chinook-ch-47-72b5123bda964e9aa5343384734977e2) | [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/) |
 
 The recon models were downloaded 2026-11-17 and the two Chinook models 2026-11-23,
-all as Sketchfab's glTF-binary conversion with 1k textures. The two Chinook models
-are stored for a future transport helicopter and are not yet used by any visual
-definition; their credits are listed here and on the Credits panel ahead of use.
-`chinook_ch47.glb` is not in metres: scale it by about 0.096 for a 30 m aircraft
-(see `chinook_ch47.meta.json`).
+all as Sketchfab's glTF-binary conversion with 1k textures. `chinook_ch47.glb` is the
+visual of the Skybridge Airlifter (`visual.elite.airlifter.prototype`), drawn at a
+scale of 0.096 because the file is not in metres. `chinook_ch47_lowpoly.glb` is
+stored for later and is not used by any visual definition yet. Both are credited
+here and on the Credits panel.

@@ -33,7 +33,7 @@ func _init() -> void:
 			sourced += 1
 			var uid := source.trim_prefix("sketchfab/").get_slice(" ", 0)
 			check(urls.any(func(url): return String(url).ends_with(uid)), "%s has an in-game credit" % definition.visual_id)
-	check(sourced == 3, "the three recon models are Sketchfab-sourced (%d)" % sourced)
+	check(sourced == 4, "the three recon models and the Skybridge's Chinook are Sketchfab-sourced (%d)" % sourced)
 	var panel: Control = AudioSettingsScript.new()
 	root.add_child(panel)
 	await process_frame

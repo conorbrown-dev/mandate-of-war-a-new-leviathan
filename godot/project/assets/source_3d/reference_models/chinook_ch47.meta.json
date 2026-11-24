@@ -8,7 +8,7 @@
     "z": 313.218
   },
   "triangles_all_exported_meshes": 15386,
-  "units_note": "File units are not metres. The real CH-47 is about 30 m overall, so a visual definition would scale by about 0.096 to give about 30 m. No visual definition uses this model yet.",
+  "units_note": "File units are not metres. The real CH-47 is about 30 m overall, so the Skybridge Airlifter visual scales it by 0.096 to give about 30 m.",
   "origin_note": "Origin sits about 0.9 m (scaled) off the fuselage centre on X; wheels rest at y of about 0.9 file units.",
   "collision_recommendation": "Use simple BoxShape3D/CapsuleShape3D or custom RTS footprint data; do not use render mesh collision per unit.",
   "source_pipeline": "Sketchfab glTF-binary download (1k textures), imported unchanged; credit in godot/project/credits.json"
