@@ -111,6 +111,36 @@ static UnitPrototype parse_unit_prototype(const rts::data::JsonValue& obj) {
     if (auto construction = obj.get("construction_unit"); construction && construction->type() == rts::data::JsonValue::Type::Bool) {
         prototype.construction_unit = construction->as_bool();
     }
+    if (auto cargo = obj.get("cargo_transport"); cargo) {
+        if (cargo->type() != rts::data::JsonValue::Type::Bool) {
+            throw std::runtime_error("Unit prototype " + prototype.key + " has a non-boolean cargo_transport");
+        }
+        prototype.cargo_transport = cargo->as_bool();
+    }
+    if (auto airdrop = obj.get("airdrop"); airdrop) {
+        if (airdrop->type() != rts::data::JsonValue::Type::Bool) {
+            throw std::runtime_error("Unit prototype " + prototype.key + " has a non-boolean airdrop");
+        }
+        prototype.airdrop = airdrop->as_bool();
+    }
+    if (auto burn = obj.get("fuel_per_km"); burn) {
+        if (burn->type() != rts::data::JsonValue::Type::Number || !std::isfinite(burn->as_number()) || burn->as_number() < 0.0) {
+            throw std::runtime_error("Unit prototype " + prototype.key + " has an invalid fuel_per_km");
+        }
+        prototype.fuel_per_km = static_cast<float>(burn->as_number());
+    }
+    if (const auto intel = obj.get("intel_range"); intel) {
+        if (intel->type() != rts::data::JsonValue::Type::Number ||
+            !std::isfinite(intel->as_number()) || intel->as_number() < 0.0 || intel->as_number() > 10000.0)
+            throw std::runtime_error("Unit prototype " + prototype.key + " has an invalid intel_range");
+        prototype.intel_range = static_cast<float>(intel->as_number());
+    }
+    if (const auto footprint = obj.get("footprint_radius"); footprint) {
+        if (footprint->type() != rts::data::JsonValue::Type::Number ||
+            !std::isfinite(footprint->as_number()) || footprint->as_number() < 0.5 || footprint->as_number() > 50.0)
+            throw std::runtime_error("Unit prototype " + prototype.key + " has an invalid footprint_radius");
+        prototype.footprint_radius = static_cast<float>(footprint->as_number());
+    }
     const auto weapon = obj.get("weapon");
     if (!weapon || weapon->type() != rts::data::JsonValue::Type::Object) {
         throw std::runtime_error("Unit prototype " + prototype.key + " has no weapon");
@@ -125,6 +155,24 @@ static UnitPrototype parse_unit_prototype(const rts::data::JsonValue& obj) {
     };
     prototype.weapon = {weapon_number("damage"), weapon_number("range"), weapon_number("fire_rate"),
                         weapon_number("projectile_speed"), weapon_number("aoe_radius"), weapon_number("lead_bias")};
+    // "targets": which domains the weapon can engage, as real systems do. A
+    // tank gun cannot engage a jet; a surface-to-air missile cannot engage a tank.
+    if (const auto targets = weapon->get("targets"); targets) {
+        if (targets->type() != rts::data::JsonValue::Type::Array) {
+            throw std::runtime_error("Unit prototype " + prototype.key + " has non-list weapon targets");
+        }
+        prototype.weapon.hits_ground = false;
+        prototype.weapon.hits_air = false;
+        for (const auto& target : targets->as_array()) {
+            const std::string domain = target.type() == rts::data::JsonValue::Type::String ? target.as_string() : std::string();
+            if (domain == "ground") prototype.weapon.hits_ground = true;
+            else if (domain == "air") prototype.weapon.hits_air = true;
+            else throw std::runtime_error("Unit prototype " + prototype.key + " has an unknown weapon target");
+        }
+    }
+    if (weapon->get("max_target_altitude_m")) {
+        prototype.weapon.max_target_altitude = weapon_number("max_target_altitude_m");
+    }
 
     if (auto content_id_opt = obj.get("content_id"); content_id_opt && content_id_opt->type() == rts::data::JsonValue::Type::String) {
         prototype.content_id = content_id_opt->as_string();
@@ -175,6 +223,13 @@ static UnitPrototype parse_unit_prototype(const rts::data::JsonValue& obj) {
                 throw std::runtime_error("Invalid recon_loiter_seconds in unit prototype");
             }
             prototype.recon_loiter_seconds = static_cast<float>(loiter->as_number());
+        }
+        prototype.flight_altitude = DEFAULT_FLIGHT_ALTITUDE_METERS;
+        if (auto altitude = obj.get("flight_altitude_m"); altitude) {
+            if (altitude->type() != rts::data::JsonValue::Type::Number || !std::isfinite(altitude->as_number()) || altitude->as_number() <= 0.0) {
+                throw std::runtime_error("Invalid flight_altitude_m in unit prototype");
+            }
+            prototype.flight_altitude = static_cast<float>(altitude->as_number());
         }
         if (prototype.payload <= 0.0f || prototype.operational_range <= 0.0f || prototype.operational_energy <= 0.0f ||
             prototype.operational_material <= 0.0f || prototype.max_airborne_time_seconds <= 0.0f ||

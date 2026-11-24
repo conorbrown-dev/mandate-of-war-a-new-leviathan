@@ -10,6 +10,26 @@ not add custom binary content. Game replays are saved output, not content.
 the id of the faction that holds it at the start. Ids must not match a material
 site.
 
+## Power grid
+
+A scenario names its grid with `"power_grid": "res://scenarios/<file>.json"`
+(Broken Strait uses `power_grid.json`). Without it a match has no grid and Power
+stays as set. The file lists `nodes` and `lines`:
+
+- A node has an `id` (1 to 65535), a `kind`, a `name` and a `position`. A
+  `station` has `output_mw` and an optional `owner` faction id (none means
+  civilian). A `load` is a side's command post: it needs an `owner` and has
+  `demand_mw`. A `junction` only joins lines.
+- A line has an `id` (1 to 65535), the node ids `from` and `to`, a `kind`
+  (`wood` or `steel`), an optional `owner`, and optional `via` points where its
+  route bends. `reason` records why it is wood or steel.
+- `known_to` on a node or line lists the faction ids that know of it when the
+  match starts. A side always knows its own.
+
+Use `steel` for a line that leaves a station, serves a large city or large
+structure, or crosses wide water, and `wood` otherwise; the `power_grid`
+contract checks the station and water cases.
+
 ## Units and factions
 
 `data/unit_faction_stats.json` is the only definition of units and factions.
@@ -25,11 +45,16 @@ needed unless it needs a new `visual_id`, which is defined in
 | `faction` | Owning faction key |
 | `material_cost`, `build_time_seconds`, `hp`, `speed` | Core stats |
 | `view_range` | Sight. A unit only fires at what it can see |
-| `weapon` | `damage`, `range`, `fire_rate` (seconds between shots), `projectile_speed`, `aoe_radius`, `lead_bias` |
+| `intel_range` | Optional radar/intel radius in metres, 0–10,000; default 0 disables it. Terrain blocks ground contacts; airborne contacts use the sky layer. Grants anonymous coarse contacts only, never visual sight, identity or firing permission |
+| `weapon` | `damage`, `range`, `fire_rate` (seconds between shots), `projectile_speed`, `aoe_radius`, `lead_bias`, and `targets`: which of `"ground"` and `"air"` it can engage, as the real system can (a tank gun cannot engage a jet in flight; a surface-to-air missile cannot engage a tank). An empty list means unarmed. Default `["ground"]`. An aircraft is an air target from take-off to touch-down |
 | `capabilities` | Territorial actions |
 | `construction_unit` | True for units that need a buildable site |
-| `nato_symbol` | Build catalog symbol |
-| `strategic_icon` | One of `mbt`, `artillery`, `air_defense`, `swarm`, `assault`, `missile`, `engineer`, `fighter`, `vtol`, `boat` |
+| `fuel_per_km` | Fuel a ground vehicle draws from its side's store per kilometre driven, when the scenario sets `ground_vehicles_burn_fuel`. Default 0 |
+| `footprint_radius` | Ground units: half the hull length in metres, 0.5–50, default 4. Separation keeps two units' centres at least the sum of their radii apart |
+| `cargo_transport` | True for the unarmed aircraft that flies a side's fuel shipments in. It cannot be ordered and is left out of Strategic Command. Default false |
+| `airdrop` | True for light ground units a transport can drop by parachute (paratroop drops). Default false |
+| `nato_symbol` | Build catalog symbol: an id in the UI NATO icon registry (`assets/ui/symbols/nato/index.json`) |
+| `strategic_icon` | APP-6 function drawn on the map-scale symbol (`nato_map_symbol.gd`). One of `armour`, `sp_artillery`, `air_defense`, `missile`, `recon`, `engineer` (land), `fighter`, `recon_aircraft`, `cargo_aircraft`, `attack_helicopter` (air), `naval_surface` (sea). The frame comes from this dimension and the viewer's affiliation |
 
 Set `view_range` at least as high as `weapon.range`, or the extra range is unused.
 
@@ -86,6 +111,10 @@ Each finished match is written as JSON to `user://match_records/` (or
 - `commands`: every order that ran, as `[tick, faction, type, entity, x, y, extra]`.
   `x` and `y` are the encoded command values; divide by `command_position_scale`
   for meters.
+  A BUILD (type 3) with bit `0x40000000` in `extra` orders a structure (type in
+  the low byte) from a construction unit; bit `0x20000000` orders a paratroop
+  drop of that unit type at `x`, `y` from the command post. MOVE uses bit
+  `0x80000000` for a queued waypoint.
 - `actions`: calls that changed the match outside the command queue, such as
   queueing a structure or calling in a delivery, with their arguments.
 - `state_hashes`: a hash of the simulation every second. A playback must match
@@ -93,3 +122,34 @@ Each finished match is written as JSON to `user://match_records/` (or
 - `samples`: every 10 seconds, each faction's units, fighting units, materials
   and army centre.
 - the result, match length and the tick each side first sighted the enemy.
+
+## Radio alerts
+
+`godot/project/audio/radio/radio_catalog.json` (`schema_version` 1) defines what
+the command network says. The game reads it at start; a catalog with another
+schema version is refused and the built-in one kept.
+
+- `voice_sets`: one per faction voice. `faction` is the faction id, `direction`
+  is a note for whoever picks the voice, and `elevenlabs` (voice id, model,
+  settings) is used only by `tools/generate_radio_voice.py`.
+- `severities`: `rank` (0 is most important), `max_age_seconds` (older reports
+  are dropped) and `preempts` (may cut in on a lower line).
+- `categories`: id to display name. Players can switch each one off.
+- `grid.cell_m`: size of a grid cell for `{grid}`.
+- `events`: each has a stable `id`, `category`, `severity` and:
+  - `status`: `active`, or `parked` with a `needs` note for alerts whose game
+    system does not exist. Parked alerts have no `native_kind`.
+  - `native_kind`: the `RadioEventKind` number it presents.
+  - `cooldown_seconds` and `dedupe` (`event`, or `sector` for one per grid cell).
+  - `lines`: voice set to a list of variants. A spoken line may use only
+    `{cardinal}`.
+  - `fallback`: text for a faction with no line. `plain`: text when the report
+    has no reference point, so no direction can be given.
+  - `detail`: a second text line; may use `{bearing}`, `{range_km}`, `{grid}`
+    and `{cardinal}`. It is dropped when any of them is unknown.
+  - `focus`: whether clicking the report moves the camera to it.
+
+Recorded lines are listed in `voice_manifest.json` beside the catalog, written
+by the generator: clip id (`<voice_set>/<event>.v<variant>[.<compass code>]`),
+resource path, text, voice id, model, settings, hashes and processing steps. A
+line with no entry there is shown as text.

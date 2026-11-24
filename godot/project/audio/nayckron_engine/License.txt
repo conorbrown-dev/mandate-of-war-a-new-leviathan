@@ -1,0 +1,6 @@
+Nayckron, based on qubodup
+Source: https://opengameart.org/content/engine-loop-heavy-vehicletank
+License selected: CC-BY-3.0
+License: https://creativecommons.org/licenses/by/3.0/
+Files unmodified. License designation verified on source page 2026-11-08.
+The source also offers GPL 3.0; this project selects CC BY 3.0.

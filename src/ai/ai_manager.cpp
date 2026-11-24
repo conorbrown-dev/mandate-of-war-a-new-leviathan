@@ -1,3 +1,4 @@
+#include <map>
 #include "ai/ai_manager.hpp"
 #include "simulation/simulation.hpp"
 #include "ecs/components/faction.hpp"
@@ -84,10 +85,13 @@ void AIManager::update(float delta_ms) {
         update_visibility();
         update_sectors();
         gather_resources();
+        order_paradrop(simulation_->production_manager().faction_line(faction_id_));
         produce_units();
         plan_expansion();
         update_scouts();
         update_waves();
+        update_port_squad();
+        update_port_repair();
         update_sweep();
         update_operational_plan();
         defend_base();
@@ -114,13 +118,25 @@ void AIManager::reset() {
     sectors_.clear();
     scout_tasks_.clear();
     next_sweep_tick_ = next_flight_tick_ = 0;
+    sweep_tasks_.clear();
     scenario_first_wave_ = scenario_wave_growth_ = scenario_max_wave_ = 0;
     home_guard_.clear();
+    port_squad_.clear();
+    port_target_ = 0;
+    port_repair_target_ = 0;
+    next_repair_order_tick_ = 0;
+    port_repair_orders_ = 0;
     first_seen_.clear();
     order_cursor_ = mixed_cursor_ = 0;
     scouts_on_order_ = 0;
     arrived_scouts_.clear();
     recon_flights_ordered_ = 0;
+    airfield_orders_ = 0;
+    next_airfield_tick_ = 0;
+    fuel_shipments_ordered_ = 0;
+    next_fuel_order_tick_ = 0;
+    next_paradrop_tick_ = 0;
+    paradrops_ordered_ = 0;
     sites_surveyed_ = false;
     unknown_sites_.clear();
     enemy_sites_.clear();
@@ -136,6 +152,7 @@ void AIManager::configure_assault(float min_x, float min_y, float max_x, float m
     area_max_y_ = max_y;
     sectors_.clear();
     scout_tasks_.clear();
+    sweep_tasks_.clear();
     sweep_x_ = (min_x + max_x) * 0.5f;
     sweep_y_ = (min_y + max_y) * 0.5f;
     assault_active_ = true;
@@ -149,6 +166,11 @@ void AIManager::configure_assault(float min_x, float min_y, float max_x, float m
     apply_wave_plan();
     committed_.clear();
     home_guard_.clear();
+    port_squad_.clear();
+    port_target_ = 0;
+    port_repair_target_ = 0;
+    next_repair_order_tick_ = 0;
+    port_repair_orders_ = 0;
 }
 
 bool AIManager::is_recon_asset(EntityId unit) const {
@@ -187,15 +209,17 @@ void AIManager::update_sectors() {
 
 // The patch nobody has looked at for longest, nearest first, leaving out any
 // another scout is already heading for.
-size_t AIManager::stalest_sector(float x, float y, EntityId scout) const {
+size_t AIManager::stalest_sector(float x, float y, EntityId scout, EntityId group) const {
     size_t best = 0;
     uint32_t best_age = std::numeric_limits<uint32_t>::max();
     float best_distance = std::numeric_limits<float>::infinity();
     for (size_t index = 0; index < sectors_.size(); ++index) {
         const bool taken = std::any_of(scout_tasks_.begin(), scout_tasks_.end(), [&](const auto& task) {
             return task.first != scout && task.second.sector == index;
+        }) || std::any_of(sweep_tasks_.begin(), sweep_tasks_.end(), [&](const auto& task) {
+            return task.first != group && task.second.sector == index;
         });
-        if (taken && sectors_.size() > scout_tasks_.size()) continue;
+        if (taken && sectors_.size() > scout_tasks_.size() + sweep_tasks_.size()) continue;
         const auto& sector = sectors_[index];
         const uint32_t age = std::max(sector.last_seen_tick, sector.last_tasked_tick);
         const float dx = sector.x - x, dy = sector.y - y;
@@ -266,25 +290,38 @@ void AIManager::update_scouts() {
     }
 }
 
-// With no contact, a wave searches together rather than scattering.
+// With no contact, a wave searches in small groups, each on ground nobody else
+// is watching or heading for, so the wave covers the search area side by side.
 void AIManager::update_sweep() {
     if (!assault_active_ || sectors_.empty() || committed_.empty()) return;
     const uint32_t tick = simulation_->simulation_tick();
-    if (tick < next_sweep_tick_) return;
-    float center_x = 0.0f, center_y = 0.0f;
-    int counted = 0;
+    struct Group { float x = 0.0f, y = 0.0f; int count = 0; };
+    std::map<EntityId, Group> groups;
     for (EntityId unit : visible_units_) {
-        if (!committed_.contains(unit)) continue;
-        center_x += simulation_->get_unit_x(unit);
-        center_y += simulation_->get_unit_y(unit);
-        ++counted;
+        if (!committed_.contains(unit) || is_recon_asset(unit)) continue;
+        auto& group = groups[sweep_group(unit)];
+        group.x += simulation_->get_unit_x(unit);
+        group.y += simulation_->get_unit_y(unit);
+        ++group.count;
     }
-    if (counted == 0) return;
-    const size_t next = stalest_sector(center_x / counted, center_y / counted);
-    sectors_[next].last_tasked_tick = tick;
-    sweep_x_ = sectors_[next].x;
-    sweep_y_ = sectors_[next].y;
-    next_sweep_tick_ = tick + kSweepLegTicks;
+    std::erase_if(sweep_tasks_, [&](const auto& task) { return !groups.contains(task.first); });
+    for (const auto& [key, group] : groups) {
+        const auto task = sweep_tasks_.find(key);
+        const bool reached = task != sweep_tasks_.end() && sectors_[task->second.sector].last_seen_tick > task->second.tasked_tick;
+        const bool overdue = task != sweep_tasks_.end() && tick - task->second.tasked_tick > kSweepLegTicks * 3;
+        if (task != sweep_tasks_.end() && !reached && !overdue) continue;
+        const size_t next = stalest_sector(group.x / group.count, group.y / group.count, INVALID_ENTITY, key);
+        sectors_[next].last_tasked_tick = tick;
+        sweep_tasks_[key] = {next, tick};
+    }
+}
+
+bool AIManager::sweep_target(EntityId unit, float& x, float& y) const {
+    const auto task = sweep_tasks_.find(sweep_group(unit));
+    if (task == sweep_tasks_.end() || task->second.sector >= sectors_.size()) return false;
+    x = sectors_[task->second.sector].x;
+    y = sectors_[task->second.sector].y;
+    return true;
 }
 
 bool AIManager::nearest_contact(float x, float y, float& contact_x, float& contact_y) const {
@@ -299,7 +336,111 @@ bool AIManager::nearest_contact(float x, float y, float& contact_x, float& conta
             contact_y = sighting.y;
         }
     }
+    for (const auto& contact : simulation_->radar_contacts(faction_id_)) {
+        const float dx = contact[0]-x, dy = contact[1]-y;
+        if (dx*dx+dy*dy < best) {
+            best = dx*dx+dy*dy;
+            contact_x = contact[0]; contact_y = contact[1];
+        }
+    }
     return std::isfinite(best);
+}
+
+// The AI's engineer rebuilds a damaged or ruined port of its own, once the
+// opening is over (two minutes in, after the airfield), and only while the
+// engineer has nothing else to do. It drives to the quay and stays; the work itself is
+// the simulation's repair rule (an engineer of the owner at the quay).
+void AIManager::update_port_repair() {
+    port_repair_target_ = 0;
+    if (!assault_active_ || !simulation_->port_network().active()) return;
+    EntityId engineer = INVALID_ENTITY;
+    for (EntityId unit : visible_units_) {
+        if (simulation_->is_construction_unit(unit)) {
+            engineer = unit;
+            break;
+        }
+    }
+    if (engineer == INVALID_ENTITY) return;
+    const float ex = simulation_->get_unit_x(engineer), ey = simulation_->get_unit_y(engineer);
+    float best = std::numeric_limits<float>::infinity();
+    for (const auto& [id, port] : simulation_->port_network().ports()) {
+        if (port.owner != static_cast<int>(faction_id_)) continue;
+        // A port that is merely scratched is left alone; a ruin or a battered one is worth the trip.
+        if (!port.destroyed && port.hp > kPortMaxHealth * 0.7f) continue;
+        const float distance = std::hypot(port.x - ex, port.y - ey);
+        if (distance < best) {
+            best = distance;
+            port_repair_target_ = id;
+        }
+    }
+    if (port_repair_target_ == 0) return;
+    const Port& port = *simulation_->port_network().port(port_repair_target_);
+    // The opening belongs to the airfield, which the same engineer builds; the
+    // money for the repair is held from the start, the trip waits.
+    if (simulation_->simulation_tick() < seconds_to_ticks(120.0f)) return;
+    if (best <= kPortCaptureRadius * 0.6f) return; // already there, repairing
+    // Someone else is using the engineer: wait until it is free.
+    if (simulation_->has_move_target(engineer)) return;
+    const uint32_t tick = simulation_->simulation_tick();
+    if (tick < next_repair_order_tick_) return;
+    next_repair_order_tick_ = tick + seconds_to_ticks(10.0f);
+    if (simulation_->issue_commands({engineer}, faction_id_, CommandType::MOVE, port.x, port.y) > 0) ++port_repair_orders_;
+}
+
+// A small squad drives to the nearest port the AI does not hold and stays until
+// it is taken, so the AI can ship forces in and deny the enemy a landing point.
+// Ports are public coastal sites, so their positions are not hidden knowledge.
+void AIManager::update_port_squad() {
+    port_target_ = 0;
+    // The opening is spent on the first wave; ports come after it has gone.
+    if (!assault_active_ || waves_launched_ < 1 || !simulation_->port_network().active()) return;
+    const auto base = simulation_->production_manager().faction_line(faction_id_);
+    if (base == INVALID_ENTITY) return;
+    for (auto member = port_squad_.begin(); member != port_squad_.end();) {
+        const bool lost = !std::binary_search(visible_units_.begin(), visible_units_.end(), *member);
+        member = lost ? port_squad_.erase(member) : std::next(member);
+    }
+    const float base_x = simulation_->get_unit_x(base), base_y = simulation_->get_unit_y(base);
+    float best_score = std::numeric_limits<float>::infinity();
+    for (const auto& [id, port] : simulation_->port_network().ports()) {
+        if (port.owner == static_cast<int>(faction_id_)) continue;
+        // Neutral ports first: taking one costs nobody a fight.
+        const float score = std::hypot(port.x - base_x, port.y - base_y) + (port.owner >= 0 ? 4000.0f : 0.0f);
+        if (score < best_score) {
+            best_score = score;
+            port_target_ = id;
+        }
+    }
+    if (port_target_ == 0) {
+        port_squad_.clear();
+        return;
+    }
+    const Port& target = *simulation_->port_network().port(port_target_);
+    // Top the squad up from idle fighting units, once there is an army to spare.
+    std::vector<EntityId> idle;
+    for (EntityId unit : visible_units_) {
+        if (unit == base || unit == expansion_unit_ || committed_.contains(unit) || home_guard_.contains(unit) ||
+            port_squad_.contains(unit) || is_recon_asset(unit)) continue;
+        const auto* data = simulation_->component_manager().get_component<UnitData>(unit);
+        if (!data || data->speed <= 0.0f || !simulation_->component_manager().get_component<Weapon>(unit)) continue;
+        const auto prototype = get_unit_prototypes().find(static_cast<UnitType>(data->unit_type));
+        if (prototype != get_unit_prototypes().end() && (prototype->second.is_naval || prototype->second.is_aircraft)) continue;
+        idle.push_back(unit);
+    }
+    constexpr size_t kSquadSize = 2;
+    constexpr size_t kArmyToSpare = 4;
+    if (idle.size() >= kArmyToSpare) {
+        while (port_squad_.size() < kSquadSize && !idle.empty()) {
+            port_squad_.insert(idle.back());
+            idle.pop_back();
+        }
+    }
+    for (EntityId unit : port_squad_) {
+        const float dx = simulation_->get_unit_x(unit) - target.x, dy = simulation_->get_unit_y(unit) - target.y;
+        if (dx * dx + dy * dy > 60.0f * 60.0f) {
+            simulation_->issue_commands({unit}, faction_id_, CommandType::MOVE, target.x, target.y);
+        }
+    }
 }
 
 void AIManager::update_waves() {
@@ -313,7 +454,7 @@ void AIManager::update_waves() {
     }
     std::vector<EntityId> ready;
     for (EntityId unit : visible_units_) {
-        if (unit == base || unit == expansion_unit_ || committed_.contains(unit) || home_guard_.contains(unit) || is_recon_asset(unit)) continue;
+        if (unit == base || unit == expansion_unit_ || committed_.contains(unit) || home_guard_.contains(unit) || port_squad_.contains(unit) || is_recon_asset(unit)) continue;
         const auto* data = simulation_->component_manager().get_component<UnitData>(unit);
         if (!data || data->speed <= 0.0f || !simulation_->component_manager().get_component<Weapon>(unit)) continue;
         if (static_cast<int>(home_guard_.size()) < doctrine_.home_guard) home_guard_.insert(unit);
@@ -321,7 +462,7 @@ void AIManager::update_waves() {
     }
     if (static_cast<int>(ready.size()) < next_wave_size_) return;
     // A cautious style does not march out blind.
-    if (doctrine_.attack_only_known_enemy && enemy_units_.empty() && simulation_->last_known(faction_id_).empty()) return;
+    if (doctrine_.attack_only_known_enemy && enemy_units_.empty() && simulation_->last_known(faction_id_).empty() && simulation_->radar_contacts(faction_id_).empty()) return;
     committed_.insert(ready.begin(), ready.end());
     ++waves_launched_;
     next_wave_size_ = std::min(max_wave_, next_wave_size_ + wave_growth_);
@@ -350,6 +491,10 @@ void AIManager::update_visibility() {
     // The legacy visible_units API denotes owned, controllable units.
     for (EntityId id : simulation_->get_entity_list()) {
         const auto* faction = components.get_component<Faction>(id);
+        // A cargo aircraft flies its own route and takes no orders.
+        const auto* data = components.get_component<UnitData>(id);
+        const auto prototype = data ? get_unit_prototypes().find(static_cast<UnitType>(data->unit_type)) : get_unit_prototypes().end();
+        if (prototype != get_unit_prototypes().end() && prototype->second.cargo_transport) continue;
         if (faction && faction->faction_id == faction_id_ && alive(id)) {
             visible_units_.push_back(id);
         }
@@ -432,6 +577,8 @@ void AIManager::produce_units() {
     auto& production = simulation_->production_manager();
     const auto base = production.faction_line(faction_id_);
     if (base == INVALID_ENTITY) return;
+    build_airfield(base);
+    order_fuel(base);
     if (assault_active_) {
         produce_for_assault(base);
         return;
@@ -439,14 +586,15 @@ void AIManager::produce_units() {
     // Recon units belong to the assault planner; this path only buys fighters.
     std::vector<UnitType> candidates;
     for (const auto& [type, prototype] : get_unit_prototypes())
-        if (!is_scout(prototype) && !is_recon_plane(prototype) && production.can_queue_unit(base, faction_id_, type))
+        if (!is_scout(prototype) && !is_recon_plane(prototype) && production.can_queue_unit(base, faction_id_, type) && can_receive(type))
             candidates.push_back(type);
     std::sort(candidates.begin(), candidates.end(), [](UnitType a, UnitType b) {
         const auto& prototypes = get_unit_prototypes();
         const float ca = prototypes.at(a).material_cost, cb = prototypes.at(b).material_cost;
         return ca != cb ? ca < cb : a < b;
     });
-    if (!candidates.empty()) simulation_->issue_build_commands({base}, faction_id_, 0, 0, static_cast<int>(candidates.front()));
+    if (!candidates.empty() && !holding_for_fuel(production.get_unit_metal_cost(faction_id_, candidates.front())))
+        simulation_->issue_build_commands({base}, faction_id_, 0, 0, static_cast<int>(candidates.front()));
 }
 
 // Everything here is an ordinary order through the production line, at the
@@ -461,15 +609,24 @@ void AIManager::produce_for_assault(EntityId base) {
     std::optional<UnitType> scout, plane;
     float flight_price = 0.0f;
     float flight_view = 0.0f;
+    // With several recon planes on the roster, fly the cheapest; ties go to the
+    // lowest id so the choice never depends on map iteration order.
+    std::optional<UnitType> cheapest_plane;
     for (const auto& [type, prototype] : get_unit_prototypes()) {
-        if (prototype.faction != faction_id_) continue;
-        if (is_recon_plane(prototype)) {
-            flight_price = prototype.material_cost + prototype.operational_material;
+        if (prototype.faction != faction_id_ || !is_recon_plane(prototype)) continue;
+        const float price = prototype.material_cost + prototype.operational_material;
+        if (!cheapest_plane || price < flight_price ||
+            (price == flight_price && static_cast<int>(type) < static_cast<int>(*cheapest_plane))) {
+            cheapest_plane = type;
+            flight_price = price;
             flight_view = prototype.view_range;
         }
-        if (!production.can_queue_unit(base, faction_id_, type)) continue;
+    }
+    for (const auto& [type, prototype] : get_unit_prototypes()) {
+        if (prototype.faction != faction_id_) continue;
+        if (!production.can_queue_unit(base, faction_id_, type) || !can_receive(type)) continue;
         if (is_scout(prototype)) scout = type;
-        else if (is_recon_plane(prototype)) plane = type;
+        else if (is_recon_plane(prototype)) { if (type == cheapest_plane) plane = type; }
         else if (!prototype.is_aircraft && !prototype.is_naval && !prototype.construction_unit) fighters.push_back(type);
     }
     // Fighters wait while scouts are short, or a scout sits behind them in the queue.
@@ -480,13 +637,14 @@ void AIManager::produce_for_assault(EntityId base) {
             scouts_on_order_ = std::max(0, scouts_on_order_ - 1);
         }
     }
-    if (scout && scout_count() + scouts_on_order_ < doctrine_.scouts_wanted) {
+    if (scout && scout_count() + scouts_on_order_ < doctrine_.scouts_wanted &&
+        !holding_for_fuel(production.get_unit_metal_cost(faction_id_, *scout))) {
         simulation_->issue_build_commands({base}, faction_id_, base_x, base_y, static_cast<int>(*scout));
         ++scouts_on_order_;
         return;
     }
     const bool enemy_unknown = simulation_->last_known(faction_id_).empty();
-    if (plane && !sectors_.empty() && enemy_unknown && tick >= next_flight_tick_) {
+    if (plane && !sectors_.empty() && enemy_unknown && tick >= next_flight_tick_ && !holding_for_fuel(flight_price)) {
         const size_t target = plot_recon_flight(flight_view, base_x, base_y);
         simulation_->issue_build_commands({base}, faction_id_, sectors_[target].x, sectors_[target].y, static_cast<int>(*plane));
         ++recon_flights_ordered_;
@@ -513,9 +671,188 @@ void AIManager::produce_for_assault(EntityId base) {
     // unknown the price of the next flight stays in the bank.
     const auto storage = production.storages().find(line->second.storage_id);
     const float price = get_unit_prototypes().at(choice).material_cost;
+    if (holding_for_fuel(production.get_unit_metal_cost(faction_id_, choice)) || holding_for_repair(production.get_unit_metal_cost(faction_id_, choice))) return;
     if (doctrine_.save_for_recon_flight && enemy_unknown && storage != production.storages().end() &&
         storage->second.tactical.materials.current - price < flight_price) return;
+    // A ship takes minutes where an airlift takes seconds, so the sea is the
+    // fallback for a side with no prospect of an airfield, and the overflow when
+    // the air route is nearly full.
+    if (simulation_->needs_delivery(choice) && simulation_->sea_delivery_refusal(faction_id_, choice, 0).empty()) {
+        const bool air_open = simulation_->delivery_refusal(faction_id_, choice).empty();
+        constexpr int kAirQueueBeforeSea = Simulation::kMaxInboundForces - 2;
+        if ((!air_open && !airfield_expected()) || simulation_->inbound_count(faction_id_) >= kAirQueueBeforeSea) {
+            if (simulation_->issue_sea_delivery_command(faction_id_, choice, 0) > 0) {
+                ++sea_orders_;
+                ++mixed_cursor_;
+                return;
+            }
+        }
+    }
     if (simulation_->issue_build_commands({base}, faction_id_, base_x, base_y, static_cast<int>(choice)) > 0) ++mixed_cursor_;
+}
+
+float AIManager::own_fuel() const {
+    const auto& storages = simulation_->production_manager().storages();
+    const auto store = storages.find(simulation_->production_manager().faction_storage(faction_id_));
+    return store == storages.end() ? 0.0f : store->second.tactical.fuel.current;
+}
+
+// Drop a scout near a contact the AI can see now. The ordinary command checks
+// the landing point again when applied, including sight, terrain and payment.
+void AIManager::order_paradrop(EntityId base) {
+    if (!assault_active_ || !simulation_->forces_by_transport() || base == INVALID_ENTITY || enemy_units_.empty() ||
+        simulation_->simulation_tick() < next_paradrop_tick_) return;
+    std::optional<UnitType> scout;
+    for (const auto& [type, prototype] : get_unit_prototypes()) {
+        if (prototype.faction == faction_id_ && prototype.airdrop && is_scout(prototype) && (!scout || type < *scout)) scout = type;
+    }
+    if (!scout || holding_for_fuel(simulation_->production_manager().get_unit_metal_cost(faction_id_, *scout))) return;
+    constexpr float kDropOffset = 350.0f;
+    constexpr float kMinimumAdvance = 1200.0f;
+    const float home_x = simulation_->get_unit_x(base), home_y = simulation_->get_unit_y(base);
+    for (EntityId enemy : enemy_units_) {
+        const float enemy_x = simulation_->get_unit_x(enemy), enemy_y = simulation_->get_unit_y(enemy);
+        if (std::hypot(enemy_x - home_x, enemy_y - home_y) < kMinimumAdvance) continue;
+        for (int side = 0; side < 8; ++side) {
+            const float angle = static_cast<float>(side) * 3.14159265f / 4.0f;
+            const float x = enemy_x + std::cos(angle) * kDropOffset;
+            const float y = enemy_y + std::sin(angle) * kDropOffset;
+            if (!simulation_->paradrop_refusal(faction_id_, *scout, x, y).empty()) continue;
+            if (simulation_->issue_paradrop_command(faction_id_, *scout, x, y) == 0) return;
+            ++paradrops_ordered_;
+            next_paradrop_tick_ = simulation_->simulation_tick() + seconds_to_ticks(90.0f);
+            return;
+        }
+    }
+}
+
+// A shipment, at the player's price and through the player's rules: it needs
+// an airfield, one at a time, and room in the store.
+void AIManager::order_fuel(EntityId base) {
+    (void)base;
+    const uint32_t tick = simulation_->simulation_tick();
+    const bool by_air = simulation_->territorial_control_manager().has_active_installation(faction_id_, InstallationType::AIRFIELD);
+    // With no prospect of an airfield, fuel comes by sea through a port it holds.
+    const bool by_sea = !by_air && !airfield_expected() && simulation_->choose_port(faction_id_) != 0;
+    if (tick < next_fuel_order_tick_ || own_fuel() >= kLowFuel || simulation_->fuel_shipment(faction_id_) || (!by_air && !by_sea)) return;
+    const auto& storages = simulation_->production_manager().storages();
+    const auto store = storages.find(simulation_->production_manager().faction_storage(faction_id_));
+    if (store == storages.end() || store->second.tactical.materials.current < kFuelShipmentMaterialCost) return;
+    next_fuel_order_tick_ = tick + seconds_to_ticks(5.0f);
+    if (simulation_->issue_fuel_shipment_command(faction_id_, by_sea) > 0) ++fuel_shipments_ordered_;
+}
+
+// Short of fuel with no shipment coming, the price of one is not spent on units.
+bool AIManager::holding_for_fuel(float price) const {
+    if (!simulation_->ground_fuel_burn() || own_fuel() >= kLowFuel || simulation_->fuel_shipment(faction_id_)) return false;
+    const auto& storages = simulation_->production_manager().storages();
+    const auto store = storages.find(simulation_->production_manager().faction_storage(faction_id_));
+    return store == storages.end() || store->second.tactical.materials.current - price < kFuelShipmentMaterialCost;
+}
+
+// While its engineer is rebuilding a port, the price of the work stays in the
+// bank: a ruin is worth more than the next unit.
+bool AIManager::holding_for_repair(float price) const {
+    if (port_repair_target_ == 0) return false;
+    const Port* port = simulation_->port_network().port(port_repair_target_);
+    if (!port) return false;
+    const float needed = (kPortMaxHealth - port->hp) * kPortRepairCostPerHealth;
+    const auto& storages = simulation_->production_manager().storages();
+    const auto store = storages.find(simulation_->production_manager().faction_storage(faction_id_));
+    return store == storages.end() || store->second.tactical.materials.current - price < needed;
+}
+
+bool AIManager::can_receive(UnitType type) const {
+    return !simulation_->needs_delivery(type) || simulation_->delivery_refusal(faction_id_, type).empty() ||
+        (!airfield_expected() && simulation_->sea_delivery_refusal(faction_id_, type, 0).empty());
+}
+
+// True while the AI has an airfield, is building one, or has an engineer that
+// can. Only a side with no prospect of one falls back on the sea alone; a ship
+// takes minutes where an airlift takes seconds, so money is not spent on ships
+// while an airfield is about to open.
+bool AIManager::airfield_expected() const {
+    constexpr uint8_t kAirfield = 2;
+    if (simulation_->territorial_control_manager().has_active_installation(faction_id_, InstallationType::AIRFIELD) ||
+        simulation_->structure_queued(faction_id_, kAirfield)) return true;
+    return std::any_of(visible_units_.begin(), visible_units_.end(), [this](EntityId unit) {
+        return simulation_->is_construction_unit(unit);
+    });
+}
+
+// Under the transport rule ground forces land only at an airfield. The AI
+// builds one the way the player does: its Field Engineer orders it, the line
+// builds it at the ordinary price, and with no engineer alive it cannot.
+void AIManager::build_airfield(EntityId base) {
+    if (!simulation_->forces_by_transport()) return;
+    constexpr uint8_t kAirfield = 2;
+    if (simulation_->territorial_control_manager().has_active_installation(faction_id_, InstallationType::AIRFIELD) ||
+        simulation_->structure_queued(faction_id_, kAirfield)) return;
+    const uint32_t tick = simulation_->simulation_tick();
+    if (tick < next_airfield_tick_) return;
+    EntityId engineer = INVALID_ENTITY;
+    for (EntityId unit : visible_units_) {
+        if (simulation_->is_construction_unit(unit)) {
+            engineer = unit;
+            break;
+        }
+    }
+    if (engineer == INVALID_ENTITY) return;
+    float site_x = 0.0f;
+    float site_y = 0.0f;
+    // Look again a little later if nothing fits or the order did not take,
+    // for example because the site's earthworks cost more than is in store.
+    next_airfield_tick_ = tick + seconds_to_ticks(15.0f);
+    if (!find_airfield_site(base, site_x, site_y)) return;
+    if (simulation_->issue_structure_command(engineer, faction_id_, kAirfield, site_x, site_y) > 0) ++airfield_orders_;
+}
+
+// The nearest open ground to the command post that takes a runway, preferring
+// ground that needs no earthworks. Only terrain and the AI's own funds are
+// read, both of which the player knows too.
+bool AIManager::find_airfield_site(EntityId base, float& site_x, float& site_y) const {
+    constexpr uint8_t kAirfield = 2;
+    const float base_x = simulation_->get_unit_x(base);
+    const float base_y = simulation_->get_unit_y(base);
+    const auto& production = simulation_->production_manager();
+    const auto& navigation = simulation_->pathfinding();
+    const StructureSiteRules rules = structure_site_rules(kAirfield);
+    const float half_x = rules.footprint_x * 0.5f;
+    const float half_y = rules.footprint_y * 0.5f;
+    // Clear of the command post and the units parked around it.
+    const float minimum = std::hypot(half_x, half_y) + 150.0f;
+    bool found = false;
+    float best_cost = std::numeric_limits<float>::max();
+    for (float ring = minimum; ring <= 4000.0f && !found; ring += 250.0f) {
+        const int steps = std::max(12, static_cast<int>(std::ceil(2.0f * 3.14159265f * ring / 250.0f)));
+        for (int step = 0; step < steps; ++step) {
+            const float angle = 2.0f * 3.14159265f * static_cast<float>(step) / static_cast<float>(steps);
+            const float x = base_x + std::cos(angle) * ring;
+            const float y = base_y + std::sin(angle) * ring;
+            const StructureSite site = simulation_->assess_structure_site(kAirfield, x, y);
+            if (!site.buildable ||
+                !production.can_queue_structure(base, faction_id_, kAirfield, site.material, site.fuel, site.earthworks ? 1 : 0)) continue;
+            // A runway cannot go over blocked ground: buildings, other structures.
+            bool open = true;
+            for (int row = 0; row < 5 && open; ++row) {
+                for (int column = 0; column < 5 && open; ++column) {
+                    const float sample_x = x - half_x + rules.footprint_x * 0.25f * static_cast<float>(column);
+                    const float sample_y = y - half_y + rules.footprint_y * 0.25f * static_cast<float>(row);
+                    open = navigation.is_walkable(navigation.to_grid_x(sample_x), navigation.to_grid_y(sample_y));
+                }
+            }
+            if (!open) continue;
+            const float cost = site.earthworks ? site.material + site.fuel : 0.0f;
+            if (cost < best_cost) {
+                best_cost = cost;
+                site_x = x;
+                site_y = y;
+            }
+        }
+        // Take the nearest ring with any site; a level one there beats a nearer dig.
+        found = best_cost < std::numeric_limits<float>::max();
+    }
+    return found;
 }
 
 void AIManager::plan_expansion() {
@@ -537,6 +874,7 @@ void AIManager::plan_expansion() {
         if (!node.depleted && node.amount > 0.0f) nodes.push_back(id);
     }
     std::sort(nodes.begin(), nodes.end());
+    const bool short_of_fuel = simulation_->ground_fuel_burn() && own_fuel() < kLowFuel;
     EntityId selected = INVALID_ENTITY;
     float selected_amount = -1.0f;
     for (EntityId id : nodes) {
@@ -547,6 +885,12 @@ void AIManager::plan_expansion() {
             (assault_active_ && extractor.storage_id != own_storage ? foreign : own) = true;
         }
         const auto& node = simulation_->production_manager().resource_nodes().at(id);
+        const bool depot = node.type == ResourceNode::Type::ENERGY;
+        if (depot) {
+            const EntityId holder = simulation_->production_manager().fuel_depot_holder(id);
+            if (holder == own_storage) own = true;
+            else if (holder != INVALID_ENTITY && assault_active_) foreign = true;
+        }
         if (assault_active_) {
             // Sites held by the enemy at the start are as hidden from the AI as
             // its depots are from the player. After that it knows only what it
@@ -559,9 +903,11 @@ void AIManager::plan_expansion() {
             }
             if (unknown_sites_.contains(id) || enemy_sites_.contains(id)) continue;
         }
-        if (!own && (node.amount > selected_amount || (node.amount == selected_amount && id < selected))) {
+        // Short of fuel, any depot comes before any Materials site.
+        const float priority = node.amount + (depot && short_of_fuel ? 1.0e9f : 0.0f);
+        if (!own && (priority > selected_amount || (priority == selected_amount && id < selected))) {
             selected = id;
-            selected_amount = node.amount;
+            selected_amount = priority;
         }
     }
     sites_surveyed_ = true;
@@ -643,6 +989,7 @@ void AIManager::attack_enemy() {
             // Nothing in sight: head for the last place the enemy was seen, or
             // keep searching. Never a hidden unit's real position.
             float x = sweep_x_, y = sweep_y_;
+            sweep_target(unit, x, y);
             nearest_contact(position->x, position->y, x, y);
             simulation_->issue_commands({unit}, faction_id_, CommandType::MOVE, x, y);
         } else if (objective_set_) {

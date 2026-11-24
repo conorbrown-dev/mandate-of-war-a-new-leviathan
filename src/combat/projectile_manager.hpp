@@ -1,10 +1,12 @@
 #pragma once
 
 #include <vector>
+#include "combat/presentation_event.hpp"
 
 #include "ecs/component_manager.hpp"
 #include "ecs/components/factions.hpp"
 #include "logistics/logistics.hpp"
+#include "ecs/components/weapon.hpp"
 
 namespace rts {
 
@@ -23,6 +25,10 @@ struct Projectile {
     float max_lifetime;
     bool active;
     FactionId faction_id;
+    bool hits_ground = true;
+    bool hits_air = false;
+    // Targets flying above this altitude, in metres, are out of reach.
+    float max_target_altitude = DEFAULT_WEAPON_CEILING_METERS;
 };
 
 class ProjectileManager {
@@ -30,12 +36,15 @@ public:
     explicit ProjectileManager(size_t max_projectiles = 1000);
 
     void spawn(float x, float y, float vel_x, float vel_y, float speed,
-               float damage, float aoe_radius, float max_lifetime, FactionId faction_id);
+               float damage, float aoe_radius, float max_lifetime, FactionId faction_id,
+               bool hits_ground = true, bool hits_air = false,
+               float max_target_altitude = DEFAULT_WEAPON_CEILING_METERS);
     
     void update(float delta_ms);
     void update(float delta_ms, SpatialGrid& spatial_grid, ComponentManager& component_manager);
     
     void clear();
+    void set_event_sink(CombatEventSink sink) { event_sink_ = std::move(sink); }
     
     const std::vector<Projectile>& projectiles() const { return projectiles_; }
     
@@ -43,6 +52,7 @@ public:
     size_t total_spawned() const { return total_spawned_; }
 
 private:
+    CombatEventSink event_sink_;
     std::vector<Projectile> projectiles_;
     size_t max_projectiles_;
     size_t total_spawned_{0};

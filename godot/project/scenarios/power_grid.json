@@ -1,0 +1,30 @@
+{
+  "version": 1,
+  "notes": "Broken Strait power grid. Steel pylons run to and from power stations, large cities and across the strait; wooden poles serve the command posts and small sites. known_to lists the sides that start the match knowing a station or line.",
+  "nodes": [
+    {"id": 1, "kind": "station", "name": "HARBOR POWER STATION", "position": [-10600, 10500], "owner": -1, "output_mw": 120, "known_to": [0]},
+    {"id": 2, "kind": "station", "name": "NORTH RIDGE POWER STATION", "position": [-16100, -13800], "owner": 1, "output_mw": 120, "known_to": [1]},
+    {"id": 3, "kind": "station", "name": "EASTERN HYDRO PLANT", "position": [10900, 850], "owner": -1, "output_mw": 200},
+    {"id": 4, "kind": "junction", "name": "WEST SHORE SUBSTATION", "position": [-9000, 2000]},
+    {"id": 5, "kind": "junction", "name": "ROAD HEAD SUBSTATION", "position": [-12125, 4200], "known_to": [0]},
+    {"id": 6, "kind": "load", "name": "COMMAND POST", "position": [-12470, 45], "owner": 0, "demand_mw": 40},
+    {"id": 7, "kind": "junction", "name": "ROAD HEAD SUBSTATION", "position": [-17975, -11000], "known_to": [1]},
+    {"id": 8, "kind": "load", "name": "COMMAND POST", "position": [-14970, -6455], "owner": 1, "demand_mw": 40},
+    {"id": 9, "kind": "junction", "name": "CITY SUBSTATION", "position": [-13400, 10900]},
+    {"id": 10, "kind": "junction", "name": "CITY SUBSTATION", "position": [-15700, -10400]},
+    {"id": 11, "kind": "junction", "name": "SILICON WORKS FEEDER", "position": [-15450, 4050]},
+    {"id": 12, "kind": "junction", "name": "RARE METALS FEEDER", "position": [-10450, -3450]}
+  ],
+  "lines": [
+    {"id": 101, "from": 1, "to": 5, "kind": "steel", "owner": -1, "known_to": [0], "reason": "leaves a power station"},
+    {"id": 102, "from": 5, "to": 6, "kind": "wood", "owner": 0, "via": [[-12125, 650]], "reason": "follows the supply road to a command post"},
+    {"id": 103, "from": 3, "to": 4, "kind": "steel", "owner": -1, "reason": "leaves a power station and crosses the strait"},
+    {"id": 104, "from": 4, "to": 5, "kind": "steel", "owner": -1, "reason": "carries the strait trunk inland"},
+    {"id": 105, "from": 1, "to": 9, "kind": "steel", "owner": -1, "reason": "runs from a power station to a large city"},
+    {"id": 106, "from": 2, "to": 7, "kind": "steel", "owner": 1, "known_to": [1], "reason": "leaves a power station"},
+    {"id": 107, "from": 7, "to": 8, "kind": "wood", "owner": 1, "via": [[-17975, -7400]], "reason": "follows the supply road to a command post"},
+    {"id": 108, "from": 2, "to": 10, "kind": "steel", "owner": -1, "reason": "runs from a power station to a large city"},
+    {"id": 109, "from": 5, "to": 11, "kind": "wood", "owner": -1, "reason": "serves a small works across open ground"},
+    {"id": 110, "from": 4, "to": 12, "kind": "wood", "owner": -1, "reason": "serves a small works across open ground"}
+  ]
+}

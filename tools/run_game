@@ -1,0 +1,35 @@
+#!/usr/bin/env sh
+# Starts the game with a window on macOS or Linux. Builds the native library first
+# unless --no-build is given. Set GODOT to use a different Godot 4.7.2 binary.
+set -eu
+ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
+
+if [ "${1:-}" = "--no-build" ]; then
+    shift
+else
+    BUILD_JOBS=${CMAKE_BUILD_PARALLEL_LEVEL:-8}
+    case "$BUILD_JOBS" in
+        *[!0-9]*|"") echo "CMAKE_BUILD_PARALLEL_LEVEL must be a positive job count." >&2; exit 2 ;;
+    esac
+    [ "$BUILD_JOBS" -gt 0 ] 2>/dev/null || {
+        echo "CMAKE_BUILD_PARALLEL_LEVEL must be a positive job count." >&2; exit 2;
+    }
+    echo "Building game (Release, up to $BUILD_JOBS jobs)..."
+    cmake -S "$ROOT" -B "$ROOT/build" -DCMAKE_BUILD_TYPE=Release >/dev/null
+    cmake --build "$ROOT/build" --target rts_gdextension --parallel "$BUILD_JOBS"
+fi
+
+if [ -z "${GODOT:-}" ]; then
+    for candidate in \
+        "$HOME/mow-tools/godot/Godot.app/Contents/MacOS/Godot" \
+        "/Applications/Godot.app/Contents/MacOS/Godot" \
+        "$ROOT/Godot_v4.7.2-stable_linux.x86_64" \
+        "$(command -v godot 2>/dev/null || true)"; do
+        if [ -n "$candidate" ] && [ -x "$candidate" ]; then GODOT=$candidate; break; fi
+    done
+fi
+[ -n "${GODOT:-}" ] || { echo "Godot not found. Set GODOT=/path/to/Godot" >&2; exit 1; }
+
+ls "$ROOT"/godot/project/bin/librts_gdextension.* >/dev/null 2>&1 || {
+    echo "Game library missing from godot/project/bin after build." >&2; exit 1; }
+exec "$GODOT" --path "$ROOT/godot/project" "$@"

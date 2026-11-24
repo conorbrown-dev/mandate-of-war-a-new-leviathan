@@ -1,3 +1,4 @@
+#include "combat/air_domain.hpp"
 #include "combat/combat_manager.hpp"
 #include <cmath>
 #include <limits>
@@ -8,6 +9,7 @@
 #include "ecs/components/factions.hpp"
 #include "ecs/components/faction.hpp"
 #include "ecs/components/weapon.hpp"
+#include "combat/engagement_altitude.hpp"
 
 namespace rts {
 
@@ -117,7 +119,10 @@ void CombatManager::reset() {
 FireSolution CombatManager::find_target(
     float shooter_x, float shooter_y, float view_range, FactionId faction,
     ComponentManager& component_manager,
-    EntityId explicit_target
+    EntityId explicit_target,
+    bool hits_ground,
+    bool hits_air,
+    float max_target_altitude
 ) {
     FireSolution solution{};
     solution.valid = false;
@@ -127,8 +132,10 @@ FireSolution CombatManager::find_target(
         auto* target_faction = component_manager.get_component<Faction>(explicit_target);
         auto* target_health = component_manager.get_component<Health>(explicit_target);
         
-        if (target_pos && target_faction && target_health && !target_health->is_dead && 
-            target_faction->faction_id != faction) {
+        if (target_pos && target_faction && target_health && !target_health->is_dead &&
+            target_faction->faction_id != faction &&
+            weapon_reaches(hits_ground, hits_air, is_air_target(component_manager, explicit_target)) &&
+            engagement_altitude(explicit_target, component_manager) <= max_target_altitude) {
             float dx = target_pos->x - shooter_x;
             float dy = target_pos->y - shooter_y;
             float dist = std::sqrt(dx * dx + dy * dy);
@@ -166,7 +173,8 @@ FireSolution CombatManager::find_target(
         const uint32_t end = target_cell_starts_[row_offset + last_column + 1];
         for (uint32_t index = begin; index < end; ++index) {
             const auto& candidate = target_candidates_[index];
-            if (candidate.faction == faction) continue;
+            if (candidate.faction == faction || !weapon_reaches(hits_ground, hits_air, candidate.in_air) ||
+                candidate.altitude > max_target_altitude) continue;
             const float dx = candidate.x - shooter_x;
             const float dy = candidate.y - shooter_y;
             const float dist = std::sqrt(dx * dx + dy * dy);
@@ -199,7 +207,9 @@ void CombatManager::build_target_index(const std::vector<EntityId>& entities, Co
         const auto* health = component_manager.get_component<Health>(entity_id);
         if (!position || !faction || !health || health->is_dead ||
             !std::isfinite(position->x) || !std::isfinite(position->y)) continue;
-        target_candidates_.push_back({entity_id, position->x, position->y, faction->faction_id});
+        target_candidates_.push_back({entity_id, position->x, position->y, faction->faction_id,
+                                      is_air_target(component_manager, entity_id),
+                                      engagement_altitude(entity_id, component_manager)});
         min_x = std::min(min_x, position->x);
         max_x = std::max(max_x, position->x);
         min_y = std::min(min_y, position->y);
@@ -314,7 +324,8 @@ void CombatManager::resolve_fire(
         }
         
         auto* weapon = component_manager.get_component<Weapon>(entity_id);
-        if (!weapon) {
+        // An unarmed unit, such as a cargo aircraft, has nothing to fire.
+        if (!weapon || weapon->damage <= 0.0f || (!weapon->hits_ground && !weapon->hits_air)) {
             continue;
         }
         
@@ -326,14 +337,27 @@ void CombatManager::resolve_fire(
                     ? std::min(weapon->range, component_manager.get_component<UnitData>(entity_id)->view_range)
                     : weapon->range, faction->faction_id,
                 component_manager,
-                explicit_attack_targets_.count(entity_id) > 0 ? pending_fire_.at(entity_id).target_id : 0
+                explicit_attack_targets_.count(entity_id) > 0 ? pending_fire_.at(entity_id).target_id : 0,
+                weapon->hits_ground, weapon->hits_air, weapon->max_target_altitude
             );
             
             if (target.valid) {
+                // Ground targets are fired on where they stand, as balanced.
+                // An aircraft in flight is too fast for that, so fire control
+                // leads it: the shot goes where it will be.
+                float lead_x = 0.0f;
+                float lead_y = 0.0f;
+                const auto* target_aircraft = component_manager.get_component<Aircraft>(target.target_id);
+                if (target_aircraft && target_aircraft->status == Aircraft::Status::AIRBORNE) {
+                    if (const auto* target_velocity = component_manager.get_component<Velocity>(target.target_id)) {
+                        lead_x = target_velocity->x;
+                        lead_y = target_velocity->y;
+                    }
+                }
                 FireSolution fire = calculate_fire_solution(
                     pos->x, pos->y,
                     target.aim_x, target.aim_y,
-                    0.0f, 0.0f, *weapon
+                    lead_x, lead_y, *weapon
                 );
                 
                 if (fire.valid) {
@@ -343,11 +367,15 @@ void CombatManager::resolve_fire(
                     float vel_x = (mag > 0.0f) ? (dx / mag) * fire.projectile_speed : fire.projectile_speed;
                     float vel_y = (mag > 0.0f) ? (dy / mag) * fire.projectile_speed : 0.0f;
                     
+                    const auto spawned_before = projectile_manager_.total_spawned();
                     projectile_manager_.spawn(
                         pos->x, pos->y, vel_x, vel_y, fire.projectile_speed,
-                        fire.damage, fire.aoe_radius, 3.0f, faction->faction_id
+                        fire.damage, fire.aoe_radius, 3.0f, faction->faction_id,
+                        weapon->hits_ground, weapon->hits_air, weapon->max_target_altitude
                     );
                     
+                    if (event_sink_ && projectile_manager_.total_spawned() != spawned_before)
+                        event_sink_(CombatEventKind::SHOT, entity_id, vel_x, vel_y);
                     weapon->cooldown_remaining = weapon->fire_rate;
                 }
             }

@@ -17,7 +17,9 @@ void write_heightfield(const std::string& path, int width, int height, const std
 class Terrain {
 public:
     static constexpr int GRID_SIZE = 320;
-    void load_from_file(const std::string& path);
+    // height_scale multiplies every sample, so a theater drawn at another size
+    // keeps the slopes of the authored one.
+    void load_from_file(const std::string& path, float height_scale = 1.0f);
     void set_world_bounds(float width, float height);
     float height_at(float x, float y) const;
     // Sets every height point touching the rectangle to one level.

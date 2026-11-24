@@ -71,6 +71,19 @@ bool RoadNetwork::queue(EntityId engineer, FactionId owner, float start_x, float
     return true;
 }
 
+bool RoadNetwork::add_completed(float start_x, float start_y, float end_x, float end_y, float width) {
+    if (!std::isfinite(start_x) || !std::isfinite(start_y) || !std::isfinite(end_x) || !std::isfinite(end_y) ||
+        !std::isfinite(width) || width <= 0.0f) return false;
+    // queue() wants a builder, so it is given a placeholder that is cleared at once; it also joins the road to its neighbours.
+    if (!queue(EntityId{0}, FactionId::ELITE_PRECISION, start_x, start_y, end_x, end_y, 1.0f)) return false;
+    auto& segment = segments_.back();
+    segment.engineer = INVALID_ENTITY;
+    segment.width = width;
+    segment.build_progress = 1.0f;
+    segment.completed = true;
+    return true;
+}
+
 std::vector<RoadSegment> RoadNetwork::update(float delta_ms) {
     std::vector<RoadSegment> completed;
     if (!std::isfinite(delta_ms) || delta_ms <= 0.0f) return completed;

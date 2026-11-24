@@ -49,6 +49,14 @@ public:
     bool is_committed(EntityId unit) const { return committed_.contains(unit); }
     int scout_count() const;
     int recon_flights_ordered() const { return recon_flights_ordered_; }
+    // Forces arrive by transport, so the AI needs its own airfield to receive
+    // them, built by its Field Engineer at the ordinary price, as the player does.
+    int airfield_orders() const { return airfield_orders_; }
+    // Fuel runs the army once ground vehicles burn it. Below this the AI asks
+    // for a shipment and looks to depots before Materials sites.
+    static constexpr float kLowFuel = 1500.0f;
+    int fuel_shipments_ordered() const { return fuel_shipments_ordered_; }
+    int paradrops_ordered() const { return paradrops_ordered_; }
 
     // Style and difficulty. Both stay in force across reset() until changed.
     void set_doctrine(const AIDoctrine& doctrine);
@@ -58,6 +66,11 @@ public:
     const AIDifficulty& difficulty() const { return difficulty_; }
     int next_wave_size() const { return next_wave_size_; }
     bool is_home_guard(EntityId unit) const { return home_guard_.contains(unit); }
+    int port_squad_size() const { return static_cast<int>(port_squad_.size()); }
+    uint32_t port_target() const { return port_target_; }
+    int sea_orders() const { return sea_orders_; }
+    uint32_t port_repair_target() const { return port_repair_target_; }
+    int port_repair_orders() const { return port_repair_orders_; }
 
 private:
     Simulation* simulation_ = nullptr;
@@ -86,6 +99,8 @@ private:
     float area_min_x_ = 0.0f, area_min_y_ = 0.0f, area_max_x_ = 0.0f, area_max_y_ = 0.0f;
     std::vector<Sector> sectors_;
     std::unordered_map<EntityId, ScoutTask> scout_tasks_;
+    // Each small group of a wave searches its own sector, keyed by sweep_group().
+    std::unordered_map<EntityId, ScoutTask> sweep_tasks_;
     float sweep_x_ = 0.0f, sweep_y_ = 0.0f;
     uint32_t next_sweep_tick_ = 0;
     // Scouts ordered but not yet on the map, so a slow queue does not over-order.
@@ -93,6 +108,12 @@ private:
     std::unordered_set<EntityId> arrived_scouts_;
     uint32_t next_flight_tick_ = 0;
     int recon_flights_ordered_ = 0;
+    int airfield_orders_ = 0;
+    int fuel_shipments_ordered_ = 0;
+    uint32_t next_fuel_order_tick_ = 0;
+    uint32_t next_airfield_tick_ = 0;
+    uint32_t next_paradrop_tick_ = 0;
+    int paradrops_ordered_ = 0;
     // Sites the AI cannot know about yet, and sites it has seen in enemy hands.
     bool sites_surveyed_ = false;
     std::unordered_set<EntityId> unknown_sites_;
@@ -107,6 +128,13 @@ private:
     AIDoctrine doctrine_;
     AIDifficulty difficulty_;
     std::unordered_set<EntityId> home_guard_;
+    // The units sent to take a port, and the port they are bound for (0 if none).
+    std::unordered_set<EntityId> port_squad_;
+    uint32_t port_target_ = 0;
+    uint32_t port_repair_target_ = 0;
+    uint32_t next_repair_order_tick_ = 0;
+    int port_repair_orders_ = 0;
+    int sea_orders_ = 0;
     // When each enemy now in sight was first seen, for the reaction delay.
     std::unordered_map<EntityId, uint32_t> first_seen_;
     size_t order_cursor_ = 0;
@@ -125,11 +153,25 @@ private:
     void update_scouts();
     void update_sweep();
     void produce_for_assault(EntityId base);
-    size_t stalest_sector(float x, float y, EntityId scout = INVALID_ENTITY) const;
+    void build_airfield(EntityId base);
+    void order_fuel(EntityId base);
+    void order_paradrop(EntityId base);
+    float own_fuel() const;
+    bool holding_for_fuel(float price) const;
+    bool find_airfield_site(EntityId base, float& site_x, float& site_y) const;
+    // False when the transport rule would refuse this unit now.
+    bool can_receive(UnitType type) const;
+    bool holding_for_repair(float price) const;
+    bool airfield_expected() const;
+    size_t stalest_sector(float x, float y, EntityId scout = INVALID_ENTITY, EntityId group = INVALID_ENTITY) const;
+    static EntityId sweep_group(EntityId unit) { return unit / 3; }
+    bool sweep_target(EntityId unit, float& x, float& y) const;
     size_t plot_recon_flight(float view_range, float base_x, float base_y);
     bool is_recon_asset(EntityId unit) const;
     bool nearest_contact(float x, float y, float& contact_x, float& contact_y) const;
     void update_waves();
+    void update_port_squad();
+    void update_port_repair();
     bool home_threatened(EntityId base) const;
     void update_operational_plan();
     void plan_expansion();

@@ -1,3 +1,4 @@
+#include "combat/air_domain.hpp"
 #include "combat/projectile_manager.hpp"
 #include <cmath>
 #include <algorithm>
@@ -5,6 +6,7 @@
 #include "spatial/spatial_grid.hpp"
 #include "ecs/components/factions.hpp"
 #include "ecs/components/faction.hpp"
+#include "combat/engagement_altitude.hpp"
 
 namespace rts {
 
@@ -13,7 +15,9 @@ ProjectileManager::ProjectileManager(size_t max_projectiles)
 
 void ProjectileManager::spawn(float x, float y, float vel_x, float vel_y,
                               float speed, float damage, float aoe_radius,
-                              float max_lifetime, FactionId faction_id) {
+                              float max_lifetime, FactionId faction_id,
+                              bool hits_ground, bool hits_air,
+                              float max_target_altitude) {
     if (projectiles_.size() >= max_projectiles_) {
         return;
     }
@@ -24,6 +28,9 @@ void ProjectileManager::spawn(float x, float y, float vel_x, float vel_y,
     p.y = y;
     
     p.faction_id = faction_id;
+    p.hits_ground = hits_ground;
+    p.hits_air = hits_air;
+    p.max_target_altitude = max_target_altitude;
     
     float mag = std::sqrt(vel_x * vel_x + vel_y * vel_y);
     if (mag > 0.0f) {
@@ -70,6 +77,10 @@ void ProjectileManager::update(float delta_ms, SpatialGrid& spatial_grid, Compon
             const auto* health = component_manager.get_component<Health>(id);
             const auto* position = component_manager.get_component<Position>(id);
             if (!position || !health || health->is_dead || (owner && owner->faction_id==p.faction_id)) continue;
+            // A shot only meets what is in its own domain: a shell passes under a jet,
+            // and a gun that reaches 15 km passes under strategic recon at 24 km.
+            if (!weapon_reaches(p.hits_ground, p.hits_air, is_air_target(component_manager, id)) ||
+                engagement_altitude(id, component_manager) > p.max_target_altitude) continue;
             const float ox=old_x-position->x, oy=old_y-position->y;
             const float c=ox*ox+oy*oy-radius*radius;
             if(c<=0) { impact=0; break; }
@@ -100,9 +111,10 @@ void ProjectileManager::check_impact(Projectile& p, SpatialGrid& spatial_grid, C
         float dist2 = dx * dx + dy * dy;
         float dist = std::sqrt(dist2);
         
-        if (dist2 <= radius * radius) {
+        if (dist2 <= radius * radius && engagement_altitude(entity_id, component_manager) <= p.max_target_altitude) {
             auto* entity_faction = component_manager.get_component<Faction>(entity_id);
-            if (!entity_faction || entity_faction->faction_id != p.faction_id) {
+            if ((!entity_faction || entity_faction->faction_id != p.faction_id) &&
+                weapon_reaches(p.hits_ground, p.hits_air, is_air_target(component_manager, entity_id))) {
                 apply_damage(entity_id, p.damage, component_manager);
                 hit_enemy = true;
             }
@@ -117,6 +129,8 @@ void ProjectileManager::check_impact(Projectile& p, SpatialGrid& spatial_grid, C
 void ProjectileManager::apply_damage(EntityId entity_id, float damage, ComponentManager& component_manager) {
     auto* health = component_manager.get_component<Health>(entity_id);
     if (health) {
+        if (event_sink_ && !health->is_dead && damage > 0.0f)
+            event_sink_(CombatEventKind::HIT, entity_id, 0.0f, 0.0f);
         health->current -= damage;
         if (health->current <= 0.0f) {
             health->current = 0.0f;

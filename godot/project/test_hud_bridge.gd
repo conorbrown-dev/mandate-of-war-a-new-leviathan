@@ -1,5 +1,7 @@
 extends SceneTree
 
+const Tokens := preload("res://ui/theme/ui_tokens.gd")
+
 var checks := 0
 var failures := 0
 
@@ -26,6 +28,8 @@ func _run() -> void:
 	check(float(snapshot.get("tick", -1.0)) >= 0.0, "HUD aggregate must report simulation timing")
 	check(snapshot.get("queue", null) is Array and snapshot.get("build_catalog", []).size() > 0, "HUD aggregate must provide production queue and catalog")
 	check(String(snapshot.get("materials", "--")).contains("/") and String(snapshot.get("fuel", "--")).contains("/") and String(snapshot.get("power", "--")).contains("MW") and String(snapshot.get("power_reserve", "")).contains("RESERVE") and not snapshot.has("research"), "HUD aggregate must provide canonical tactical resources without Research")
+	check(Tokens.RESOURCE_FUEL.g > Tokens.RESOURCE_FUEL.r and Tokens.RESOURCE_POWER.r > Tokens.RESOURCE_POWER.g,
+		"Fuel uses green and Power uses orange in the shared HUD tokens")
 	var build_icons_resolve := true
 	for entry in snapshot.get("build_catalog", []):
 		if bool(entry.get("is_structure", false)):

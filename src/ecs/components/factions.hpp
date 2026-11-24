@@ -58,6 +58,9 @@ enum class UnitType : uint8_t {
 // players per faction. Structures do not count.
 constexpr int MAX_UNITS_PER_PLAYER = 2000;
 
+// Aircraft fly here unless their unit data gives flight_altitude_m.
+constexpr float DEFAULT_FLIGHT_ALTITUDE_METERS = 1500.0f;
+
 struct WeaponProfile {
     float damage = 0.0f;
     float range = 0.0f;
@@ -65,6 +68,10 @@ struct WeaponProfile {
     float projectile_speed = 1.0f;
     float aoe_radius = 0.0f;
     float lead_bias = 0.0f;
+    bool hits_ground = true;
+    bool hits_air = false;
+    // Highest target altitude, in metres, this weapon can engage.
+    float max_target_altitude = 15000.0f;
 };
 
 struct UnitPrototype {
@@ -92,6 +99,9 @@ struct UnitPrototype {
     // a point set when ordered, on station this long, then off the map. It uses
     // no airfield and takes no further orders.
     float recon_loiter_seconds = 0.0f;
+    // Cruise altitude in metres. A weapon engages an aircraft in flight only when
+    // its max_target_altitude reaches this high.
+    float flight_altitude = 0.0f;
     float energy_consumption_rate = 0.0f;
     float material_consumption_rate = 0.0f;
     // Presentation-only stable reference. Gameplay never derives behavior
@@ -102,6 +112,13 @@ struct UnitPrototype {
     std::string nato_symbol = "";
     std::string strategic_icon = "";
     bool construction_unit = false;
+    // Light enough to be dropped by parachute from a transport aircraft.
+    bool airdrop = false;
+    // The aircraft that flies a side's fuel shipments in. Never ordered or built.
+    bool cargo_transport = false;
+    // Fuel a ground vehicle draws from its side's store per kilometre driven,
+    // when the scenario turns ground fuel burn on.
+    float fuel_per_km = 0.0f;
     WeaponProfile weapon = {};
     std::vector<SeizureCapability> capabilities = {};
     // Ground-motion tuning is content-owned so factions and chassis can diverge
@@ -119,6 +136,10 @@ struct UnitPrototype {
     // Zero preserves radius-only steering for legacy content.
     float steering_maneuver_turn_rate = 0.0f;
     bool steering_can_pivot_turn = false;
+    float intel_range = 0.0f;
+    // Half the hull length in metres. Ground units are pushed apart until
+    // their centres are at least the sum of their radii apart.
+    float footprint_radius = 4.0f;
 };
 
 // Unit production data keyed by UnitType

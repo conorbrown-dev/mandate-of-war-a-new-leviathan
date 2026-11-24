@@ -444,7 +444,7 @@ bool ProductionManager::can_queue_unit(EntityId line_id, FactionId faction, Unit
     auto line = production_lines_.find(line_id);
     auto proto = get_unit_prototypes().find(type);
     if (faction_line(faction) != line_id || line == production_lines_.end() ||
-        proto == get_unit_prototypes().end() || proto->second.faction != faction ||
+        proto == get_unit_prototypes().end() || proto->second.faction != faction || proto->second.cargo_transport ||
         line->second.queue.size() >= static_cast<size_t>(line->second.max_jobs)) return false;
     // Strategic authorization is a later migration. Tactical acquisition must
     // not use Research-project completion as a currency-like availability gate.

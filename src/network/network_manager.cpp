@@ -108,10 +108,12 @@ void NetworkManager::update_discovery(float delta_ms) {
 
 void NetworkManager::update(float delta_ms) {
     (void)delta_ms;
-    current_tick_ = simulation_ ? simulation_->get_state().tick_number : 0;
+    current_tick_ = simulation_ ? simulation_->simulation_tick() : 0;
     
      if (simulation_ && simulation_->entity_count() > 0) {
-         capture_snapshot();
+         // Offline play has no remote state to synchronize. Explicit
+         // send_snapshot() still works for diagnostics and tests.
+         if (multiplayer_session_) capture_snapshot();
          receive_packets();
      }
      
@@ -558,14 +560,19 @@ void NetworkManager::reset() {
     last_ping_time_ = 0.0f;
     ping_sample_count_ = 0;
     tcp_transport_.reset();
+    multiplayer_session_ = false;
 }
 
 bool NetworkManager::connect(const std::string& host, uint16_t port) {
-    return tcp_transport_.connect(host, port);
+    const bool connected = tcp_transport_.connect(host, port);
+    multiplayer_session_ = multiplayer_session_ || connected;
+    return connected;
 }
 
 bool NetworkManager::listen(uint16_t port) {
-    return tcp_transport_.listen(port);
+    const bool listening = tcp_transport_.listen(port);
+    multiplayer_session_ = multiplayer_session_ || listening;
+    return listening;
 }
 
 bool NetworkManager::accept() {

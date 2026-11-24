@@ -10,7 +10,7 @@ You are an implementation agent for a large-scale near-future RTS inspired by Su
 
 ## Authoritative Current Status
 
-**Current work package:** the fun-to-play slices in `docs/HANDOFF.md` (Slices 1 and most of 2 are done). Goal 0B — Thin the Godot/GDExtension boundary is complete.
+**Current work package:** the fun-to-play slices in `docs/HANDOFF.md` (Slices 1 and 2 are done). Goal 0B — Thin the Godot/GDExtension boundary is complete.
 
 **Beginning baseline:** `main` at `d7e6f45cec045921813c3e9a7074ff09964e800d`. Do not rely on prior baseline claims without current evidence.
 
@@ -98,7 +98,7 @@ desktop-dense and presentation-only; simulation rules remain native C++.
 - **Presentation layer:** Godot 4.7.2 with `godot-cpp` GDExtension
 - **Visible unit batching:** Godot `MultiMeshInstance3D`
 - **Build system:** CMake
-- **Current verified platforms:** Windows x86_64 (MSVC, renders on the GPU) and Linux x86_64
+- **Current verified platforms:** Windows x86_64 (MSVC, renders on the GPU), Linux x86_64, and macOS arm64 (headless validation only)
 
 ## Scale Targets
 

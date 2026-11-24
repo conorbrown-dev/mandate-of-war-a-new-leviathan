@@ -18,6 +18,11 @@ func _init() -> void:
 		assert(not bool(definition.get("fallback", false)))
 
 	assert(String(extension.call("get_unit_visual_id", -1)).is_empty())
-	assert(String(extension.call("get_unit_visual_id", PRODUCTION_UNIT_TYPE_COUNT)).is_empty())
+	# The patrol boat (11) has its own model now, and so do the units added after it.
+	for unit_type in [11, 21, 22, 23, 24, 25]:
+		var boat_visual := String(extension.call("get_unit_visual_id", unit_type))
+		assert(not boat_visual.is_empty())
+		assert(not bool(registry.resolve(boat_visual).get("fallback", false)))
+	assert(String(extension.call("get_unit_visual_id", 200)).is_empty())
 	print("NATIVE_VISUAL_IDS checks=27 failures=0")
 	quit()

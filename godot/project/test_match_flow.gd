@@ -161,6 +161,121 @@ func _test_defeat() -> void:
 	await _finish(view)
 
 
+# Forces land only at an airfield, so the AI has to build one, as the player does.
+func _test_ai_builds_its_airfield() -> void:
+	var view: Node = await _start_match()
+	var at_start: Dictionary = view.extension.call("delivery_state", 1)
+	check(bool(at_start.get("enabled", false)) and not bool(at_start.get("has_site", true)), "the AI starts with nowhere to land forces: no free landing zone")
+	var built_seconds := -1.0
+	for second in range(240):
+		_tick(view, 20)
+		if bool(view.extension.call("delivery_state", 1).get("has_site", false)):
+			built_seconds = float(second + 1)
+			break
+	print("MATCH_FLOW ai_airfield_seconds=%.0f" % built_seconds)
+	check(built_seconds > 0.0, "the AI builds its own airfield within four minutes")
+	var record: Variant = JSON.parse_string(String(view.extension.call("match_record_json")))
+	var engineer_orders := 0
+	if typeof(record) == TYPE_DICTIONARY:
+		for command in record.commands:
+			if int(command[1]) == 1 and int(command[2]) == 3 and (int(command[6]) & 0x40000000) != 0 and int(command[3]) == int(view.engineer_ids.get(1, -1)):
+				engineer_orders += 1
+	check(engineer_orders == 1, "its Field Engineer gave the order, and the record holds it")
+	view._sync_vision()
+	check(view.enemy_airfield_views.is_empty(), "an enemy airfield nobody has seen is not drawn")
+	var site: Dictionary = view.extension.call("delivery_state", 1)
+	var landing := Vector2(float(site.get("x", 0.0)), float(site.get("y", 0.0)))
+	var player: Array = view.scenario_definition.player.spawn
+	var observer: int = view.extension.call("create_unit_with_type", landing.x + 30.0, landing.y, 0, 0)
+	check(observer > 0, "a player unit reaches the enemy landing site")
+	for _vision_tick in range(10):
+		view.extension.call("update_simulation", 50.0)
+	view._sync_vision()
+	check(view.enemy_airfield_views.size() == 1, "the enemy airfield is drawn once the player sees it")
+	check(String(view.fuel_supply_status) == "ENEMY AIRFIELD LOCATED", "and the player is told")
+	view.extension.call("issue_move_commands", PackedInt32Array([observer]), 0, float(player[0]), float(player[1]), 8.0)
+	view.extension.call("skirmish_set_ai_enabled", false)
+	for _away_tick in range(20 * 90):
+		view.extension.call("update_simulation", 50.0)
+	view._sync_vision()
+	check(view.enemy_airfield_views.size() == 1, "it stays on the map after the player looks away")
+	await _finish(view)
+
+
+const SCOUT_CAR := 13
+const CARGO_AIRCRAFT := 17
+
+
+# A light unit dropped by parachute onto watched ground, with no airfield.
+func _test_paradrop() -> void:
+	var view: Node = await _start_match()
+	view.extension.call("skirmish_set_ai_enabled", false)
+	var funds_before: Array = view.extension.call("economy_get_tactical_resources", int(view.commander_ids.get(0, -1)))
+	view._toggle_strategic_command()
+	await process_frame
+	var card: Node = view.strategic_command_view.find_child("Card_%d" % SCOUT_CAR, true, false)
+	var order_button: Button = card.get_node_or_null("Order") if card != null else null
+	var drop_button: Button = card.get_node_or_null("Paradrop") if card != null else null
+	check(order_button != null and order_button.disabled, "with no airfield the scout car cannot be flown in to land")
+	check(drop_button != null and not drop_button.disabled, "but its PARADROP button is open")
+	var tank_card: Node = view.strategic_command_view.find_child("Card_0", true, false)
+	check(tank_card != null and tank_card.get_node_or_null("Paradrop") == null, "a main battle tank has no PARADROP button")
+	if drop_button != null:
+		drop_button.pressed.emit()
+	check(view.paradrop_targeting_type == SCOUT_CAR and not view.strategic_command_view.visible, "PARADROP closes the panel and waits for a drop zone")
+	var enemy: Array = view.scenario_definition.ai.spawn
+	check(not view._order_paradrop(Vector2(float(enemy[0]), float(enemy[1]))), "a drop onto ground nobody watches is refused")
+	check(String(view.fuel_supply_status) == "PARADROP REFUSED // DROP ZONE NOT SCOUTED", "and the player is told why")
+	check(view.paradrop_targeting_type == -1, "the refused click ends the targeting")
+	var engineer := int(view.engineer_ids.get(0, -1))
+	var engineer_at: PackedFloat32Array = view.extension.call("get_unit_position", engineer)
+	var zone := Vector2(engineer_at[0] + 60.0, engineer_at[1] + 60.0)
+	check(bool(view.extension.call("can_see", 0, zone.x, zone.y)), "the engineer watches the chosen drop zone")
+	view._begin_paradrop_targeting(SCOUT_CAR)
+	check(view._order_paradrop(zone), "a drop onto watched ground is accepted")
+	check(String(view.fuel_supply_status) == "PARADROP INBOUND", "and the player is told it is inbound")
+	view.extension.call("update_simulation", 50.0)
+	var inbound: Array = view.extension.call("delivery_state", 0).get("inbound", [])
+	check(inbound.size() == 1 and bool(inbound[0].get("airdrop", false)) and Vector2(float(inbound[0].x), float(inbound[0].y)).distance_to(zone) < 2.0, "the drop is in the air for that zone")
+	var funds_after: Array = view.extension.call("economy_get_tactical_resources", int(view.commander_ids.get(0, -1)))
+	check(float(funds_after[0]) < float(funds_before[0]), "and was paid for")
+	view._update_hud()
+	check(view.paradrop_markers.size() == 1, "the drop zone is marked on the map")
+	var known: PackedInt32Array = view.extension.call("get_entity_ids")
+	var landed: Dictionary = {}
+	var transport_seen := false
+	for _second in range(150):
+		_tick(view, 20)
+		for entity in view.extension.call("get_unpresented_entities", known):
+			if int(entity.unit_type) == SCOUT_CAR and int(entity.faction_id) == 0:
+				landed = entity
+			if int(entity.unit_type) == CARGO_AIRCRAFT and int(entity.faction_id) == 0:
+				transport_seen = true
+		if not landed.is_empty():
+			break
+	check(transport_seen, "the drop flies in on a cargo aircraft")
+	check(not landed.is_empty(), "the scout car lands within two and a half minutes")
+	if not landed.is_empty():
+		check(Vector2(float(landed.x), float(landed.y)).distance_to(zone) <= 151.0, "around the drop zone")
+	view._update_hud()
+	check(view.paradrop_markers.is_empty(), "the marker goes once it has landed")
+	check(not bool(view.extension.call("delivery_state", 0).get("has_site", true)), "all without an airfield")
+	# A second drop over enemy surface-to-air missiles under its route.
+	for index in range(8):
+		var sam: int = view.extension.call("create_unit_with_type", -17000.0 + index * 60.0, zone.y + 30.0, 5, 1)
+		view.extension.call("issue_stop_commands", PackedInt32Array([sam]), 1)
+	view._begin_paradrop_targeting(SCOUT_CAR)
+	check(view._order_paradrop(zone), "a second drop is ordered")
+	for _second in range(150):
+		_tick(view, 20)
+		if (view.extension.call("delivery_state", 0).get("inbound", []) as Array).is_empty():
+			break
+	view._update_hud()
+	check(int(view.extension.call("delivery_state", 0).get("airdrops_lost", 0)) == 1, "its transport is shot down over the enemy missiles")
+	check(String(view.fuel_supply_status) == "PARADROP TRANSPORT SHOT DOWN", "and the player is told")
+	await _finish(view)
+
+
 func _style_for(doctrine: String, difficulty: String) -> Dictionary:
 	OS.set_environment("RTS_AI_DOCTRINE", doctrine)
 	OS.set_environment("RTS_AI_DIFFICULTY", difficulty)
@@ -185,6 +300,8 @@ func _test_ai_style_choice() -> void:
 
 func _run() -> void:
 	await _test_ai_style_choice()
+	await _test_ai_builds_its_airfield()
+	await _test_paradrop()
 	await _test_victory()
 	await _test_defeat()
 	print("GODOT_MATCH_FLOW checks=%d failures=%d" % [checks, failures])

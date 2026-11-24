@@ -67,3 +67,20 @@ TEST(unit_data_factions_load_from_data) {
         require(faction_name(id) == start.name, "faction names come from data");
     }
 }
+
+TEST(unit_data_intel_range_is_optional_validated_and_copied_to_sensors) {
+    const auto legacy = parse_unit_catalog("{\"unit_types\":[" + catalog_unit(200, "LEGACY", VALID_WEAPON) + "]}");
+    require(legacy.at(static_cast<UnitType>(200)).intel_range == 0, "legacy content has no invented radar");
+    for (const std::string value : {"-1", "10001", "\"wide\""}) {
+        auto unit = catalog_unit(200, "BAD_RADAR", VALID_WEAPON);
+        unit.insert(1, "\"intel_range\":" + value + ",");
+        require(catalog_rejected("{\"unit_types\":["+unit+"]}"), "invalid radar range is rejected");
+    }
+    Simulation sim; sim.start();
+    for (const auto& [type, prototype] : get_unit_prototypes()) {
+        const auto id = sim.create_unit_with_type(0,0,type,prototype.faction);
+        const auto* sensor = sim.component_manager().get_component<UnitData>(static_cast<EntityId>(id));
+        require(sensor && sensor->intel_range == prototype.intel_range && prototype.intel_range > prototype.view_range,
+                "authored intel coverage is independent from sight and reaches farther");
+    }
+}
