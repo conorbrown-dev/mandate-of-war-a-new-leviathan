@@ -357,6 +357,8 @@ var radar_contacts := PackedFloat32Array()
 var recon_targeting := false
 # The unit type the next map click drops by parachute, or -1.
 var paradrop_targeting_type := -1
+# How many jump in the drop waiting for its map click.
+var paradrop_targeting_count := 1
 var paradrop_markers := {}
 var paradrops_lost_seen := 0
 # The recon plane the next map click sends (any unit with a flight plan).
@@ -857,18 +859,20 @@ func _order_recon_flight(target: Vector2) -> bool:
 
 # The next map click picks the drop zone. Native rules decide: the ground must
 # be watched right now, and the unit is paid for and counts against the cap.
-func _begin_paradrop_targeting(unit_type: int) -> void:
+func _begin_paradrop_targeting(unit_type: int, count: int = 1) -> void:
 	_cancel_tactical_modes()
 	_close_strategic_command()
 	paradrop_targeting_type = unit_type
-	_announce_intel("SELECT DROP ZONE // GROUND YOU CAN SEE")
+	paradrop_targeting_count = count
+	_announce_intel("SELECT DROP ZONE // GROUND YOU CAN SEE" if count <= 1 else "SELECT DROP ZONE FOR %d UNITS // GROUND YOU CAN SEE" % count)
 
 
 func _order_paradrop(target: Vector2) -> bool:
 	var unit_type := paradrop_targeting_type
 	paradrop_targeting_type = -1
-	var refusal := String(extension.call("order_paradrop", HUMAN_PLAYER_ID, unit_type, target.x, target.y))
-	_announce_intel("PARADROP INBOUND" if refusal.is_empty() else "PARADROP REFUSED // " + refusal)
+	var count := paradrop_targeting_count
+	var refusal := String(extension.call("order_paradrop", HUMAN_PLAYER_ID, unit_type, target.x, target.y, count))
+	_announce_intel(("PARADROP INBOUND" if count <= 1 else "PARADROP INBOUND // %d UNITS" % count) if refusal.is_empty() else "PARADROP REFUSED // " + refusal)
 	_sync_strategic_command()
 	_update_hud()
 	return refusal.is_empty()
@@ -877,6 +881,7 @@ func _order_paradrop(target: Vector2) -> bool:
 # A marker over each drop zone with a paratroop drop still in the air.
 func _sync_paradrop_markers() -> void:
 	var active := {}
+	var stick_sizes := {}
 	var delivery: Dictionary = extension.call("delivery_state", HUMAN_PLAYER_ID)
 	# A drop's transport flies in over the map and can be shot down.
 	var lost := int(delivery.get("airdrops_lost", 0))
@@ -890,6 +895,7 @@ func _sync_paradrop_markers() -> void:
 		var key := Vector2i(roundi(point.x), roundi(point.y))
 		var seconds := float(force.remaining_ms) / 1000.0
 		active[key] = minf(float(active.get(key, INF)), seconds)
+		stick_sizes[key] = int(stick_sizes.get(key, 0)) + int(force.get("count", 1))
 	for key in paradrop_markers.keys():
 		if not active.has(key):
 			var stale: Node3D = paradrop_markers[key]
@@ -919,7 +925,8 @@ func _sync_paradrop_markers() -> void:
 			marker.add_child(label)
 			add_child(marker)
 			paradrop_markers[key] = marker
-		(marker.get_node("Countdown") as Label3D).text = "PARADROP  %.0f S" % float(active[key])
+		var sticks := int(stick_sizes.get(key, 1))
+		(marker.get_node("Countdown") as Label3D).text = ("PARADROP  %.0f S" % float(active[key])) if sticks <= 1 else ("PARADROP x%d  %.0f S" % [sticks, float(active[key])])
 
 
 func _request_fuel_shipment(by_sea := false) -> bool:

@@ -360,6 +360,22 @@ shot down first, the drop is lost, its price is not refunded and the HUD says
 "PARADROP TRANSPORT SHOT DOWN" (`paradrops_lost`, `delivery_state.airdrops_lost`).
 About 104 s for a drop beside the player's start.
 
+**Sticks (2026-11-23):** one order can drop 1 to `kMaxParadropStick` (6) of the same
+unit. The **DROP STICK** button in the Strategic Command footer steps through 1, 2, 4
+and 6, and each PARADROP button shows the price of the whole stick. The sortie still uses
+one cargo aircraft, so shooting it down loses every unit in it. Price is per unit; each
+unit in the air holds a unit-cap slot (`inbound_unit_count`, not `inbound_count`, which
+still counts sorties for the 24-in-the-air limit). The stick size rides in bits 8 to 15
+of the recorded BUILD order (`PARADROP_COUNT_SHIFT`); zero there means one unit, so
+orders recorded before sticks still replay. `order_paradrop` and `paradrop_refusal` on
+the bridge take a trailing `count` (default 1), and `delivery_state.inbound` entries carry
+`count`. The map ring reads `PARADROP x4` and the inbound list `4X`. Units land one at a
+time on the same scatter pattern (each unit's place in the sequence is the drop's number
+plus five times the units already down). Covered by four native tests
+(`a_paradrop_stick_*`, `a_paradrop_order_recorded_without_a_stick_size_*`) and
+`_test_paradrop_stick` in `test_match_flow.gd`. The Haulwing fly-in view from the old
+stabilise checkout was not ported: the drop already flies a real, shootable cargo aircraft.
+
 Known gaps: the AI does not
 use paratroop drops yet; Elite Precision has only the scout car to drop and Industrial
 none; a drop zone that is lost between order and landing is still used.

@@ -363,6 +363,10 @@ public:
         float drop_y = 0.0f;
         // Orders the drop count from, so each paratrooper lands on its own spot.
         uint32_t drop_sequence = 0;
+        // A stick jumps together from one aircraft: units still to land, and
+        // how many are already down (always 1 and 0 for anything but a drop).
+        int count = 1;
+        int dropped = 0;
         // A drop flies in on a cargo aircraft once its unit is ready. It is
         // released over the zone; if the aircraft is shot down first it is lost.
         uint32_t launch_tick = 0;
@@ -437,13 +441,24 @@ public:
     // The side's unarmed cargo aircraft, which flies shipments and drops in.
     std::optional<UnitType> cargo_aircraft_type(FactionId faction) const;
     static constexpr float kParadropScatterMeters = 150.0f;
-    // Empty when the faction can drop this unit at this point now, else why not.
-    std::string paradrop_refusal(FactionId faction, UnitType type, float x, float y) const;
-    bool order_paradrop(FactionId faction, UnitType type, float x, float y);
-    size_t issue_paradrop_command(FactionId faction, UnitType type, float x, float y);
+    // A stick is up to this many of one unit in a single sortie. Each pays the
+    // catalog price and holds a unit-cap slot from the order; the one aircraft
+    // carries them all, so shooting it down loses the whole stick.
+    static constexpr int kMaxParadropStick = 6;
+    // The stick size rides in bits 8 to 15 of a paradrop order, the unit type
+    // in the low byte. Zero there means one unit, as orders recorded before
+    // sticks existed read.
+    static constexpr uint32_t PARADROP_COUNT_SHIFT = 8;
+    // Empty when the faction can drop `count` of this unit at this point now, else why not.
+    std::string paradrop_refusal(FactionId faction, UnitType type, float x, float y, int count = 1) const;
+    bool order_paradrop(FactionId faction, UnitType type, float x, float y, int count = 1);
+    size_t issue_paradrop_command(FactionId faction, UnitType type, float x, float y, int count = 1);
     // Seconds from the order until the unit is on the ground at this point.
     float paradrop_seconds(UnitType type, float x) const;
+    // Sorties and shipments in the air: what the in-air limit counts.
     int inbound_count(FactionId faction) const;
+    // Units in the air: a stick of three counts three. What the unit cap counts.
+    int inbound_unit_count(FactionId faction) const;
 
     // Ports and the sea lanes. A side ships in only through a port it holds;
     // an armed enemy ship it can see in the lane blocks the order. Cargo ships

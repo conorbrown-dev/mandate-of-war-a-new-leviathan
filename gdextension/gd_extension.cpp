@@ -311,8 +311,8 @@ protected:
         ClassDB::bind_method(D_METHOD("ground_fuel_burn_set", "enabled"), &RtsExtension::ground_fuel_burn_set);
         ClassDB::bind_method(D_METHOD("material_sites_state", "player_id"), &RtsExtension::material_sites_state);
         ClassDB::bind_method(D_METHOD("enemy_airfields_in_sight", "player_id"), &RtsExtension::enemy_airfields_in_sight);
-        ClassDB::bind_method(D_METHOD("paradrop_refusal", "faction_id", "unit_type", "x", "y"), &RtsExtension::paradrop_refusal);
-        ClassDB::bind_method(D_METHOD("order_paradrop", "faction_id", "unit_type", "x", "y"), &RtsExtension::order_paradrop);
+        ClassDB::bind_method(D_METHOD("paradrop_refusal", "faction_id", "unit_type", "x", "y", "count"), &RtsExtension::paradrop_refusal, DEFVAL(1));
+        ClassDB::bind_method(D_METHOD("order_paradrop", "faction_id", "unit_type", "x", "y", "count"), &RtsExtension::order_paradrop, DEFVAL(1));
         ClassDB::bind_method(D_METHOD("get_tick_clock"), &RtsExtension::get_tick_clock);
         ClassDB::bind_method(D_METHOD("set_game_speed", "scale"), &RtsExtension::set_game_speed);
         ClassDB::bind_method(D_METHOD("get_game_speed"), &RtsExtension::get_game_speed);
@@ -1443,19 +1443,21 @@ public:
     }
 
     // Empty when this unit can be dropped at this point now, else why not.
-    String paradrop_refusal(int64_t faction_id, int64_t unit_type, double x, double y) const {
+    // `count` is the stick size, 1 to Simulation::kMaxParadropStick.
+    String paradrop_refusal(int64_t faction_id, int64_t unit_type, double x, double y, int64_t count = 1) const {
         if (faction_id < 0 || faction_id > 2 || unit_type < 0 || unit_type > 255) return String("UNKNOWN UNIT");
+        const int stick = static_cast<int>(std::clamp<int64_t>(count, -1, 255));
         return String(rts::runtime_simulation()->paradrop_refusal(static_cast<rts::FactionId>(faction_id),
-            static_cast<rts::UnitType>(unit_type), static_cast<float>(x), static_cast<float>(y)).c_str());
+            static_cast<rts::UnitType>(unit_type), static_cast<float>(x), static_cast<float>(y), stick).c_str());
     }
 
     // Orders a paratroop drop as a recorded command, which runs on the next
     // tick. Answers at once with the refusal, or "" when the order was sent.
-    String order_paradrop(int64_t faction_id, int64_t unit_type, double x, double y) const {
-        const String refusal = paradrop_refusal(faction_id, unit_type, x, y);
+    String order_paradrop(int64_t faction_id, int64_t unit_type, double x, double y, int64_t count = 1) const {
+        const String refusal = paradrop_refusal(faction_id, unit_type, x, y, count);
         if (!refusal.is_empty()) return refusal;
         if (rts::runtime_simulation()->issue_paradrop_command(static_cast<rts::FactionId>(faction_id),
-                static_cast<rts::UnitType>(unit_type), static_cast<float>(x), static_cast<float>(y)) == 0) {
+                static_cast<rts::UnitType>(unit_type), static_cast<float>(x), static_cast<float>(y), static_cast<int>(count)) == 0) {
             return String("ORDER NOT SENT");
         }
         return String();
@@ -1509,6 +1511,7 @@ public:
             entry["route_mode"] = static_cast<int>(force.route_mode);
             entry["order_id"] = static_cast<int64_t>(force.order_id);
             entry["airdrop"] = force.airdrop;
+            entry["count"] = force.count;
             entry["released"] = force.released;
             if (force.airdrop) {
                 entry["x"] = force.drop_x;

@@ -12,7 +12,9 @@ extends Control
 ## footer with forces in flight and logistics requests.
 
 signal order_unit(unit_type: int, mode: int)
-signal order_paradrop(unit_type: int)
+## A paratroop drop: the unit and how many jump. The map click that picks the
+## drop zone follows, and the native rules decide whether it is allowed.
+signal order_paradrop(unit_type: int, count: int)
 signal request_fuel
 signal request_fuel_by_sea
 signal request_recon
@@ -50,7 +52,13 @@ const SHORT_REASONS := {
 	"UNKNOWN WARSHIP": "UNAVAILABLE",
 }
 
+## Units per drop: the stick button cycles through these. The native limit is
+## Simulation::kMaxParadropStick (6).
+const STICK_SIZES := [1, 2, 4, 6]
+
 var _tab := TAB_GROUND
+var _stick_index := 0
+var _stick_button: Button
 var _ground_transport_mode := 0
 var _catalog: Array = []
 var _inbound: Array = []
@@ -214,6 +222,13 @@ func _ready() -> void:
 	recon_button.tooltip_text = "Plot a reconnaissance flight over the map."
 	recon_button.pressed.connect(request_recon.emit)
 	footer.add_child(recon_button)
+	_stick_button = ButtonComponent.new()
+	_stick_button.name = "StickSize"
+	_stick_button.variant = "secondary"
+	_stick_button.tooltip_text = "How many units jump in one paradrop. They share one aircraft, so shooting it down loses them all. Each is paid for."
+	_stick_button.pressed.connect(_cycle_stick)
+	footer.add_child(_stick_button)
+	_update_stick_text()
 	var help := Label.new()
 	help.name = "Help"
 	help.theme_type_variation = "CaptionLabel"
@@ -240,6 +255,23 @@ func _notification(what: int) -> void:
 		# Fewer columns on a narrow window rather than overflowing the screen.
 		var usable := size.x - Tokens.SPACE_2XL * 2 - Tokens.SPACE_XL * 2
 		_cards.columns = clampi(int((usable + Tokens.SPACE_MD) / (CARD_WIDTH + Tokens.SPACE_MD)), 2, 4)
+
+
+func stick_size() -> int:
+	return int(STICK_SIZES[_stick_index])
+
+
+func _cycle_stick() -> void:
+	_stick_index = (_stick_index + 1) % STICK_SIZES.size()
+	_update_stick_text()
+	# The drop buttons show the price of a whole stick.
+	_fingerprint = ""
+	_refresh()
+
+
+func _update_stick_text() -> void:
+	if is_instance_valid(_stick_button):
+		_stick_button.text = "DROP STICK: %d" % stick_size()
 
 
 func _select_tab(index: int) -> void:
@@ -315,11 +347,14 @@ func _refresh() -> void:
 	for force in _inbound:
 		var mode := int(force.get("route_mode", 0))
 		var drop := "PARADROP " if bool(force.get("airdrop", false)) else ("ROAD " if mode == 1 else "RAIL " if mode == 2 else "SEA " if mode == 3 else "AIR ")
-		lines.append("%s%s  %.0f S" % [drop, String(_unit_names.get(int(force.type), "UNIT")).to_upper(), float(force.remaining_ms) / 1000.0])
+		var unit_name := String(_unit_names.get(int(force.type), "UNIT")).to_upper()
+		if bool(force.get("airdrop", false)) and int(force.get("count", 1)) > 1:
+			unit_name = "%dX %s" % [int(force.get("count", 1)), unit_name]
+		lines.append("%s%s  %.0f S" % [drop, unit_name, float(force.remaining_ms) / 1000.0])
 	_inbound_label.text = "INBOUND  //  " + ("   ·   ".join(lines) if not lines.is_empty() else "NONE")
 	_inbound_label.add_theme_color_override("font_color", Tokens.ACCENT_STRONG if not lines.is_empty() else Tokens.TEXT_MUTED)
 	var entries := tab_entries()
-	var next := "%d|%d|%s" % [_tab, _ground_transport_mode, JSON.stringify(entries)]
+	var next := "%d|%d|%d|%s" % [_tab, _ground_transport_mode, stick_size(), JSON.stringify(entries)]
 	if next == _fingerprint:
 		return
 	_fingerprint = next
@@ -405,13 +440,14 @@ func _add_card(entry: Dictionary) -> void:
 		var drop_open := available or reason == "AIRFIELD REQUIRED FOR REINFORCEMENTS"
 		var paradrop := ButtonComponent.new()
 		paradrop.name = "Paradrop"
-		paradrop.text = "PARADROP"
+		var stick := stick_size()
+		paradrop.text = "PARADROP" if stick == 1 else "PARADROP x%d" % stick
 		paradrop.variant = "secondary"
 		paradrop.icon_id = &"logistics.airlift"
 		paradrop.disabled = not drop_open
 		paradrop.custom_minimum_size.y = 40
-		paradrop.tooltip_text = "Drop by parachute onto ground you can see. No airfield needed; then click the map."
-		paradrop.pressed.connect(func(): order_paradrop.emit(int(entry.get("type", -1))))
+		paradrop.tooltip_text = "Drop %d by parachute onto ground you can see, for %d Materials. No airfield needed; then click the map." % [stick, int(float(entry.get("material", 0.0))) * stick]
+		paradrop.pressed.connect(func(): order_paradrop.emit(int(entry.get("type", -1)), stick))
 		paradrop.mouse_entered.connect(show_description.bind(entry))
 		holder.add_child(paradrop)
 	else:

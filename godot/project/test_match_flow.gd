@@ -294,6 +294,64 @@ func _test_paradrop() -> void:
 	await _finish(view)
 
 
+# A stick of several units drops together: chosen on the panel, carried through the
+# map click into the native order, paid per unit and shown on the map and in the panel.
+func _test_paradrop_stick() -> void:
+	var view: Node = await _start_match()
+	view.extension.call("skirmish_set_ai_enabled", false)
+	view._toggle_strategic_command()
+	await process_frame
+	var panel: Node = view.strategic_command_view
+	var stick_button: Button = panel.find_child("StickSize", true, false)
+	check(stick_button != null and panel.stick_size() == 1 and stick_button.text == "DROP STICK: 1", "the panel starts with a stick of one")
+	var price := 0.0
+	for entry in view.extension.call("get_build_catalog", 0):
+		if int(entry.get("type", -1)) == SCOUT_CAR:
+			price = float(entry.get("material", 0.0))
+	check(price > 0.0, "the scout car has a catalog price")
+	stick_button.pressed.emit()
+	stick_button.pressed.emit()
+	check(panel.stick_size() == 4 and stick_button.text == "DROP STICK: 4", "the stick button steps through 1, 2, 4")
+	stick_button.pressed.emit()
+	stick_button.pressed.emit()
+	check(panel.stick_size() == 1, "and wraps from 6 back to 1")
+	stick_button.pressed.emit()
+	stick_button.pressed.emit()
+	await process_frame
+	var card: Node = panel.find_child("Card_%d" % SCOUT_CAR, true, false)
+	var drop_button: Button = card.get_node_or_null("Paradrop") if card != null else null
+	check(drop_button != null and drop_button.text == "PARADROP x4", "the drop button shows the stick")
+	check(drop_button != null and drop_button.tooltip_text.contains("%d Materials" % (int(price) * 4)), "and the price of the whole stick")
+	var funds_before: Array = view.extension.call("economy_get_tactical_resources", int(view.commander_ids.get(0, -1)))
+	if drop_button != null:
+		drop_button.pressed.emit()
+	check(view.paradrop_targeting_type == SCOUT_CAR and view.paradrop_targeting_count == 4, "the drop waits for its zone with the stick size")
+	check(String(view.fuel_supply_status).contains("4 UNITS"), "and the prompt says how many")
+	var engineer := int(view.engineer_ids.get(0, -1))
+	var engineer_at: PackedFloat32Array = view.extension.call("get_unit_position", engineer)
+	var zone := Vector2(engineer_at[0] + 60.0, engineer_at[1] + 60.0)
+	check(view._order_paradrop(zone), "the click orders the stick")
+	check(String(view.fuel_supply_status) == "PARADROP INBOUND // 4 UNITS", "and the player is told how many are coming")
+	view.extension.call("update_simulation", 50.0)
+	var inbound: Array = view.extension.call("delivery_state", 0).get("inbound", [])
+	check(inbound.size() == 1 and bool(inbound[0].get("airdrop", false)) and int(inbound[0].get("count", 0)) == 4, "one sortie carries four units")
+	var funds_after: Array = view.extension.call("economy_get_tactical_resources", int(view.commander_ids.get(0, -1)))
+	check(absf((float(funds_before[0]) - float(funds_after[0])) - price * 4.0) < 1.0, "four units were paid for")
+	view._update_hud()
+	var marker: Node3D = view.paradrop_markers.values()[0] if view.paradrop_markers.size() == 1 else null
+	check(marker != null and (marker.get_node("Countdown") as Label3D).text.begins_with("PARADROP x4"), "the map marker shows the stick")
+	# Targeting closed the panel, so open it again to see the stick in flight.
+	view._toggle_strategic_command()
+	await process_frame
+	var inbound_label: Label = panel.find_child("Inbound", true, false)
+	check(inbound_label != null and inbound_label.text.contains("4X"), "Strategic Command lists the stick in flight")
+	# A refused stick is refused whole, and the refusal reaches the player.
+	view._begin_paradrop_targeting(SCOUT_CAR, 99)
+	check(not view._order_paradrop(zone), "a stick over the native limit is refused")
+	check(String(view.fuel_supply_status) == "PARADROP REFUSED // BAD STICK SIZE", "and the player is told why")
+	await _finish(view)
+
+
 func _style_for(doctrine: String, difficulty: String) -> Dictionary:
 	OS.set_environment("RTS_AI_DOCTRINE", doctrine)
 	OS.set_environment("RTS_AI_DIFFICULTY", difficulty)
@@ -320,6 +378,7 @@ func _run() -> void:
 	await _test_ai_style_choice()
 	await _test_ai_builds_its_airfield()
 	await _test_paradrop()
+	await _test_paradrop_stick()
 	await _test_victory()
 	await _test_defeat()
 	print("GODOT_MATCH_FLOW checks=%d failures=%d" % [checks, failures])

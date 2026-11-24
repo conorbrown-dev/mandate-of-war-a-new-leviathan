@@ -613,6 +613,12 @@ int Simulation::inbound_count(FactionId faction) const {
     return count;
 }
 
+int Simulation::inbound_unit_count(FactionId faction) const {
+    int count = 0;
+    for (const auto& force : inbound_forces_) count += force.faction == faction ? force.count : 0;
+    return count;
+}
+
 bool Simulation::set_landing_zone(FactionId faction, float x, float y) {
     const auto index = static_cast<size_t>(faction);
     if (index >= FACTION_COUNT || !std::isfinite(x) || !std::isfinite(y) ||
@@ -673,7 +679,7 @@ std::string Simulation::delivery_refusal(FactionId faction, UnitType type) const
     float y = 0.0f;
     if (!landing_site(faction, x, y)) return "AIRFIELD REQUIRED FOR REINFORCEMENTS";
     if (inbound_count(faction) >= kMaxInboundForces) return "TRANSPORT QUEUE FULL";
-    if (unit_count(faction) + inbound_count(faction) >= unit_cap_per_player_) return "UNIT CAP REACHED";
+    if (unit_count(faction) + inbound_unit_count(faction) >= unit_cap_per_player_) return "UNIT CAP REACHED";
     const EntityId line = production_manager_.faction_line(faction);
     const auto line_it = production_manager_.production_lines().find(line);
     if (line_it == production_manager_.production_lines().end()) return "NO PRODUCTION LINE";
@@ -739,7 +745,7 @@ std::string Simulation::delivery_refusal_via(FactionId faction, UnitType type, G
         !needs_delivery(type)) return "UNKNOWN GROUND FORCE";
     if (!transport_route(faction, mode).enabled) return mode == GroundTransport::RAIL ? "RAIL ROUTE UNAVAILABLE" : "ROAD ROUTE UNAVAILABLE";
     if (inbound_count(faction) >= kMaxInboundForces) return "TRANSPORT QUEUE FULL";
-    if (unit_count(faction) + inbound_count(faction) >= unit_cap_per_player_) return "UNIT CAP REACHED";
+    if (unit_count(faction) + inbound_unit_count(faction) >= unit_cap_per_player_) return "UNIT CAP REACHED";
     const EntityId line = production_manager_.faction_line(faction);
     const auto line_it = production_manager_.production_lines().find(line);
     if (line_it == production_manager_.production_lines().end()) return "NO PRODUCTION LINE";
@@ -873,7 +879,7 @@ std::string Simulation::sea_delivery_refusal(FactionId faction, UnitType type, u
         return "SEA LANE CONTESTED";
     }
     if (inbound_count(faction) >= kMaxInboundForces) return "TRANSPORT QUEUE FULL";
-    if (unit_count(faction) + inbound_count(faction) >= unit_cap_per_player_) return "UNIT CAP REACHED";
+    if (unit_count(faction) + inbound_unit_count(faction) >= unit_cap_per_player_) return "UNIT CAP REACHED";
     const EntityId line = production_manager_.faction_line(faction);
     const auto line_it = production_manager_.production_lines().find(line);
     if (line_it == production_manager_.production_lines().end()) return "NO PRODUCTION LINE";
@@ -920,7 +926,7 @@ std::string Simulation::naval_order_refusal(FactionId faction, UnitType type) co
     if (port_network_.owned_by(static_cast<int>(faction)).empty()) return "NO PORT HELD";
     if (port_network_.usable_by(static_cast<int>(faction)).empty()) return "PORT DESTROYED";
     if (inbound_count(faction) >= kMaxInboundForces) return "TRANSPORT QUEUE FULL";
-    if (unit_count(faction) + inbound_count(faction) >= unit_cap_per_player_) return "UNIT CAP REACHED";
+    if (unit_count(faction) + inbound_unit_count(faction) >= unit_cap_per_player_) return "UNIT CAP REACHED";
     const EntityId line = production_manager_.faction_line(faction);
     const auto line_it = production_manager_.production_lines().find(line);
     if (line_it == production_manager_.production_lines().end()) return "NO PRODUCTION LINE";
@@ -1108,22 +1114,23 @@ void Simulation::sync_port_facilities() {
     }
 }
 
-std::string Simulation::paradrop_refusal(FactionId faction, UnitType type, float x, float y) const {
+std::string Simulation::paradrop_refusal(FactionId faction, UnitType type, float x, float y, int count) const {
     const auto proto = get_unit_prototypes().find(type);
     if (proto == get_unit_prototypes().end() || proto->second.faction != faction) return "UNKNOWN UNIT";
     if (!forces_by_transport_ || !needs_delivery(type) || !proto->second.airdrop) return "CANNOT BE AIRDROPPED";
+    if (count < 1 || count > kMaxParadropStick) return "BAD STICK SIZE";
     if (!cargo_aircraft_type(faction)) return "NO CARGO AIRCRAFT";
     if (!std::isfinite(x) || !std::isfinite(y) || !is_land_position(x, y) ||
         !pathfinding_.is_walkable(pathfinding_.to_grid_x(x), pathfinding_.to_grid_y(y))) return "NO DROP ZONE THERE";
     // Nobody jumps blind: the drop zone must be watched when the drop is ordered.
     if (!can_see(faction, x, y)) return "DROP ZONE NOT SCOUTED";
     if (inbound_count(faction) >= kMaxInboundForces) return "TRANSPORT QUEUE FULL";
-    if (unit_count(faction) + inbound_count(faction) >= unit_cap_per_player_) return "UNIT CAP REACHED";
+    if (unit_count(faction) + inbound_unit_count(faction) + count > unit_cap_per_player_) return "UNIT CAP REACHED";
     const EntityId line = production_manager_.faction_line(faction);
     const auto line_it = production_manager_.production_lines().find(line);
     if (line_it == production_manager_.production_lines().end()) return "NO PRODUCTION LINE";
     const auto storage = production_manager_.storages().find(line_it->second.storage_id);
-    const float cost = production_manager_.get_unit_metal_cost(faction, type);
+    const float cost = production_manager_.get_unit_metal_cost(faction, type) * static_cast<float>(count);
     if (storage == production_manager_.storages().end() || storage->second.tactical.materials.current < cost) {
         return "INSUFFICIENT MATERIALS";
     }
@@ -1166,12 +1173,13 @@ EntityId Simulation::launch_cargo_aircraft(FactionId faction, float x, float y) 
     return transport;
 }
 
-bool Simulation::order_paradrop(FactionId faction, UnitType type, float x, float y) {
-    if (!paradrop_refusal(faction, type, x, y).empty()) return false;
-    const float cost = production_manager_.get_unit_metal_cost(faction, type);
+bool Simulation::order_paradrop(FactionId faction, UnitType type, float x, float y, int count) {
+    if (!paradrop_refusal(faction, type, x, y, count).empty()) return false;
+    const float cost = production_manager_.get_unit_metal_cost(faction, type) * static_cast<float>(count);
     if (!production_manager_.deduct_faction_resources(faction, cost, 0.0f)) return false;
     InboundForce force{faction, type, tick_ + static_cast<uint32_t>(std::ceil(paradrop_seconds(type, x) * 20.0f))};
     force.airdrop = true;
+    force.count = count;
     force.launch_tick = tick_ + static_cast<uint32_t>(std::ceil(get_unit_prototypes().at(type).build_time_seconds * 20.0f));
     force.drop_x = x;
     force.drop_y = y;
@@ -1187,10 +1195,11 @@ size_t Simulation::issue_fuel_shipment_command(FactionId faction, bool by_sea) {
         FUEL_SHIPMENT_ORDER_FLAG | (by_sea ? SEA_DELIVERY_ORDER_FLAG : 0u));
 }
 
-size_t Simulation::issue_paradrop_command(FactionId faction, UnitType type, float x, float y) {
+size_t Simulation::issue_paradrop_command(FactionId faction, UnitType type, float x, float y, int count) {
     const EntityId post = production_manager_.faction_line(faction);
-    if (post == INVALID_ENTITY) return 0;
-    return issue_commands({post}, faction, CommandType::BUILD, x, y, PARADROP_ORDER_FLAG | static_cast<uint32_t>(type));
+    if (post == INVALID_ENTITY || count < 1 || count > kMaxParadropStick) return 0;
+    return issue_commands({post}, faction, CommandType::BUILD, x, y,
+        PARADROP_ORDER_FLAG | (static_cast<uint32_t>(count) << PARADROP_COUNT_SHIFT) | static_cast<uint32_t>(type));
 }
 
 void Simulation::deliver_inbound_forces() {
@@ -1232,11 +1241,18 @@ void Simulation::deliver_inbound_forces() {
             continue;
         }
         if (force.airdrop) {
-            if (force.arrive_tick > tick_ || unit_count(force.faction) >= unit_cap_per_player_) {
+            if (force.arrive_tick > tick_) {
                 ++index;
                 continue;
             }
-            if (land_paradrop(force)) {
+            // The stick jumps together. A unit the cap or the ground refuses
+            // stays in the air with the rest until there is room.
+            auto& drop = inbound_forces_[index];
+            while (drop.count > 0 && unit_count(drop.faction) < unit_cap_per_player_ && land_paradrop(drop)) {
+                ++drop.dropped;
+                --drop.count;
+            }
+            if (drop.count <= 0) {
                 inbound_forces_.erase(inbound_forces_.begin() + static_cast<std::ptrdiff_t>(index));
             } else {
                 ++index;
@@ -1379,10 +1395,13 @@ void Simulation::deliver_inbound_forces() {
 // stand on is passed over for the next one out, then the point itself.
 bool Simulation::land_paradrop(const InboundForce& force) {
     constexpr float kGoldenAngle = 2.39996323f;
-    uint32_t hash = force.drop_sequence * 2654435761u;
+    // Each unit of a stick has its own place in the sequence; the first of a
+    // drop keeps the drop's own number, so single drops land where they did.
+    const uint32_t sequence = force.drop_sequence + static_cast<uint32_t>(force.dropped) * 5u;
+    uint32_t hash = sequence * 2654435761u;
     hash ^= hash >> 15;
     for (int attempt = 0; attempt < 12; ++attempt) {
-        const float turn = static_cast<float>(force.drop_sequence + static_cast<uint32_t>(attempt) * 7u);
+        const float turn = static_cast<float>(sequence + static_cast<uint32_t>(attempt) * 7u);
         const float spread = 0.35f + 0.65f * static_cast<float>((hash >> 8) % 1000u) / 1000.0f;
         const float radius = kParadropScatterMeters * spread * std::min(1.0f, 0.4f + 0.1f * static_cast<float>(attempt));
         const float x = force.drop_x + std::cos(turn * kGoldenAngle) * radius;
@@ -1710,7 +1729,9 @@ bool Simulation::validate_command(const InputCommand& cmd, uint32_t execution_ti
     if (type == CommandType::BUILD && (cmd.extra & PARADROP_ORDER_FLAG) != 0) {
         // A paratroop drop is ordered from the command post. Whether it can
         // fly is decided when it runs, with the refusal rules above.
-        const bool ok = (cmd.extra & ~PARADROP_ORDER_FLAG) <= 255 &&
+        const uint32_t stick = (cmd.extra >> PARADROP_COUNT_SHIFT) & 0xFFu;
+        const bool ok = (cmd.extra & ~(PARADROP_ORDER_FLAG | (0xFFu << PARADROP_COUNT_SHIFT))) <= 255 &&
+                        stick <= static_cast<uint32_t>(kMaxParadropStick) &&
                         production_manager_.faction_line(owner->faction_id) == static_cast<EntityId>(cmd.entity_id);
         if (!ok) fprintf(stderr, "VALIDATE_FAIL: paradrop order must come from the command post (entity=%u extra=%u)\n", cmd.entity_id, cmd.extra);
         return ok;
@@ -2795,7 +2816,7 @@ void Simulation::economy_phase(float delta_ms) {
          const auto faction = static_cast<FactionId>(index);
          // An inbound delivery was paid for, so production must leave it a slot.
          const int reserved = (reinforcement_delivery_.state() == ReinforcementDeliveryState::INCOMING &&
-             reinforcement_delivery_.owner() == faction ? 1 : 0) + inbound_count(faction);
+             reinforcement_delivery_.owner() == faction ? 1 : 0) + inbound_unit_count(faction);
          production_manager_.set_unit_slots(faction, unit_cap_per_player_ - unit_counts_[index] - reserved);
      }
      production_manager_.update_all(delta_ms);
@@ -5352,7 +5373,8 @@ void rts::Simulation::process_command_internal(const InputCommand& cmd) {
             }
             if ((cmd.extra & PARADROP_ORDER_FLAG) != 0) {
                 const auto* owner = component_manager_.get_component<Faction>(cmd.entity_id);
-                if (owner) order_paradrop(owner->faction_id, static_cast<UnitType>(cmd.extra & 0xFFu), build_x, build_y);
+                const int stick = static_cast<int>((cmd.extra >> PARADROP_COUNT_SHIFT) & 0xFFu);
+                if (owner) order_paradrop(owner->faction_id, static_cast<UnitType>(cmd.extra & 0xFFu), build_x, build_y, stick == 0 ? 1 : stick);
                 break;
             }
             if ((cmd.extra & NAVAL_ORDER_FLAG) != 0) {

@@ -917,6 +917,109 @@ TEST(a_paradrop_obeys_the_unit_cap_like_any_delivery) {
            "a second is refused while the first is in the air");
 }
 
+TEST(a_paradrop_stick_is_validated_priced_per_unit_and_holds_a_cap_slot_each) {
+    DropFront drop;
+    auto& simulation = drop.simulation;
+    const FactionId elite = FactionId::ELITE_PRECISION;
+    const float x = DropFront::kDropX;
+    const float y = DropFront::kDropY;
+    verify(simulation.paradrop_refusal(elite, kScoutCar, x, y, 0) == "BAD STICK SIZE", "an empty stick is refused");
+    verify(simulation.paradrop_refusal(elite, kScoutCar, x, y, Simulation::kMaxParadropStick + 1) == "BAD STICK SIZE", "an oversized stick is refused");
+    verify(simulation.paradrop_refusal(elite, kScoutCar, x, y, Simulation::kMaxParadropStick).empty(), "a full stick is allowed");
+    verify(simulation.issue_paradrop_command(elite, kScoutCar, x, y, 0) == 0 &&
+           simulation.issue_paradrop_command(elite, kScoutCar, x, y, Simulation::kMaxParadropStick + 1) == 0, "and an absurd stick never becomes an order");
+    const float price = simulation.production_manager().get_unit_metal_cost(elite, kScoutCar);
+
+    // The price is per unit, and a stick the side cannot pay for is refused whole.
+    simulation.set_reinforcement_resources(elite, price * 2.5f, 3000.0f);
+    verify(simulation.paradrop_refusal(elite, kScoutCar, x, y, 3) == "INSUFFICIENT MATERIALS", "three units cost more than two and a half prices");
+    const float before = drop.materials();
+    verify(simulation.order_paradrop(elite, kScoutCar, x, y, 2), "two units can be paid for");
+    verify(std::abs(before - drop.materials() - 2.0f * price) < 0.5f, "and cost two prices");
+
+    // One slot under the unit cap for every unit in the air, not one per aircraft.
+    simulation.set_reinforcement_resources(elite, 5000.0f, 3000.0f);
+    simulation.set_unit_cap_per_player(simulation.unit_count(elite) + 5);
+    verify(simulation.inbound_count(elite) == 1 && simulation.inbound_unit_count(elite) == 2, "one sortie carries two units");
+    verify(simulation.paradrop_refusal(elite, kScoutCar, x, y, 4) == "UNIT CAP REACHED", "four more would pass the cap");
+    verify(simulation.paradrop_refusal(elite, kScoutCar, x, y, 3).empty(), "three more fit exactly");
+    verify(simulation.order_paradrop(elite, kScoutCar, x, y, 3), "and are accepted");
+    verify(simulation.paradrop_refusal(elite, kScoutCar, x, y, 1) == "UNIT CAP REACHED", "then the cap is full");
+}
+
+TEST(a_paradrop_stick_jumps_together_from_one_aircraft_and_lands_spread_out) {
+    DropFront drop;
+    auto& simulation = drop.simulation;
+    const FactionId elite = FactionId::ELITE_PRECISION;
+    const int units_before = simulation.unit_count(elite);
+    const float before = drop.materials();
+    const float price = simulation.production_manager().get_unit_metal_cost(elite, kScoutCar);
+    verify(simulation.issue_paradrop_command(elite, kScoutCar, DropFront::kDropX, DropFront::kDropY, 4) == 1, "a stick of four is one recorded order");
+    simulation.update(50.0f);
+    const auto& commands = simulation.command_log();
+    verify(std::count_if(commands.begin(), commands.end(), [](const InputCommand& command) {
+        return (command.extra & Simulation::PARADROP_ORDER_FLAG) != 0 &&
+               ((command.extra >> Simulation::PARADROP_COUNT_SHIFT) & 0xFFu) == 4u && (command.extra & 0xFFu) == static_cast<uint32_t>(kScoutCar);
+    }) == 1, "that records the stick size beside the unit type");
+    verify(simulation.inbound_count(elite) == 1 && simulation.inbound_unit_count(elite) == 4, "one sortie is in the air carrying four");
+    verify(std::abs(before - drop.materials() - 4.0f * price) < 0.5f, "four units were paid for, once");
+    const auto cargo_aircraft = [&simulation]() {
+        int count = 0;
+        for (const EntityId unit : simulation.get_entity_list()) {
+            const auto* data = simulation.component_manager().get_component<UnitData>(unit);
+            const auto prototype = data ? get_unit_prototypes().find(static_cast<UnitType>(data->unit_type)) : get_unit_prototypes().end();
+            count += prototype != get_unit_prototypes().end() && prototype->second.cargo_transport ? 1 : 0;
+        }
+        return count;
+    };
+    const int build_ticks = static_cast<int>(std::ceil(get_unit_prototypes().at(kScoutCar).build_time_seconds * 20.0f));
+    for (int tick = 1; tick < build_ticks + 2; ++tick) simulation.update(50.0f);
+    verify(cargo_aircraft() == 1, "the whole stick takes off on a single cargo aircraft");
+    for (int tick = 0; tick < 20 * 400 && !simulation.inbound_forces().empty(); ++tick) simulation.update(50.0f);
+    for (int tick = 0; tick < 20; ++tick) simulation.update(50.0f);
+    const auto landed = drop.scout_cars();
+    verify(landed.size() == 4 && simulation.inbound_forces().empty(), "all four land and the sortie ends");
+    verify(simulation.unit_count(elite) == units_before + 4, "and count as the player's units");
+    verify(std::abs(before - drop.materials() - 4.0f * price) < 0.5f, "with no second charge");
+    float nearest_pair = std::numeric_limits<float>::max();
+    for (size_t first = 0; first < landed.size(); ++first) {
+        const float x = simulation.get_unit_x(landed[first]);
+        const float y = simulation.get_unit_y(landed[first]);
+        verify(std::hypot(x - DropFront::kDropX, y - DropFront::kDropY) <= Simulation::kParadropScatterMeters + 1.0f, "each lands around the drop point");
+        for (size_t second = first + 1; second < landed.size(); ++second) {
+            nearest_pair = std::min(nearest_pair, std::hypot(x - simulation.get_unit_x(landed[second]), y - simulation.get_unit_y(landed[second])));
+        }
+    }
+    verify(nearest_pair > 10.0f, "spread out, not stacked on one spot");
+}
+
+TEST(a_paradrop_stick_shot_down_is_lost_whole) {
+    DropFront drop;
+    auto& simulation = drop.simulation;
+    for (int index = 0; index < 8; ++index) {
+        const EntityId sam = static_cast<EntityId>(simulation.create_unit_with_type(
+            -9000.0f + static_cast<float>(index) * 60.0f, DropFront::kDropY + 30.0f, UnitType::MASS_ANTI_AIR, FactionId::MASS_WARFARE));
+        simulation.stop_unit(sam);
+    }
+    verify(simulation.order_paradrop(FactionId::ELITE_PRECISION, kScoutCar, DropFront::kDropX, DropFront::kDropY, 3), "a stick of three is ordered");
+    for (int tick = 0; tick < 20 * 300 && !simulation.inbound_forces().empty(); ++tick) simulation.update(50.0f);
+    verify(drop.scout_cars().empty(), "shooting the one aircraft down lands nobody");
+    verify(simulation.paradrops_lost(FactionId::ELITE_PRECISION) == 1, "and counts as one lost sortie");
+    verify(simulation.inbound_unit_count(FactionId::ELITE_PRECISION) == 0, "the three cap slots are free again");
+}
+
+TEST(a_paradrop_order_recorded_without_a_stick_size_still_drops_one_unit) {
+    DropFront drop;
+    auto& simulation = drop.simulation;
+    const FactionId elite = FactionId::ELITE_PRECISION;
+    const EntityId post = simulation.production_manager().faction_line(elite);
+    // The order as it was recorded before sticks existed: flag and unit type only.
+    verify(simulation.issue_commands({post}, elite, CommandType::BUILD, DropFront::kDropX, DropFront::kDropY,
+               Simulation::PARADROP_ORDER_FLAG | static_cast<uint32_t>(kScoutCar)) == 1, "the old form is still accepted");
+    simulation.update(50.0f);
+    verify(simulation.inbound_count(elite) == 1 && simulation.inbound_unit_count(elite) == 1, "and means a single unit");
+}
+
 namespace {
 // A tank on open ground with a known fuel store, for the ground fuel burn.
 struct FuelFront {
