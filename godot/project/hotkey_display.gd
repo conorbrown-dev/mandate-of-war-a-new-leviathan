@@ -1,90 +1,128 @@
 extends Control
+## The F1 hotkey sheet: every control, grouped, in a centred command panel.
+## Built once from hotkey_manager.gd when first shown; presentation only.
+
+const Tokens := preload("res://ui/theme/ui_tokens.gd")
+const MandatePanelScript := preload("res://ui/components/mandate_panel.gd")
+const COLUMNS := 3
 
 var hotkey_manager: Node = null
 
-const INK := Color("#d9edf3")
-const MUTED := Color("#7f9ba8")
-const PANEL := Color("#07131d", 0.92)
-const PANEL_EDGE := Color("#1f5266", 0.96)
-const CYAN := Color("#47d9ff")
-const HIGHLIGHT := Color("#ffbd52")
-
-var ui_font: Font = null
-var ui_font_small: Font = null
+var _built := false
 
 
 func _ready() -> void:
+	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_ready_setup()
+	visible = false
 
 
-func _ready_setup() -> void:
-	ui_font = UiTypography.compact_tactical_font()
-	if not is_instance_valid(hotkey_manager):
-		hotkey_manager = preload("res://hotkey_manager.gd").new()
-		add_child(hotkey_manager)
+func toggle() -> void:
+	set_sheet_visible(not visible)
 
 
-func _notification(what: int) -> void:
-	if what == NOTIFICATION_RESIZED:
-		queue_redraw()
+func set_sheet_visible(shown: bool) -> void:
+	if shown and not _built:
+		_build()
+	visible = shown
 
 
 func refresh() -> void:
-	queue_redraw()
+	for child in get_children():
+		remove_child(child)
+		child.queue_free()
+	_built = false
+	if visible:
+		_build()
 
 
-func _draw() -> void:
+func _build() -> void:
 	if not is_instance_valid(hotkey_manager):
-		return
+		hotkey_manager = preload("res://hotkey_manager.gd").new()
+		add_child(hotkey_manager)
+	_built = true
+	var backdrop := ColorRect.new()
+	backdrop.color = Color(Tokens.SURFACE_BASE, 0.55)
+	backdrop.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	backdrop.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_child(backdrop)
+	var center := CenterContainer.new()
+	center.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	center.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_child(center)
 
-	var ui_scale := clampf(minf(size.x / 1920.0, size.y / 1080.0), 0.62, 1.0)
-	draw_set_transform(Vector2.ZERO, 0.0, Vector2(ui_scale, ui_scale))
+	var panel: PanelContainer = MandatePanelScript.new()
+	panel.surface = "command"
+	panel.mouse_filter = Control.MOUSE_FILTER_STOP
+	center.add_child(panel)
 
-	var w := size.x / ui_scale
-	var h := size.y / ui_scale
+	var margin := MarginContainer.new()
+	for side in ["left", "right", "top", "bottom"]:
+		margin.add_theme_constant_override("margin_" + side, Tokens.SPACE_XL)
+	panel.add_child(margin)
 
-	var hotkey_list := hotkey_manager.get_all_hotkeys()
-	if hotkey_list.is_empty():
-		return
+	var layout := VBoxContainer.new()
+	layout.add_theme_constant_override("separation", Tokens.SPACE_LG)
+	margin.add_child(layout)
 
-	var panel_rect := Rect2(w - 260.0 - 14.0, h - 320.0, 260.0, 306.0)
+	var title_row := HBoxContainer.new()
+	layout.add_child(title_row)
+	var title := Label.new()
+	title.text = "HOTKEYS"
+	title.add_theme_font_size_override("font_size", 20)
+	title.add_theme_color_override("font_color", Tokens.TEXT_PRIMARY)
+	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	title_row.add_child(title)
+	var hint := Label.new()
+	hint.text = "F1 OR ESC TO CLOSE"
+	hint.add_theme_font_size_override("font_size", 12)
+	hint.add_theme_color_override("font_color", Tokens.TEXT_MUTED)
+	title_row.add_child(hint)
 
-	draw_rect(panel_rect, PANEL, true)
-	draw_rect(panel_rect, PANEL_EDGE, false, 1.0)
+	var columns := HBoxContainer.new()
+	columns.add_theme_constant_override("separation", Tokens.SPACE_2XL)
+	layout.add_child(columns)
+	var column_boxes: Array[VBoxContainer] = []
+	for _index in range(COLUMNS):
+		var column := VBoxContainer.new()
+		column.add_theme_constant_override("separation", Tokens.SPACE_LG)
+		column.alignment = BoxContainer.ALIGNMENT_BEGIN
+		columns.add_child(column)
+		column_boxes.append(column)
 
-	var title_rect := Rect2(panel_rect.position + Vector2(10, 10), Vector2(panel_rect.size.x - 20, 30))
-	_font_draw(title_rect.position + Vector2(0, 20), "HOTKEY ASSIGNMENTS", 10, CYAN, ui_scale)
-
-	var entry_height := 24.0
-	var start_y := title_rect.position.y + 40.0
-
-	var visible_count := 12
-	var current_y := start_y
-
-	for index in range(mini(visible_count, hotkey_list.size())):
-		var hotkey := hotkey_list[index]
-		var entry_rect := Rect2(panel_rect.position + Vector2(10, current_y), Vector2(panel_rect.size.x - 20, entry_height))
-
-		draw_rect(entry_rect, Color("#0b1c27", 0.96), true)
-		draw_rect(entry_rect, PANEL_EDGE, false, 1.0)
-
-		var key_text := hotkey.get("key", "UNKNOWN")
-		var description := hotkey.get("description", "")
-
-		_font_draw(entry_rect.position + Vector2(12, 16), key_text, 11, HIGHLIGHT, ui_scale)
-		_font_draw(entry_rect.position + Vector2(120, 16), description, 9, INK, ui_scale)
-
-		current_y += entry_height + 2
-
-	var more_count := hotkey_list.size() - visible_count
-	if more_count > 0:
-		var more_rect := Rect2(panel_rect.position + Vector2(10, current_y + 4), Vector2(panel_rect.size.x - 20, 20))
-		_font_draw(more_rect.position + Vector2(0, 14), "… and %d more" % more_count, 9, MUTED, ui_scale)
+	# Fill the shortest column with each section in turn, so the sheet stays even.
+	var heights: Array[int] = []
+	heights.resize(COLUMNS)
+	heights.fill(0)
+	for section in hotkey_manager.get_hotkey_sections():
+		var target := heights.find(heights.min())
+		column_boxes[target].add_child(_section(String(section.category), section.hotkeys))
+		heights[target] += section.hotkeys.size() + 2
 
 
-func _font_draw(at: Vector2, text: String, font_size: int, color: Color, ui_scale: float) -> void:
-	if ui_font != null:
-		draw_string(ui_font, at, text, HORIZONTAL_ALIGNMENT_LEFT, -1, floor(font_size * ui_scale), color)
-	else:
-		draw_string(ThemeDB.fallback_font, at, text, HORIZONTAL_ALIGNMENT_LEFT, -1, floor(font_size * ui_scale), color)
+func _section(category: String, hotkeys: Array) -> Control:
+	var box := VBoxContainer.new()
+	box.add_theme_constant_override("separation", Tokens.SPACE_XS)
+	var heading := Label.new()
+	heading.text = category.to_upper()
+	heading.add_theme_font_size_override("font_size", 12)
+	heading.add_theme_color_override("font_color", Tokens.ACCENT)
+	box.add_child(heading)
+	var grid := GridContainer.new()
+	grid.columns = 2
+	grid.add_theme_constant_override("h_separation", Tokens.SPACE_MD)
+	grid.add_theme_constant_override("v_separation", Tokens.SPACE_XS)
+	box.add_child(grid)
+	for hotkey in hotkeys:
+		var key := Label.new()
+		key.text = String(hotkey.get("label", String(hotkey.get("key", "")).trim_prefix("KEY_")))
+		key.add_theme_font_size_override("font_size", 14)
+		key.add_theme_color_override("font_color", Tokens.TEXT_PRIMARY)
+		key.custom_minimum_size.x = 132
+		grid.add_child(key)
+		var description := Label.new()
+		description.text = String(hotkey.get("description", ""))
+		description.add_theme_font_size_override("font_size", 14)
+		description.add_theme_color_override("font_color", Tokens.TEXT_SECONDARY)
+		grid.add_child(description)
+	return box

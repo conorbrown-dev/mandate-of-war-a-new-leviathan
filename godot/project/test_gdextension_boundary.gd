@@ -1,6 +1,10 @@
 extends SceneTree
 
+var checks := 0
+
+
 func check(condition: bool, message: String, failures: Array[String]) -> void:
+	checks += 1
 	if not condition:
 		failures.append(message)
 
@@ -18,7 +22,7 @@ func _init() -> void:
 			for method in [
 				"start_simulation", "update_simulation", "get_unit_position", "get_unit_transforms", "get_unpresented_entities",
 				"issue_move_commands", "queue_faction_structure", "queue_faction_unit", "get_build_catalog", "get_hud_state", "skirmish_state", "economy_get_tactical_resources",
-				"get_road_segments", "territory_get_installation_info"
+				"get_road_segments", "territory_get_installation_info", "get_airborne_flags", "get_unit_routes"
 			]:
 				check(bridge.has_method(method), "required bridge method missing: %s" % method, failures)
 			# These had no Godot consumer. Their removal prevents presentation code
@@ -55,11 +59,13 @@ func _init() -> void:
 			var unpresented: Array = bridge.call("get_unpresented_entities", PackedInt32Array())
 			check(unpresented.size() == 1 and int(unpresented[0].get("id", -1)) == entity_id, "entity snapshot must expose unpresented native entities", failures)
 			check(bridge.call("get_unpresented_entities", PackedInt32Array([entity_id])).is_empty(), "entity snapshot must omit already-presented entities", failures)
+			var airborne: PackedByteArray = bridge.call("get_airborne_flags", PackedInt32Array([entity_id]))
+			check(airborne.size() == 1 and airborne[0] == 0, "flight snapshot must report a ground unit as not airborne", failures)
 			bridge.call("stop_simulation")
 	if not failures.is_empty():
 		for failure in failures:
 			push_error(failure)
 		quit(1)
 		return
-	print("GDEXTENSION_BOUNDARY checks=61 failures=0")
+	print("GDEXTENSION_BOUNDARY checks=%d failures=0" % checks)
 	quit(0)

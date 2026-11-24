@@ -1,26 +1,23 @@
 class_name StrategicUnitIcon
 extends RefCounted
 
+const UnitCatalog := preload("res://unit_catalog.gd")
+
 ## NATO symbology for strategic icons. Each unit type is represented by a
 ## standardized symbol following APP-115 (NATO symbology standards).
 
 static func mesh_for(unit_type: int) -> Mesh:
-	match unit_type:
-		0: return _square(Vector3(1.4, 0.16, 1.4)) # Elite MBT - Fixed wing unit (rectangle)
-		1: return _diamond(Vector3(1.4, 0.16, 1.4)) # Artillery - Engineering (diamond)
-		2: return _circle(8, Vector3(1.4, 0.16, 1.4)) # Elite anti-air - Air defense (circle)
-		3: return _square(Vector3(1.4, 0.16, 1.4)) # Swarm tank - Mobile gun system (rectangle)
-		4: return _square(Vector3(1.4, 0.16, 1.4)) # Assault vehicle - Infantry fighting vehicle (rectangle)
-		5: return _circle(8, Vector3(1.4, 0.16, 1.4)) # Mass anti-air - Air defense (circle)
-		6: return _square(Vector3(1.4, 0.16, 1.4)) # Industrial MBT - Fixed wing unit (rectangle)
-		7: return _lozenge(Vector3(1.4, 0.16, 1.4)) # Missile platform - Missile (lozenge/rhombus)
-		8: return _diamond(Vector3(1.4, 0.16, 1.4)) # Engineering vehicle - Engineering (diamond)
-		9: return _triangle(3, Vector3(1.4, 0.16, 1.4)) # Elite T1 fighter - Fixed wing aircraft (triangle)
-		10: return _triangle(4, Vector3(1.4, 0.16, 1.4)) # Elite VTOL - Rotocraft (triangle)
-		11: return _ellipse(8, Vector3(1.4, 0.16, 1.4)) # Patrol boat - Naval (ellipse)
-		12: return _hexagon(Vector3(1.4, 0.16, 1.4)) # Command Walker - Command and control (hexagon)
-		13: return _triangle(3, Vector3(1.4, 0.16, 1.4)) # Reserved bomber - Fixed wing aircraft (obtuse triangle)
-		_: return _circle(8, Vector3(1.4, 0.16, 1.4))
+	var size := Vector3(1.4, 0.16, 1.4)
+	match UnitCatalog.strategic_icon(unit_type):
+		"mbt", "swarm", "assault": return _square(size)
+		"artillery", "engineer": return _diamond(size)
+		"air_defense": return _circle(8, size)
+		"missile": return _lozenge(size)
+		"fighter": return _triangle(3, size)
+		"vtol": return _triangle(4, size)
+		"boat": return _ellipse(8, size)
+		"command": return _hexagon(size)
+		_: return _circle(8, size)
 
 
 static func shape_scale_for(unit_type: int) -> Vector3:

@@ -1,16 +1,10 @@
 #include "network/tcp_transport.hpp"
 #include "network/serializer.hpp"
-#include <sys/socket.h>
-#include <netinet/in.h>
-#include <arpa/inet.h>
-#include <unistd.h>
+#include "network/socket_compat.hpp"
 #include <cstring>
 #include <cerrno>
 #include <algorithm>
 #include <chrono>
-#include <netdb.h>
-#include <sys/ioctl.h>
-#include <linux/sockios.h>
 
 namespace rts {
 
@@ -53,14 +47,14 @@ bool TcpTransport::connect(const std::string& host, uint16_t port) {
         disconnect();
     }
     
-    socket_ = ::socket(AF_INET, SOCK_STREAM, 0);
+    socket_ = net::open_socket(AF_INET, SOCK_STREAM);
     if (socket_ < 0) {
         return false;
     }
     
     hostent* server = gethostbyname(host.c_str());
     if (!server) {
-        ::close(socket_);
+        net::close_socket(socket_);
         socket_ = -1;
         return false;
     }
@@ -68,11 +62,11 @@ bool TcpTransport::connect(const std::string& host, uint16_t port) {
     sockaddr_in server_addr{};
     std::memset(&server_addr, 0, sizeof(server_addr));
     server_addr.sin_family = AF_INET;
-    server_addr.sin_addr.s_addr = *reinterpret_cast<in_addr_t*>(server->h_addr_list[0]);
+    server_addr.sin_addr.s_addr = *reinterpret_cast<uint32_t*>(server->h_addr_list[0]);
     server_addr.sin_port = htons(port);
     
     if (::connect(socket_, reinterpret_cast<sockaddr*>(&server_addr), sizeof(server_addr)) < 0) {
-        ::close(socket_);
+        net::close_socket(socket_);
         socket_ = -1;
         return false;
     }
@@ -93,13 +87,12 @@ bool TcpTransport::listen(uint16_t port) {
         disconnect();
     }
     
-    socket_ = ::socket(AF_INET, SOCK_STREAM, 0);
+    socket_ = net::open_socket(AF_INET, SOCK_STREAM);
     if (socket_ < 0) {
         return false;
     }
     
-    int opt = 1;
-    setsockopt(socket_, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt));
+    net::enable_option(socket_, SO_REUSEADDR);
     
     sockaddr_in server_addr{};
     std::memset(&server_addr, 0, sizeof(server_addr));
@@ -108,13 +101,13 @@ bool TcpTransport::listen(uint16_t port) {
     server_addr.sin_port = htons(port);
     
     if (::bind(socket_, reinterpret_cast<sockaddr*>(&server_addr), sizeof(server_addr)) < 0) {
-        ::close(socket_);
+        net::close_socket(socket_);
         socket_ = -1;
         return false;
     }
     
     if (::listen(socket_, 1) < 0) {
-        ::close(socket_);
+        net::close_socket(socket_);
         socket_ = -1;
         return false;
     }
@@ -148,12 +141,12 @@ bool TcpTransport::accept() {
 
 void TcpTransport::disconnect() {
     if (client_socket_ >= 0) {
-        ::close(client_socket_);
+        net::close_socket(client_socket_);
         client_socket_ = -1;
     }
     
     if (socket_ >= 0 && is_server_) {
-        ::close(socket_);
+        net::close_socket(socket_);
         socket_ = -1;
     }
     
@@ -167,7 +160,7 @@ void TcpTransport::disconnect() {
 bool TcpTransport::send_all(const uint8_t* data, size_t size) {
     size_t sent = 0;
     while (sent < size) {
-        ssize_t n = ::send(client_socket_, data + sent, size - sent, MSG_NOSIGNAL);
+        ssize_t n = net::send_bytes(client_socket_, data + sent, size - sent);
         if (n <= 0) {
             return false;
         }
@@ -180,7 +173,7 @@ bool TcpTransport::send_all(const uint8_t* data, size_t size) {
 bool TcpTransport::recv_all(uint8_t* data, size_t size) {
     size_t received = 0;
     while (received < size) {
-        ssize_t n = ::recv(client_socket_, data + received, size - received, 0);
+        ssize_t n = net::recv_bytes(client_socket_, data + received, size - received);
         if (n <= 0) {
             return false;
         }
@@ -345,12 +338,7 @@ size_t TcpTransport::available() const {
         return 0;
     }
     
-    int bytes = 0;
-    if (ioctl(client_socket_, FIONREAD, &bytes) < 0) {
-        return 0;
-    }
-    
-    return static_cast<size_t>(bytes);
+    return net::bytes_available(client_socket_);
 }
 
 size_t TcpTransport::read(uint8_t* buffer, size_t size) {
@@ -358,7 +346,7 @@ size_t TcpTransport::read(uint8_t* buffer, size_t size) {
         return 0;
     }
     
-    ssize_t n = ::recv(client_socket_, buffer, size, MSG_DONTWAIT);
+    ssize_t n = net::recv_available(client_socket_, buffer, size);
     if (n <= 0) {
         return 0;
     }
@@ -372,7 +360,7 @@ size_t TcpTransport::write(const uint8_t* data, size_t size) {
         return 0;
     }
     
-    ssize_t n = ::send(client_socket_, data, size, MSG_NOSIGNAL);
+    ssize_t n = net::send_bytes(client_socket_, data, size);
     if (n <= 0) {
         return 0;
     }

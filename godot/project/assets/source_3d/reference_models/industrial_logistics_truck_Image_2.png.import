@@ -2,13 +2,10 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://d36ie7vdpiwi2"
+uid="uid://chv85cfdwu2eo"
 path="res://.godot/imported/industrial_logistics_truck_Image_2.png-6a16a7acbabf0e549d80cd8a3c6962ab.ctex"
 metadata={
 "vram_texture": false
-}
-generator_parameters={
-"md5": "e1ec4ebe5c6507e5df79136206c464ac"
 }
 
 [deps]
@@ -26,7 +23,7 @@ compress/rdo_quality_loss=0.0
 compress/hdr_compression=1
 compress/normal_map=0
 compress/channel_pack=0
-mipmaps/generate=true
+mipmaps/generate=false
 mipmaps/limit=-1
 roughness/mode=0
 roughness/src_normal=""

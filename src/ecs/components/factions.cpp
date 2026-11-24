@@ -5,18 +5,19 @@
 #include <filesystem>
 #include <cstdlib>
 #include <sstream>
+#include <unordered_set>
 #include <optional>
 #include <unordered_map>
 
 #include "data/json_parser.hpp"
+#include "util/environment.hpp"
 
 namespace rts {
 
 namespace {
 
 std::filesystem::path content_data_path(const char* filename) {
-    if (const char* configured_root = std::getenv("RTS_DATA_ROOT");
-        configured_root != nullptr && configured_root[0] != '\0') {
+    if (const std::string configured_root = read_environment("RTS_DATA_ROOT"); !configured_root.empty()) {
         return std::filesystem::path(configured_root) / filename;
     }
     return std::filesystem::path("data") / filename;
@@ -25,28 +26,13 @@ std::filesystem::path content_data_path(const char* filename) {
 } // namespace
 
 std::string faction_name(FactionId faction) {
-    switch (faction) {
-        case FactionId::ELITE_PRECISION: return "Elite Precision";
-        case FactionId::MASS_WARFARE: return "Mass Warfare";
-        case FactionId::INDUSTRIAL_EXPERIMENTAL: return "Industrial/Experimental";
-        default: return "Unknown";
-    }
+    const auto& factions = get_faction_start_data();
+    const auto found = factions.find(faction);
+    return found == factions.end() ? "Unknown" : found->second.name;
 }
 
 static std::optional<UnitType> parse_unit_type(const std::string& name) {
-    if (name == "ELITE_MAIN_BATTLE_TANK") return UnitType::ELITE_MAIN_BATTLE_TANK;
-    if (name == "ELITE_LONG_RANGE_ARTILLERY") return UnitType::ELITE_LONG_RANGE_ARTILLERY;
-    if (name == "ELITE_ANTI_AIR") return UnitType::ELITE_ANTI_AIR;
-    if (name == "MASS_SWARM_TANK") return UnitType::MASS_SWARM_TANK;
-    if (name == "MASS_ASSAULT_VEHICLE") return UnitType::MASS_ASSAULT_VEHICLE;
-    if (name == "MASS_ANTI_AIR") return UnitType::MASS_ANTI_AIR;
-    if (name == "INDUSTRIAL_MBT") return UnitType::INDUSTRIAL_MBT;
-    if (name == "INDUSTRIAL_MISSILE_PLATFORM") return UnitType::INDUSTRIAL_MISSILE_PLATFORM;
-    if (name == "INDUSTRIAL_ENGINEERING") return UnitType::INDUSTRIAL_ENGINEERING;
-    if (name == "ELITE_PATROL_BOAT") return UnitType::ELITE_PATROL_BOAT;
-    if (name == "ELITE_T1_FIGHTER") return UnitType::ELITE_T1_FIGHTER;
-    if (name == "ELITE_T1_VTOL") return UnitType::ELITE_T1_VTOL;
-    return std::nullopt;
+    return unit_type_from_key(name);
 }
 
 static std::optional<FactionId> parse_faction_id(const std::string& name) {
@@ -87,10 +73,16 @@ static UnitPrototype parse_unit_prototype(const rts::data::JsonValue& obj) {
         throw std::runtime_error("Missing required field in unit prototype");
     }
 
-    auto type = parse_unit_type(type_opt.value().as_string());
+    const auto id_opt = obj.get("id");
+    if (!id_opt || id_opt->type() != rts::data::JsonValue::Type::Number ||
+        id_opt->as_number() < 0.0 || id_opt->as_number() > 255.0 ||
+        id_opt->as_number() != std::floor(id_opt->as_number())) {
+        throw std::runtime_error("Unit prototype needs an integer id from 0 to 255");
+    }
+    const std::optional<UnitType> type = static_cast<UnitType>(static_cast<int>(id_opt->as_number()));
     auto faction = parse_faction_id(faction_opt.value().as_string());
 
-    if (!type || !faction) {
+    if (!faction) {
         throw std::runtime_error("Invalid unit type or faction in prototype");
     }
 
@@ -109,6 +101,30 @@ static UnitPrototype parse_unit_prototype(const rts::data::JsonValue& obj) {
     if (visual_id_opt && visual_id_opt->type() == rts::data::JsonValue::Type::String) {
         prototype.visual_id = visual_id_opt->as_string();
     }
+    prototype.key = type_opt.value().as_string();
+    if (auto nato = obj.get("nato_symbol"); nato && nato->type() == rts::data::JsonValue::Type::String) {
+        prototype.nato_symbol = nato->as_string();
+    }
+    if (auto icon = obj.get("strategic_icon"); icon && icon->type() == rts::data::JsonValue::Type::String) {
+        prototype.strategic_icon = icon->as_string();
+    }
+    if (auto construction = obj.get("construction_unit"); construction && construction->type() == rts::data::JsonValue::Type::Bool) {
+        prototype.construction_unit = construction->as_bool();
+    }
+    const auto weapon = obj.get("weapon");
+    if (!weapon || weapon->type() != rts::data::JsonValue::Type::Object) {
+        throw std::runtime_error("Unit prototype " + prototype.key + " has no weapon");
+    }
+    const auto weapon_number = [&](const char* field) {
+        const auto value = weapon->get(field);
+        if (!value || value->type() != rts::data::JsonValue::Type::Number ||
+            !std::isfinite(value->as_number()) || value->as_number() < 0.0) {
+            throw std::runtime_error("Unit prototype " + prototype.key + " has an invalid weapon " + field);
+        }
+        return static_cast<float>(value->as_number());
+    };
+    prototype.weapon = {weapon_number("damage"), weapon_number("range"), weapon_number("fire_rate"),
+                        weapon_number("projectile_speed"), weapon_number("aoe_radius"), weapon_number("lead_bias")};
 
     if (auto content_id_opt = obj.get("content_id"); content_id_opt && content_id_opt->type() == rts::data::JsonValue::Type::String) {
         prototype.content_id = content_id_opt->as_string();
@@ -154,6 +170,12 @@ static UnitPrototype parse_unit_prototype(const rts::data::JsonValue& obj) {
         prototype.max_airborne_time_seconds = max_airborne_time->as_number();
         prototype.energy_consumption_rate = energy_rate->as_number();
         prototype.material_consumption_rate = material_rate->as_number();
+        if (auto loiter = obj.get("recon_loiter_seconds"); loiter) {
+            if (loiter->type() != rts::data::JsonValue::Type::Number || !std::isfinite(loiter->as_number()) || loiter->as_number() <= 0.0) {
+                throw std::runtime_error("Invalid recon_loiter_seconds in unit prototype");
+            }
+            prototype.recon_loiter_seconds = static_cast<float>(loiter->as_number());
+        }
         if (prototype.payload <= 0.0f || prototype.operational_range <= 0.0f || prototype.operational_energy <= 0.0f ||
             prototype.operational_material <= 0.0f || prototype.max_airborne_time_seconds <= 0.0f ||
             prototype.energy_consumption_rate <= 0.0f || prototype.material_consumption_rate < 0.0f) {
@@ -283,41 +305,21 @@ static std::unordered_map<std::string, ResearchProject> load_research_projects_f
     return projects;
 }
 
-static std::unordered_map<UnitType, UnitPrototype> load_unit_prototypes_from_json() {
-    const std::filesystem::path data_path = content_data_path("unit_faction_stats.json");
-    
-     if (!std::filesystem::exists(data_path)) {
-         std::cerr << "Warning: " << data_path << " not found, using default unit data\n";
-          static std::unordered_map<UnitType, UnitPrototype> prototypes = {
-              {UnitType::ELITE_MAIN_BATTLE_TANK, {"Elite MBT", 500.0f, 250.0f, 100.0f, 15.0f, 500.0f, 3.5f, 120.0f, 6.0f, UnitType::ELITE_MAIN_BATTLE_TANK, FactionId::ELITE_PRECISION, {"advanced_targeting"}, false, false, false, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, ""}},
-              {UnitType::ELITE_LONG_RANGE_ARTILLERY, {"Elite Artillery", 800.0f, 400.0f, 200.0f, 20.0f, 300.0f, 2.0f, 300.0f, 8.0f, UnitType::ELITE_LONG_RANGE_ARTILLERY, FactionId::ELITE_PRECISION, {"advance_ballistics"}, false, false, false, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, ""}},
-              {UnitType::ELITE_ANTI_AIR, {"Elite AA Vehicle", 350.0f, 200.0f, 150.0f, 12.0f, 250.0f, 4.0f, 100.0f, 7.0f, UnitType::ELITE_ANTI_AIR, FactionId::ELITE_PRECISION, {"stealth_tech"}, false, false, false, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, ""}},
-              {UnitType::ELITE_T1_FIGHTER, {"Elite T1 Fighter", 250.0f, 100.0f, 100.0f, 8.0f, 350.0f, 2.0f, 150.0f, 3.0f, UnitType::ELITE_T1_FIGHTER, FactionId::ELITE_PRECISION, {}, false, true, false, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, ""}},
-              {UnitType::ELITE_T1_VTOL, {"Elite T1 VTOL", 300.0f, 120.0f, 80.0f, 10.0f, 400.0f, 2.5f, 120.0f, 3.5f, UnitType::ELITE_T1_VTOL, FactionId::ELITE_PRECISION, {"vtol_flight_systems"}, false, true, false, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, ""}},
-              {UnitType::ELITE_PATROL_BOAT, {"Elite Patrol Boat", 200.0f, 80.0f, 50.0f, 10.0f, 200.0f, 2.5f, 80.0f, 5.0f, UnitType::ELITE_PATROL_BOAT, FactionId::ELITE_PRECISION, {}, false, false, false, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, ""}},
-              {UnitType::MASS_SWARM_TANK, {"Swarm Tank", 150.0f, 80.0f, 0.0f, 5.0f, 100.0f, 5.0f, 60.0f, 4.0f, UnitType::MASS_SWARM_TANK, FactionId::MASS_WARFARE, {"swarm_coordination"}, false, false, false, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, ""}},
-              {UnitType::MASS_ASSAULT_VEHICLE, {"Assault Vehicle", 250.0f, 120.0f, 0.0f, 7.5f, 180.0f, 4.5f, 80.0f, 5.0f, UnitType::MASS_ASSAULT_VEHICLE, FactionId::MASS_WARFARE, {"assault_support"}, false, false, false, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, ""}},
-              {UnitType::MASS_ANTI_AIR, {"Mass AA Vehicle", 180.0f, 100.0f, 0.0f, 6.0f, 150.0f, 5.5f, 80.0f, 5.0f, UnitType::MASS_ANTI_AIR, FactionId::MASS_WARFARE, {"rapid_response"}, false, false, false, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, ""}},
-              {UnitType::INDUSTRIAL_MBT, {"Industrial MBT", 300.0f, 150.0f, 50.0f, 10.0f, 350.0f, 3.0f, 90.0f, 5.0f, UnitType::INDUSTRIAL_MBT, FactionId::INDUSTRIAL_EXPERIMENTAL, {"heavy_machinery"}, false, false, false, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, ""}},
-              {UnitType::INDUSTRIAL_MISSILE_PLATFORM, {"Missile Platform", 500.0f, 300.0f, 150.0f, 15.0f, 250.0f, 2.5f, 200.0f, 6.0f, UnitType::INDUSTRIAL_MISSILE_PLATFORM, FactionId::INDUSTRIAL_EXPERIMENTAL, {"missile_systems"}, false, false, false, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, ""}},
-              {UnitType::INDUSTRIAL_ENGINEERING, {"Engineering Unit", 200.0f, 100.0f, 80.0f, 12.0f, 200.0f, 2.0f, 50.0f, 5.0f, UnitType::INDUSTRIAL_ENGINEERING, FactionId::INDUSTRIAL_EXPERIMENTAL, {"engineering_corps"}, false, false, false, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, ""}}
-          };
-         return prototypes;
-     }
-
+static std::string read_required_content(const char* filename) {
+    const std::filesystem::path data_path = content_data_path(filename);
     std::ifstream file(data_path);
     if (!file.is_open()) {
-        throw std::runtime_error("Failed to open " + data_path.string());
+        throw std::runtime_error("Required game data is missing: " + data_path.string());
     }
-
     std::stringstream buffer;
     buffer << file.rdbuf();
-    auto json_str = buffer.str();
-    file.close();
+    return buffer.str();
+}
 
-    auto parsed = rts::data::JsonParser::parse(json_str);
+std::unordered_map<UnitType, UnitPrototype> parse_unit_catalog(const std::string& json) {
+    auto parsed = rts::data::JsonParser::parse(json);
     if (!parsed) {
-        throw std::runtime_error("Failed to parse JSON from " + data_path.string());
+        throw std::runtime_error("Unit data is not valid JSON");
     }
 
     auto unit_types = parsed.value().get("unit_types");
@@ -326,21 +328,67 @@ static std::unordered_map<UnitType, UnitPrototype> load_unit_prototypes_from_jso
     }
 
     std::unordered_map<UnitType, UnitPrototype> prototypes;
+    std::unordered_set<std::string> keys;
     for (size_t i = 0; i < unit_types.value().array_size(); i++) {
-        auto proto_obj = unit_types.value().as_array()[i];
+        const auto& proto_obj = unit_types.value().as_array()[i];
         if (proto_obj.type() != rts::data::JsonValue::Type::Object) {
             throw std::runtime_error("Invalid unit prototype at index " + std::to_string(i));
         }
         auto proto = parse_unit_prototype(proto_obj);
+        if (prototypes.count(proto.type) > 0 || !keys.insert(proto.key).second) {
+            throw std::runtime_error("Duplicate unit id or key: " + proto.key);
+        }
         prototypes[proto.type] = proto;
     }
 
     return prototypes;
 }
 
+static std::unordered_map<FactionId, FactionStartData> load_faction_start_data() {
+    const auto parsed = rts::data::JsonParser::parse(read_required_content("unit_faction_stats.json"));
+    const auto factions = parsed ? parsed->get("faction_start_data") : std::nullopt;
+    if (!factions || factions->type() != rts::data::JsonValue::Type::Array) {
+        throw std::runtime_error("Missing or invalid faction_start_data array");
+    }
+    std::unordered_map<FactionId, FactionStartData> result;
+    for (const auto& entry : factions->as_array()) {
+        const auto require = [&](const char* field) {
+            const auto value = entry.get(field);
+            if (!value) throw std::runtime_error(std::string("Faction data is missing ") + field);
+            return *value;
+        };
+        const auto id = parse_faction_id(require("faction_id").as_string());
+        if (!id) throw std::runtime_error("Unknown faction id in faction_start_data");
+        FactionStartData start{};
+        start.faction_id = *id;
+        start.name = require("name").as_string();
+        start.start_material = static_cast<float>(require("start_material").as_number());
+        start.start_energy = static_cast<float>(require("start_energy").as_number());
+        const auto start_units = require("start_units");
+        for (const auto& unit : start_units.as_array()) {
+            const auto type = unit_type_from_key(unit.as_string());
+            if (!type) throw std::runtime_error("Unknown start unit: " + unit.as_string());
+            start.start_units.push_back(*type);
+        }
+        start.production_bonus_metal = static_cast<float>(require("production_bonus_metal").as_number());
+        start.production_bonus_energy = static_cast<float>(require("production_bonus_energy").as_number());
+        start.unit_cost_discount = static_cast<float>(require("unit_cost_discount").as_number());
+        result[*id] = start;
+    }
+    return result;
+}
+
 const std::unordered_map<UnitType, UnitPrototype>& get_unit_prototypes() {
-    static std::unordered_map<UnitType, UnitPrototype> prototypes = load_unit_prototypes_from_json();
+    static std::unordered_map<UnitType, UnitPrototype> prototypes =
+        parse_unit_catalog(read_required_content("unit_faction_stats.json"));
     return prototypes;
+}
+
+std::optional<UnitType> unit_type_from_key(const std::string& key) {
+    for (const auto& [type, prototype] : get_unit_prototypes()) {
+        if (prototype.key == key) return type;
+    }
+    return std::nullopt;
 }
 
 const std::unordered_map<std::string, ResearchProject>& get_research_projects() {
@@ -348,48 +396,10 @@ const std::unordered_map<std::string, ResearchProject>& get_research_projects() 
     return projects;
 }
 
+std::string read_game_data(const char* filename) { return read_required_content(filename); }
+
 const std::unordered_map<FactionId, FactionStartData>& get_faction_start_data() {
-    static std::unordered_map<FactionId, FactionStartData> faction_data = {
-        // Faction A: Elite Precision
-        {FactionId::ELITE_PRECISION, {
-            FactionId::ELITE_PRECISION,
-            "Elite Precision",
-            5000.0f,  // start material
-            3000.0f,  // start energy
-            1000.0f,  // start research
-            {UnitType::ELITE_MAIN_BATTLE_TANK, UnitType::ELITE_LONG_RANGE_ARTILLERY, UnitType::ELITE_ANTI_AIR},
-            0.10f,  // 10% metal production bonus
-            0.15f,  // 15% energy production bonus
-            0.10f   // 10% unit cost discount
-        }},
-        
-        // Faction B: Mass Warfare
-        {FactionId::MASS_WARFARE, {
-            FactionId::MASS_WARFARE,
-            "Mass Warfare",
-            3000.0f,  // start material
-            2000.0f,  // start energy
-            500.0f,   // start research
-            {UnitType::MASS_SWARM_TANK, UnitType::MASS_ASSAULT_VEHICLE, UnitType::MASS_ANTI_AIR},
-            0.20f,  // 20% metal production bonus
-            0.10f,  // 10% energy production bonus
-            -0.20f  // -20% unit cost discount (cheaper production)
-        }},
-        
-        // Faction C: Industrial/Experimental
-        {FactionId::INDUSTRIAL_EXPERIMENTAL, {
-            FactionId::INDUSTRIAL_EXPERIMENTAL,
-            "Industrial/Experimental",
-            4000.0f,  // start material
-            2500.0f,  // start energy
-            800.0f,   // start research
-            {UnitType::INDUSTRIAL_MBT, UnitType::INDUSTRIAL_MISSILE_PLATFORM, UnitType::INDUSTRIAL_ENGINEERING},
-            0.15f,  // 15% metal production bonus
-            0.12f,  // 12% energy production bonus
-            0.00f   // 0% unit cost discount
-        }}
-    };
-    
+    static const std::unordered_map<FactionId, FactionStartData> faction_data = load_faction_start_data();
     return faction_data;
 }
 

@@ -117,7 +117,9 @@ TEST(ai_c_api_uses_simulation_owned_manager) {
     simulation_start();
     ai_init();
     ai_set_faction_id(1);
-    require(simulation_create_unit_with_type(0, 0, 3, 1) >= 0, "AI typed unit spawns");
+    // An Assault Vehicle (type 4) survives the adjacent tank's first shot during the
+    // one-second tick check below; a 60 hp Swarm Tank does not.
+    require(simulation_create_unit_with_type(0, 0, 4, 1) >= 0, "AI typed unit spawns");
     require(simulation_create_unit_with_type(1, 0, 0, 0) >= 0, "Nearby enemy spawns");
     require(simulation_create_unit_with_type(300, 0, 0, 0) >= 0, "Hidden enemy spawns");
     ai_update(1000);
@@ -195,21 +197,18 @@ TEST(ai_equal_worlds_generate_identical_commands_and_plans) {
             "Equal worlds must generate identical tactical and operational plans");
 }
 
-TEST(ai_strategic_research_and_production_use_authoritative_commands) {
+TEST(ai_strategic_production_uses_authoritative_commands) {
     Simulation sim;
     sim.start();
     const auto base = sim.create_faction_base(FactionId::MASS_WARFARE, 0, 0);
     sim.ai_manager().set_faction_id(FactionId::MASS_WARFARE);
     sim.ai_manager().update(1000.0f);
-    bool research = false, production = false;
+    bool production = false;
     for (const auto& command : sim.command_manager().get_local_commands()) {
-        research |= command.entity_id == base && command.cmd_type == static_cast<uint8_t>(CommandType::RESEARCH);
         production |= command.entity_id == base && command.cmd_type == static_cast<uint8_t>(CommandType::BUILD);
     }
-    require(research && production, "Strategic AI must issue deterministic research and production through authoritative commands");
+    require(production, "Strategic AI must issue deterministic production through authoritative commands");
     sim.update(50.0f);
-    require(!sim.production_manager().research(FactionId::MASS_WARFARE).active_queue.empty(),
-            "Strategic research command must enter the authoritative production queue");
     require(!sim.production_manager().production_lines().at(base).queue.empty(),
             "Strategic build command must enter the authoritative production queue");
 }

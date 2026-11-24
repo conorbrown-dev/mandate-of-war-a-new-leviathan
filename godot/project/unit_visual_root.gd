@@ -37,11 +37,113 @@ func configure(registry, visual_id: String, faction_color := Color.WHITE) -> boo
 	if model is PackedScene:
 		var instance := (model as PackedScene).instantiate()
 		_model_root.add_child(instance)
+		if _definition.has("isolate"):
+			_isolate_vehicle(instance as Node3D, _definition.isolate, visual_id)
+		_make_materials_opaque(instance, _definition.get("opaque_materials", []))
 	else:
 		_add_fallback_mesh(faction_color)
 	_apply_definition_transform()
 	_configure_hardpoints()
 	return not bool(_definition.get("fallback", false)) and model != null
+
+
+# Some donor files are packs that lay out many vehicles side by side, with
+# several vehicles' parts merged into one mesh. "isolate" keeps only the
+# surfaces centred inside a rectangle of the model's own ground plane:
+#   {"center": [x, z], "half_extent": [x, z], "length_m": metres}
+# and then centres that one vehicle and scales it to its real length. The cut
+# meshes are cached per visual so every unit of the type shares them.
+static var _isolated_meshes := {}
+
+
+func _isolate_vehicle(instance: Node3D, spec: Dictionary, visual_id: String) -> void:
+	var center := Vector2(float(spec.center[0]), float(spec.center[1]))
+	var half := Vector2(float(spec.half_extent[0]), float(spec.half_extent[1]))
+	var area := Rect2(center - half, half * 2.0)
+	var kept_bounds = null
+	for node in instance.find_children("*", "MeshInstance3D", true, false):
+		var mesh_instance := node as MeshInstance3D
+		if mesh_instance.mesh == null:
+			continue
+		var to_instance := _transform_between(mesh_instance, instance)
+		var key := "%s|%s" % [visual_id, instance.get_path_to(mesh_instance)]
+		if not _isolated_meshes.has(key):
+			_isolated_meshes[key] = _cut_mesh(mesh_instance.mesh, to_instance, area)
+		var cut: Array = _isolated_meshes[key]
+		mesh_instance.mesh = cut[0]
+		if cut[1] != null:
+			var bounds: AABB = cut[1]
+			kept_bounds = bounds if kept_bounds == null else (kept_bounds as AABB).merge(bounds)
+	if kept_bounds == null:
+		push_warning("%s: isolate rectangle %s contains no geometry" % [visual_id, area])
+		return
+	var box: AABB = kept_bounds
+	var length := maxf(box.size.x, box.size.z)
+	var scale := float(spec.get("length_m", length)) / maxf(length, 0.0001)
+	var middle := box.get_center()
+	instance.transform = Transform3D(Basis.from_scale(Vector3.ONE * scale), Vector3(-middle.x, 0.0, -middle.z) * scale) * instance.transform
+
+
+# The transform from a descendant's space into an ancestor's.
+func _transform_between(node: Node3D, ancestor: Node3D) -> Transform3D:
+	var transform := Transform3D.IDENTITY
+	var current: Node = node
+	while current != null and current != ancestor:
+		if current is Node3D:
+			transform = (current as Node3D).transform * transform
+		current = current.get_parent()
+	return transform
+
+
+# [mesh holding only the surfaces centred inside area, or null, and the kept
+# surfaces' bounds in instance space, or null].
+func _cut_mesh(mesh: Mesh, to_instance: Transform3D, area: Rect2) -> Array:
+	var kept := ArrayMesh.new()
+	var bounds = null
+	var all_kept := true
+	for surface in range(mesh.get_surface_count()):
+		var arrays := mesh.surface_get_arrays(surface)
+		var vertices: PackedVector3Array = arrays[Mesh.ARRAY_VERTEX]
+		if vertices.is_empty():
+			continue
+		var box := AABB(to_instance * vertices[0], Vector3.ZERO)
+		for vertex in vertices:
+			box = box.expand(to_instance * vertex)
+		var middle := box.get_center()
+		if not area.has_point(Vector2(middle.x, middle.z)):
+			all_kept = false
+			continue
+		bounds = box if bounds == null else (bounds as AABB).merge(box)
+		kept.add_surface_from_arrays(mesh.surface_get_primitive_type(surface), arrays)
+		kept.surface_set_material(kept.get_surface_count() - 1, mesh.surface_get_material(surface))
+	if all_kept:
+		return [mesh, bounds]
+	return [kept if kept.get_surface_count() > 0 else null, bounds]
+
+
+# Some donor models mark solid surfaces as alpha-blended, which draws an
+# airframe see-through. The definition names those materials; they are drawn
+# opaque. Shared per material so every unit of the type reuses one copy.
+static var _opaque_copies := {}
+
+
+func _make_materials_opaque(node: Node, names: Array) -> void:
+	if names.is_empty():
+		return
+	if node is MeshInstance3D:
+		var mesh_instance := node as MeshInstance3D
+		for surface in range(mesh_instance.mesh.get_surface_count() if mesh_instance.mesh != null else 0):
+			var material := mesh_instance.mesh.surface_get_material(surface) as BaseMaterial3D
+			if material == null or not names.has(material.resource_name):
+				continue
+			if not _opaque_copies.has(material):
+				var opaque := material.duplicate() as BaseMaterial3D
+				opaque.transparency = BaseMaterial3D.TRANSPARENCY_DISABLED
+				opaque.albedo_color.a = 1.0
+				_opaque_copies[material] = opaque
+			mesh_instance.set_surface_override_material(surface, _opaque_copies[material])
+	for child in node.get_children():
+		_make_materials_opaque(child, names)
 
 
 func apply_simulation_transform(world_transform: Transform3D) -> void:

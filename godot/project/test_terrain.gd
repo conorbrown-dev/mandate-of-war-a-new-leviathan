@@ -2,23 +2,7 @@ extends Node3D
 
 func _ready():
 	push_warning("Starting test...")
-	var file := FileAccess.open("res://scenarios/terrain.bin", FileAccess.READ)
-	if file == null:
-		push_warning("Failed to open file")
-		return
-	else:
-		push_warning("File opened successfully")
-	
-	file.seek_end(0)
-	var size := file.get_position()
-	push_warning("File size: %d" % [size])
-	
-	file.seek(0)
-	
-	var float_data := PackedFloat32Array()
-	float_data.resize(320 * 320)
-	for i in range(320 * 320):
-		float_data[i] = file.get_float()
+	var float_data := HeightMap.load_from_file("res://scenarios/terrain.json")
 	
 	push_warning("Float data loaded: %d elements" % [float_data.size()])
 	

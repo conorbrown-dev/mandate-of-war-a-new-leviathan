@@ -3,13 +3,16 @@ project(rts_simulation VERSION 0.1.0 LANGUAGES CXX)
 
 include(FetchContent)
 
-find_package(OpenSSL REQUIRED)
-
 # A clean checkout must not depend on an ignored, prebuilt vendor tree.  The
 # commit is intentionally exact so the generated GDExtension bindings remain
 # reproducible.  Godot 4.7.2 is the validated engine API for this project.
 set(GODOTCPP_API_VERSION "4.7" CACHE STRING "Godot API targeted by godot-cpp" FORCE)
 set(GODOTCPP_TARGET "template_debug" CACHE STRING "godot-cpp template target" FORCE)
+# The simulation reports bad content by throwing, so exceptions must stay on
+# when MSVC compiles the Windows bridge against the same standard library.
+if(MSVC)
+    set(GODOTCPP_DISABLE_EXCEPTIONS OFF CACHE BOOL "Keep C++ exceptions enabled" FORCE)
+endif()
 FetchContent_Declare(
     godot-cpp
     GIT_REPOSITORY https://github.com/godotengine/godot-cpp.git
@@ -30,6 +33,11 @@ set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
+if(MSVC)
+    add_compile_definitions(NOMINMAX _USE_MATH_DEFINES _CRT_SECURE_NO_WARNINGS)
+    add_compile_options(/utf-8 /bigobj)
+endif()
+
 # === Source files ===
 
 set(SIMULATION_SOURCES
@@ -37,6 +45,7 @@ set(SIMULATION_SOURCES
     src/ecs/component_manager.cpp
     src/spatial/spatial_grid.cpp
     src/pathfinding/pathfinding.cpp
+    src/util/environment.cpp
     src/simulation/simulation.cpp
     src/simulation/skirmish.cpp
     src/simulation/terrain.cpp
@@ -69,6 +78,8 @@ set(SIMULATION_SOURCES
      src/map/map_loader.cpp
       src/stats/stats_manager.cpp
       src/ai/ai_manager.cpp
+      src/ai/ai_doctrine.cpp
+      src/simulation/match_record.cpp
 )
 
 # === Include directories ===
@@ -77,9 +88,16 @@ include_directories(${CMAKE_SOURCE_DIR}/src)
 
 # === Simulation library ===
 
-add_library(rts_simulation SHARED ${SIMULATION_SOURCES})
+# Windows links the simulation into the extension DLL: nothing here marks
+# symbols for export, and one DLL has no dependency to resolve at load time.
+if(WIN32)
+    add_library(rts_simulation STATIC ${SIMULATION_SOURCES})
+    target_link_libraries(rts_simulation PUBLIC ws2_32)
+else()
+    add_library(rts_simulation SHARED ${SIMULATION_SOURCES})
+endif()
 target_include_directories(rts_simulation PUBLIC ${CMAKE_SOURCE_DIR}/src)
-target_link_libraries(rts_simulation PUBLIC OpenSSL::SSL OpenSSL::Crypto glm::glm)
+target_link_libraries(rts_simulation PUBLIC glm::glm)
 
 # === GDExtension library ===
 
@@ -101,9 +119,10 @@ set_target_properties(rts_gdextension PROPERTIES
 add_custom_command(TARGET rts_gdextension POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E make_directory
         ${CMAKE_SOURCE_DIR}/godot/project/bin
-    COMMAND ${CMAKE_COMMAND} -E copy_if_different
-        $<TARGET_FILE:rts_simulation>
-        ${CMAKE_SOURCE_DIR}/godot/project/bin/$<TARGET_FILE_NAME:rts_simulation>
+    COMMAND $<$<NOT:$<PLATFORM_ID:Windows>>:${CMAKE_COMMAND}> $<$<NOT:$<PLATFORM_ID:Windows>>:-E> $<$<NOT:$<PLATFORM_ID:Windows>>:copy_if_different>
+        $<$<NOT:$<PLATFORM_ID:Windows>>:$<TARGET_FILE:rts_simulation>>
+        $<$<NOT:$<PLATFORM_ID:Windows>>:${CMAKE_SOURCE_DIR}/godot/project/bin/$<TARGET_FILE_NAME:rts_simulation>>
+    COMMAND_EXPAND_LISTS
     COMMAND ${CMAKE_COMMAND} -E copy_if_different
         $<TARGET_FILE:rts_gdextension>
         ${CMAKE_SOURCE_DIR}/godot/project/bin/$<TARGET_FILE_NAME:rts_gdextension>
@@ -112,13 +131,25 @@ add_custom_command(TARGET rts_gdextension POST_BUILD
 
 # === Benchmark ===
 
-add_executable(rts_benchmark benchmark/benchmark.cpp)
-target_link_libraries(rts_benchmark rts_simulation)
-target_include_directories(rts_benchmark PUBLIC ${CMAKE_SOURCE_DIR}/src)
+# The integration diagnostic reads Linux process memory and loads the library
+# by path, so it is Linux-only.
+if(NOT WIN32)
+    add_executable(rts_benchmark benchmark/benchmark.cpp)
+    target_link_libraries(rts_benchmark rts_simulation)
+    target_include_directories(rts_benchmark PUBLIC ${CMAKE_SOURCE_DIR}/src)
+endif()
 
+# The accepted movement/formation harness (tools/validate.py simulation_scale_1000).
 add_executable(rts_scale_benchmark benchmark/scale_benchmark.cpp)
 target_link_libraries(rts_scale_benchmark rts_simulation)
 target_include_directories(rts_scale_benchmark PUBLIC ${CMAKE_SOURCE_DIR}/src)
+if(WIN32)
+    target_link_libraries(rts_scale_benchmark psapi)
+endif()
+
+add_executable(rts_balance_benchmark benchmark/balance_benchmark.cpp)
+target_link_libraries(rts_balance_benchmark rts_simulation)
+target_include_directories(rts_balance_benchmark PUBLIC ${CMAKE_SOURCE_DIR}/src)
 
 add_executable(rts_combat_benchmark benchmark/combat_benchmark.cpp)
 target_link_libraries(rts_combat_benchmark rts_simulation)
@@ -133,6 +164,7 @@ install(TARGETS rts_simulation
 
 install(TARGETS rts_gdextension
     LIBRARY DESTINATION lib
+    RUNTIME DESTINATION lib
     ARCHIVE DESTINATION lib
 )
 
@@ -176,14 +208,23 @@ add_executable(rts_integration_tests
     tests/test_replay.cpp
     tests/test_economy.cpp
     tests/test_terrain.cpp
+    tests/test_fuel_supply.cpp
+    tests/test_match_flow.cpp
+    tests/test_ai_doctrine.cpp
     tests/test_territorial_control.cpp
     tests/test_stats.cpp
+    tests/test_unit_cap.cpp
+    tests/test_unit_data.cpp
     tests/test_framework.hpp
 )
 target_link_libraries(rts_integration_tests rts_simulation)
 target_include_directories(rts_integration_tests PUBLIC ${CMAKE_SOURCE_DIR}/src)
 add_test(NAME rts_integration_tests COMMAND rts_integration_tests)
 set_tests_properties(rts_integration_tests PROPERTIES WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+
+# Equal-budget faction matchups. Failing means a unit data change broke balance.
+add_test(NAME faction_balance COMMAND rts_balance_benchmark)
+set_tests_properties(faction_balance PROPERTIES WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
 
 # Logistics benchmark
 add_executable(rts_logistics_benchmark benchmark/logistics_benchmark.cpp)

@@ -15,7 +15,7 @@ snapshot. It contains Materials, Fuel, and Power only.
 
 ## Temporary compatibility
 
-- `Storage` retains legacy `metal_*`, `energy_*`, and `research_*` fields so
+- `Storage` retains legacy `metal_*` and `energy_*` fields so
   existing production queues, content, tests, and HUD can remain runnable.
   `ProductionManager::add_storage` initializes canonical Materials from metal
   and Fuel capacity from the legacy energy capacity. New code must use
@@ -23,11 +23,10 @@ snapshot. It contains Materials, Fuel, and Power only.
 - The per-entity `Energy` and `Research` components have been removed. The
   old off-road Energy drain is intentionally inactive until its intended Fuel
   behavior is designed in a later phase.
-- Content `research_cost` remains parseable migration debt but is ignored by
-  unit and structure construction. Research queues, command handling, AI
-  behavior, and project presentation remain migration debt. They do not
-  participate in the Phase-1 deterministic tactical resource checksum or
-  resource snapshot.
+- Research is removed from the match. There is no research balance, queue,
+  command, AI behavior, resource node or project presentation. Command id 8 is
+  retired and refused. `research_projects.json` and unit
+  `research_prerequisites` remain as content for strategic authorization.
 
 ## Phase 2 production migration
 
@@ -57,9 +56,8 @@ Migrated Godot consumers: `main.gd`, `command_hud.gd`, `native_skirmish.gd`,
 `economy_add_storage` are no longer bound to Godot; the old native C helpers
 remain only for the legacy benchmark/native compatibility surface and will be
 removed with that native API migration. They are not a tactical presentation
-path. Build catalog `energy` fields, queued legacy cost display, and research
-project interfaces remain later content-cost/research-workflow debt and are not
-displayed as tactical resource balances.
+path. Build catalog `energy` fields and queued legacy cost display remain later
+content-cost debt and are not displayed as tactical resource balances.
 
 Naval recovery still spends its legacy logistics budget. Its direct Materials
 deduction now mirrors into `Storage::tactical.materials` so canonical snapshots
@@ -69,8 +67,8 @@ remain accurate; the later fuel-logistics phase removes this narrow bridge.
 
 1. Migrate logistics, AI, content costs, and native economy C APIs, then delete
    the remaining legacy storage fields.
-2. Remove tactical research commands, queues, and `research_cost`; add the
-   strategic authorization handoff.
+2. Add the strategic authorization handoff, which decides before a match which
+   units a player may bring into it.
 3. Remove the remaining native legacy storage C helpers and migrate content
    cost terminology after the active tactical presentation boundary is stable.
 4. Add fuel consumption/transfer and power-priority behavior only after the

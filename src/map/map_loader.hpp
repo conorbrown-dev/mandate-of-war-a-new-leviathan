@@ -103,7 +103,7 @@ private:
     std::vector<MapLoadError> errors_;
     
     bool load_yaml_header(const fs::path& map_path, MapData& map_data);
-    bool load_terrain_binary(const fs::path& bin_path, MapData& map_data);
+    bool load_terrain_file(const fs::path& path, MapData& map_data);
     bool load_resources_yaml(const fs::path& yaml_path, MapData& map_data);
     bool load_spawnpoints_yaml(const fs::path& yaml_path, MapData& map_data);
     bool load_entities_yaml(const fs::path& yaml_path, MapData& map_data);

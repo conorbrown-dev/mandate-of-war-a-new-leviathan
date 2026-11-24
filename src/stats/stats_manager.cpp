@@ -28,7 +28,6 @@ void StatsManager::record_match(const MatchStats& stats) {
     ofs << "units_destroyed=" << stats.units_destroyed << "\n";
     ofs << "material_collected=" << stats.material_collected << "\n";
     ofs << "energy_collected=" << stats.energy_collected << "\n";
-    ofs << "research_generated=" << stats.research_generated << "\n";
     ofs << "peak_army_size=" << stats.peak_army_size << "\n";
     ofs.close();
 }
@@ -151,7 +150,6 @@ void StatsManager::load_all_matches(std::vector<MatchStats>& matches) const {
                     else if (key == "units_destroyed") m.units_destroyed = std::stoull(value);
                     else if (key == "material_collected") m.material_collected = std::stoull(value);
                     else if (key == "energy_collected") m.energy_collected = std::stoull(value);
-                    else if (key == "research_generated") m.research_generated = std::stoull(value);
                     else if (key == "peak_army_size") m.peak_army_size = std::stoul(value);
                 }
             }

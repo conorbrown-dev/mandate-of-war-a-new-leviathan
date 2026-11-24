@@ -12,10 +12,11 @@
 namespace rts {
 
 // Version 2 assigns signed centiunit semantics to InputCommand target coordinates.
-constexpr uint32_t NETWORK_PROTOCOL_VERSION = 3;
+constexpr uint32_t NETWORK_PROTOCOL_VERSION = 4;
 constexpr uint32_t MAX_COMMANDS_PER_TICK = 256;
 constexpr uint32_t SNAPSHOT_HISTORY_SIZE = 32;
-constexpr uint32_t MAX_SNAPSHOT_ENTITIES = 1024;
+// Holds every faction at its unit cap, with room for other snapshot entities.
+constexpr uint32_t MAX_SNAPSHOT_ENTITIES = 8192;
 
 enum class MessageType : uint8_t {
     COMMAND = 0,
@@ -56,11 +57,12 @@ enum class CommandType : uint8_t {
     RETURN = 5,
     DEFEND = 6,
     PATROL = 7,
-    RESEARCH = 8,
+    // 8 was RESEARCH. Research happens outside the match; never reuse this id.
     INSTALL = 9,
     REQUISITION = 10
 };
 
+constexpr uint8_t RETIRED_RESEARCH_COMMAND = 8;
 constexpr size_t INPUT_COMMAND_WIRE_SIZE = 20;
 constexpr float INPUT_COMMAND_POSITION_SCALE = 100.0f;
 
@@ -128,7 +130,7 @@ static_assert(sizeof(PositionDelta) == 4, "PositionDelta should be 4 bytes");
 static_assert(sizeof(VelocityDelta) == 4, "VelocityDelta should be 4 bytes");
 static_assert(sizeof(HealthDelta) == 1, "HealthDelta should be 1 byte");
 static_assert(sizeof(DeltaEntitySnapshot) <= 24, "DeltaEntitySnapshot should fit in 24 bytes");
-static_assert(sizeof(DeltaSnapshot) <= 24584, "DeltaSnapshot should fit in reasonable buffer");
+static_assert(sizeof(DeltaSnapshot) == 16 + MAX_SNAPSHOT_ENTITIES * sizeof(DeltaEntitySnapshot), "DeltaSnapshot should have no padding");
 
 struct ConnectionHandshake {
     uint32_t protocol_version;
@@ -201,7 +203,7 @@ struct Snapshot {
 };
 
 static_assert(sizeof(SnapshotHeader) == 8, "SnapshotHeader should be 8 bytes");
-static_assert(sizeof(Snapshot) <= 45064, "Snapshot should fit in reasonable buffer");
+static_assert(sizeof(Snapshot) == 8 + MAX_SNAPSHOT_ENTITIES * sizeof(EntitySnapshot), "Snapshot should have no padding");
 
 struct alignas(4) NetworkHeader {
     uint32_t protocol_version;

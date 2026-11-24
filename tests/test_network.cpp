@@ -9,6 +9,7 @@
 #include <cmath>
 #include <cstring>
 #include <limits>
+#include <memory>
 #include <thread>
 #include <filesystem>
 
@@ -231,7 +232,8 @@ TEST(snapshot_deserialization_rejects_oversized_counts) {
     SnapshotHeader header{1, MAX_SNAPSHOT_ENTITIES + 1};
     uint8_t buffer[sizeof(SnapshotHeader)];
     std::memcpy(buffer, &header, sizeof(header));
-    Snapshot snapshot{};
+    const auto snapshot_storage = std::make_unique<Snapshot>();
+    Snapshot& snapshot = *snapshot_storage;
 
     if (deserialize_snapshot(buffer, sizeof(buffer), snapshot) != 0) {
         throw std::runtime_error("Oversized snapshot entity counts must be rejected");
@@ -346,17 +348,20 @@ TEST(snapshot_buffer_clear_and_reuse) {
     using namespace rts;
 
     SnapshotBuffer buffer(2);
-    Snapshot first{};
+    const auto first_storage = std::make_unique<Snapshot>();
+    Snapshot& first = *first_storage;
     first.tick = 1;
     buffer.store(first);
     buffer.clear();
 
-    Snapshot out{};
+    const auto out_storage = std::make_unique<Snapshot>();
+    Snapshot& out = *out_storage;
     if (buffer.get(1, out) || buffer.size() != 0) {
         throw std::runtime_error("Clearing snapshot history must discard stored snapshots");
     }
 
-    Snapshot second{};
+    const auto second_storage = std::make_unique<Snapshot>();
+    Snapshot& second = *second_storage;
     second.tick = 2;
     buffer.store(second);
     if (!buffer.get(2, out) || buffer.size() != 1) {

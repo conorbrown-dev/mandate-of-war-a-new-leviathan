@@ -48,17 +48,13 @@ func sync(snapshot: Dictionary, terrain_height: Callable) -> void:
 		var approach_start := Vector2(delivery_x, delivery_z) + approach_axis * RUNWAY_APPROACH_DISTANCE_M
 		var current := approach_start.lerp(Vector2(delivery_x, delivery_z), progress)
 		transport.position = Vector3(current.x, terrain_height.call(delivery_x, delivery_z) + lerpf(20.0, 0.15, progress), current.y)
-		# Source +X is the F-15C longitudinal axis. Align it with the selected
-		# diagonal runway and its inbound travel direction.
+		# Source +X is the F-15C longitudinal axis. Align it with the runway,
+		# which runs north to south, and its inbound travel direction.
 		var travel := -approach_axis
 		transport.rotation.y = atan2(-travel.y, travel.x)
 
 
+# The airfield's runway lies along the map's north-south axis; the F-15C comes
+# in from the side the airfield faces away from the map centre.
 func _runway_approach_axis(airfield: Vector2) -> Vector2:
-	var outward := airfield.normalized()
-	if outward.length_squared() <= 0.0001:
-		outward = Vector2(-1.0, 0.0)
-	var diagonal_a := Vector2(1.0, 1.0).normalized()
-	var diagonal_b := Vector2(1.0, -1.0).normalized()
-	var axis := diagonal_a if absf(outward.dot(diagonal_a)) >= absf(outward.dot(diagonal_b)) else diagonal_b
-	return axis if outward.dot(axis) >= 0.0 else -axis
+	return Vector2(0.0, 1.0) if airfield.y >= 0.0 else Vector2(0.0, -1.0)

@@ -1,12 +1,8 @@
 #include "network/discovery.hpp"
 #include <cstring>
 #include <chrono>
-#include <sys/socket.h>
-#include <netinet/in.h>
-#include <arpa/inet.h>
-#include <unistd.h>
-#include <fcntl.h>
-#include <openssl/sha.h>
+#include "network/socket_compat.hpp"
+#include "util/sha256.hpp"
 
 namespace rts {
 
@@ -28,17 +24,15 @@ bool DiscoveryServer::init() {
         return true;
     }
 
-    socket_fd_ = socket(AF_INET, SOCK_DGRAM, 0);
+    socket_fd_ = net::open_socket(AF_INET, SOCK_DGRAM);
     if (socket_fd_ < 0) {
         return false;
     }
 
-    int flags = fcntl(socket_fd_, F_GETFL, 0);
-    fcntl(socket_fd_, F_SETFL, flags | O_NONBLOCK);
+    net::set_nonblocking(socket_fd_);
 
-    int broadcast = 1;
-    if (setsockopt(socket_fd_, SOL_SOCKET, SO_BROADCAST, &broadcast, sizeof(broadcast)) < 0) {
-        close(socket_fd_);
+    if (!net::enable_option(socket_fd_, SO_BROADCAST)) {
+        net::close_socket(socket_fd_);
         return false;
     }
 
@@ -48,7 +42,7 @@ bool DiscoveryServer::init() {
     addr.sin_addr.s_addr = INADDR_ANY;
 
     if (bind(socket_fd_, reinterpret_cast<sockaddr*>(&addr), sizeof(addr)) < 0) {
-        close(socket_fd_);
+        net::close_socket(socket_fd_);
         return false;
     }
 
@@ -58,7 +52,7 @@ bool DiscoveryServer::init() {
 
 void DiscoveryServer::shutdown() {
     if (socket_fd_ >= 0) {
-        close(socket_fd_);
+        net::close_socket(socket_fd_);
         socket_fd_ = -1;
     }
     initialized_ = false;
@@ -101,8 +95,7 @@ void DiscoveryServer::update(int elapsed_ms) {
         size_t packet_size = serialize_discovery_packet(packet, buffer, sizeof(buffer));
         
         if (packet_size > 0) {
-            sendto(socket_fd_, buffer, packet_size, 0,
-                   reinterpret_cast<sockaddr*>(&broadcast_addr), sizeof(broadcast_addr));
+            net::send_datagram(socket_fd_, buffer, packet_size, broadcast_addr);
         }
 
         accumulator_ms_ = 0;
@@ -151,8 +144,7 @@ bool DiscoveryServer::handle_packet(const uint8_t* data, size_t size) {
     size_t packet_size = serialize_join_response(response, buffer, sizeof(buffer));
     
     if (packet_size > 0) {
-        sendto(socket_fd_, buffer, packet_size, 0,
-               reinterpret_cast<sockaddr*>(&client_addr), sizeof(client_addr));
+        net::send_datagram(socket_fd_, buffer, packet_size, client_addr);
     }
 
     return true;
@@ -177,17 +169,15 @@ bool DiscoveryClient::init() {
         return true;
     }
 
-    socket_fd_ = socket(AF_INET, SOCK_DGRAM, 0);
+    socket_fd_ = net::open_socket(AF_INET, SOCK_DGRAM);
     if (socket_fd_ < 0) {
         return false;
     }
 
-    int flags = fcntl(socket_fd_, F_GETFL, 0);
-    fcntl(socket_fd_, F_SETFL, flags | O_NONBLOCK);
+    net::set_nonblocking(socket_fd_);
 
-    int broadcast = 1;
-    if (setsockopt(socket_fd_, SOL_SOCKET, SO_BROADCAST, &broadcast, sizeof(broadcast)) < 0) {
-        close(socket_fd_);
+    if (!net::enable_option(socket_fd_, SO_BROADCAST)) {
+        net::close_socket(socket_fd_);
         return false;
     }
 
@@ -197,7 +187,7 @@ bool DiscoveryClient::init() {
     addr.sin_addr.s_addr = INADDR_ANY;
 
     if (bind(socket_fd_, reinterpret_cast<sockaddr*>(&addr), sizeof(addr)) < 0) {
-        close(socket_fd_);
+        net::close_socket(socket_fd_);
         return false;
     }
 
@@ -207,7 +197,7 @@ bool DiscoveryClient::init() {
 
 void DiscoveryClient::shutdown() {
     if (socket_fd_ >= 0) {
-        close(socket_fd_);
+        net::close_socket(socket_fd_);
         socket_fd_ = -1;
     }
     initialized_ = false;
@@ -240,8 +230,7 @@ void DiscoveryClient::broadcast_request() {
     size_t packet_size = serialize_join_request(request, buffer, sizeof(buffer));
     
     if (packet_size > 0) {
-        sendto(socket_fd_, buffer, packet_size, 0,
-               reinterpret_cast<sockaddr*>(&broadcast_addr), sizeof(broadcast_addr));
+        net::send_datagram(socket_fd_, buffer, packet_size, broadcast_addr);
     }
 }
 

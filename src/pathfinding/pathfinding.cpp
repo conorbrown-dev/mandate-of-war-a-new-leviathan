@@ -367,22 +367,25 @@ std::pair<float, float> Pathfinding::flow_direction(float x, float y, float dx, 
         return {0.0f, 0.0f};
     }
 
-    // A structure can finish in the same coarse strategic cell as the
-    // engineer that built it. Allow that unit to leave the newly blocked
-    // cell, while keeping the structure cell unavailable to normal routes.
+    // A structure can finish on top of the engineer that built it. Let that unit
+    // walk straight out by the shortest way, however deep inside it stands,
+    // while keeping the structure unavailable to normal routes.
     if (!is_walkable(x_grid, y_grid)) {
-        for (int direction = 0; direction < 4; ++direction) {
-            const int neighbor_x = x_grid + NEIGHBOR_X[direction];
-            const int neighbor_y = y_grid + NEIGHBOR_Y[direction];
-            if (!is_walkable(neighbor_x, neighbor_y)) {
-                continue;
-            }
-            const CachedDirection neighbor_direction = (*cached)[index(neighbor_x, neighbor_y)];
-            if (neighbor_direction.x != 0 || neighbor_direction.y != 0) {
-                return {
-                    static_cast<float>(NEIGHBOR_X[direction]),
-                    static_cast<float>(NEIGHBOR_Y[direction])
-                };
+        constexpr int MAX_ESCAPE_CELLS = 16;
+        for (int distance = 1; distance <= MAX_ESCAPE_CELLS; ++distance) {
+            for (int direction = 0; direction < 4; ++direction) {
+                const int neighbor_x = x_grid + NEIGHBOR_X[direction] * distance;
+                const int neighbor_y = y_grid + NEIGHBOR_Y[direction] * distance;
+                if (!is_walkable(neighbor_x, neighbor_y)) {
+                    continue;
+                }
+                const CachedDirection neighbor_direction = (*cached)[index(neighbor_x, neighbor_y)];
+                if (neighbor_direction.x != 0 || neighbor_direction.y != 0) {
+                    return {
+                        static_cast<float>(NEIGHBOR_X[direction]),
+                        static_cast<float>(NEIGHBOR_Y[direction])
+                    };
+                }
             }
         }
         return {0.0f, 0.0f};

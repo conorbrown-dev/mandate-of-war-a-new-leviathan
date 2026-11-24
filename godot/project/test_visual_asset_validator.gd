@@ -20,7 +20,7 @@ func _init() -> void:
 	assert(report.entries.all(func(entry): return not ("triangle_budget_exceeded" in entry.issues)))
 	assert(report.entries.all(func(entry): return not ("extreme_bounds_prototype" in entry.issues)))
 	assert(ValidatorScript.new().to_markdown(report).contains("Visual Asset Validation"))
-	assert(ValidatorScript.new().write_reports(report, "/tmp/visual_asset_validation.json", "/tmp/visual_asset_validation.md"))
+	assert(ValidatorScript.new().write_reports(report, OS.get_temp_dir().path_join("visual_asset_validation.json"), OS.get_temp_dir().path_join("visual_asset_validation.md")))
 	var shipping_report = ValidatorScript.new().validate("res://visuals/test_shipping_visual_definitions.json")
 	assert(not bool(shipping_report.valid))
 	assert(shipping_report.errors.size() == 1)

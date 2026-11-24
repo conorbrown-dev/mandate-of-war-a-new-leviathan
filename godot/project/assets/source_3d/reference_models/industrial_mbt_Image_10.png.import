@@ -2,13 +2,10 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://dxg5gwnfxwb67"
+uid="uid://bxtstj0b2xc82"
 path="res://.godot/imported/industrial_mbt_Image_10.png-820103425f5131b69ee7978913aae152.ctex"
 metadata={
 "vram_texture": false
-}
-generator_parameters={
-"md5": "354fd4b7ef00fb67ff73134073b8c810"
 }
 
 [deps]
@@ -26,7 +23,7 @@ compress/rdo_quality_loss=0.0
 compress/hdr_compression=1
 compress/normal_map=0
 compress/channel_pack=0
-mipmaps/generate=true
+mipmaps/generate=false
 mipmaps/limit=-1
 roughness/mode=0
 roughness/src_normal=""

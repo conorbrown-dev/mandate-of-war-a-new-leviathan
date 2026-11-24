@@ -1,0 +1,66 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+env:
+  GODOT_VERSION: 4.7.2
+
+jobs:
+  native-and-contracts:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install build dependencies
+        run: sudo apt-get update && sudo apt-get install -y cmake ninja-build g++
+
+      - name: Configure
+        run: cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
+
+      - name: Build
+        run: cmake --build build
+
+      - name: Native tests
+        run: ctest --test-dir build --output-on-failure
+
+      - name: Install Godot
+        run: |
+          curl -fsSLO "https://github.com/godotengine/godot/releases/download/${GODOT_VERSION}-stable/Godot_v${GODOT_VERSION}-stable_linux.x86_64.zip"
+          unzip -q "Godot_v${GODOT_VERSION}-stable_linux.x86_64.zip" -d "$RUNNER_TEMP/godot"
+          echo "GODOT_BIN=$RUNNER_TEMP/godot/Godot_v${GODOT_VERSION}-stable_linux.x86_64" >> "$GITHUB_ENV"
+
+      - name: Import Godot assets
+        run: |
+          chmod +x "$GODOT_BIN"
+          "$GODOT_BIN" --headless --path godot/project --import
+
+      - name: Godot contract tests
+        run: python3 tools/validate.py contracts
+
+      - name: Upload validation reports
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: validation-reports
+          path: validation/artifacts/**/report.json
+          if-no-files-found: ignore
+
+  windows-native:
+    runs-on: windows-2025
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: ilammy/msvc-dev-cmd@v1
+
+      - name: Configure
+        run: cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
+
+      - name: Build
+        run: cmake --build build
+
+      - name: Native tests
+        run: ctest --test-dir build --output-on-failure

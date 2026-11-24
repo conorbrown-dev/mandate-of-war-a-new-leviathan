@@ -482,6 +482,7 @@ Entity ModManager::spawn_generated_unit(Simulation& simulation, std::string_view
     });
     if (found == generated_units_.end()) return {};
 
+    if (simulation.at_unit_cap(faction_id)) return {};
     Entity entity = simulation.create_unit(x, y);
     if (entity.id == INVALID_ENTITY) return {};
     auto& components = simulation.component_manager();
