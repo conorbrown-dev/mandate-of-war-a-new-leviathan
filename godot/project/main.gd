@@ -1808,9 +1808,10 @@ func _unhandled_input(event: InputEvent) -> void:
 				else:
 					_finish_selection(event.position)
 		elif event.button_index == MOUSE_BUTTON_RIGHT and event.pressed:
+			# Right-click always commands movement. A targeting or placement mode is
+			# dropped first, then the click falls through to the move order.
 			if build_mode_type >= 0 or fob_build_mode or recon_targeting or paradrop_targeting_type >= 0:
 				_cancel_tactical_modes()
-				return
 			if material_order_mode != 0:
 				_issue_material_site_order(event.position)
 				return

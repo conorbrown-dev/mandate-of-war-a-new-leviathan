@@ -227,6 +227,24 @@ func _test_paradrop() -> void:
 	check(not view._order_paradrop(Vector2(float(enemy[0]), float(enemy[1]))), "a drop onto ground nobody watches is refused")
 	check(String(view.fuel_supply_status) == "PARADROP REFUSED // DROP ZONE NOT SCOUTED", "and the player is told why")
 	check(view.paradrop_targeting_type == -1, "the refused click ends the targeting")
+	# A right-click always commands movement, even while a drop zone is being picked.
+	var mover := int(view.engineer_ids.get(0, -1))
+	var mover_start: PackedFloat32Array = view.extension.call("get_unit_position", mover)
+	view.selected_ids = PackedInt32Array([mover])
+	view._begin_paradrop_targeting(SCOUT_CAR)
+	var aim: Vector2 = view.camera.get_viewport().get_visible_rect().size * Vector2(0.5, 0.5)
+	var aim_world: Vector2 = view._screen_to_world(aim)
+	var right_click := InputEventMouseButton.new()
+	right_click.button_index = MOUSE_BUTTON_RIGHT
+	right_click.pressed = true
+	right_click.position = aim
+	right_click.global_position = aim
+	view._unhandled_input(right_click)
+	check(view.paradrop_targeting_type == -1, "a right-click drops the drop-zone targeting")
+	_tick(view, 200)
+	var mover_end: PackedFloat32Array = view.extension.call("get_unit_position", mover)
+	check(Vector2(mover_end[0], mover_end[1]).distance_to(aim_world) < Vector2(mover_start[0], mover_start[1]).distance_to(aim_world) - 5.0, "and the same right-click sends the selected unit toward the point")
+	view._clear_selection()
 	var engineer := int(view.engineer_ids.get(0, -1))
 	var engineer_at: PackedFloat32Array = view.extension.call("get_unit_position", engineer)
 	var zone := Vector2(engineer_at[0] + 60.0, engineer_at[1] + 60.0)
