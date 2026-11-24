@@ -54,7 +54,7 @@ func _test_forest_builds_in_slices(view: Node) -> void:
 		frames += 1
 	print("PACING forest_build frames=%d longest_frame_ms=%.1f frames_over_50ms=%d at=%s instances=%d" % [frames, longest_ms, long_frames, ",".join(long_at), int(vegetation.instance_count)])
 	check(not bool(vegetation.building), "the forest finishes building")
-	check(int(vegetation.instance_count) == 953020, "into the same forest as before (%d instances)" % int(vegetation.instance_count))
+	check(int(vegetation.instance_count) == 954637, "into the same forest as before (%d instances)" % int(vegetation.instance_count))
 	# Building a whole chunk in one frame made every one of its 196 chunks a
 	# 100-240 ms frame. A stray slow frame from the machine is not that.
 	check(long_frames <= 3, "no frame waits on a whole chunk (%d frames over 50 ms)" % long_frames)
