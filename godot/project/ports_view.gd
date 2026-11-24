@@ -138,8 +138,8 @@ func _build_view(port: Dictionary) -> void:
 	label.fixed_size = true
 	label.no_depth_test = true
 	label.pixel_size = 0.0011
-	label.font_size = 36
-	label.outline_size = 8
+	label.font_size = 24
+	label.outline_size = 6
 	label.position = Vector3(0.0, LABEL_HEIGHT, 0.0)
 	root.add_child(label)
 	port.view = root
