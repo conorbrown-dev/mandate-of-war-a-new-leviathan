@@ -697,8 +697,11 @@ float AIManager::own_fuel() const {
     return store == storages.end() ? 0.0f : store->second.tactical.fuel.current;
 }
 
-// Drop a scout near a contact the AI can see now. The ordinary command checks
-// the landing point again when applied, including sight, terrain and payment.
+// Drop scouts near a contact the AI can see now, as many as its style wants in
+// one stick. It tries the full stick and steps down while the ordinary refusal
+// rules (Materials, the unit cap) say no, so it never gets more than a player
+// would. The command checks the landing point again when applied, including
+// sight, terrain and payment.
 void AIManager::order_paradrop(EntityId base) {
     if (!assault_active_ || !simulation_->forces_by_transport() || base == INVALID_ENTITY || enemy_units_.empty() ||
         simulation_->simulation_tick() < next_paradrop_tick_) return;
@@ -717,11 +720,16 @@ void AIManager::order_paradrop(EntityId base) {
             const float angle = static_cast<float>(side) * 3.14159265f / 4.0f;
             const float x = enemy_x + std::cos(angle) * kDropOffset;
             const float y = enemy_y + std::sin(angle) * kDropOffset;
-            if (!simulation_->paradrop_refusal(faction_id_, *scout, x, y).empty()) continue;
-            if (simulation_->issue_paradrop_command(faction_id_, *scout, x, y) == 0) return;
-            ++paradrops_ordered_;
-            next_paradrop_tick_ = simulation_->simulation_tick() + seconds_to_ticks(90.0f);
-            return;
+            const float price = simulation_->production_manager().get_unit_metal_cost(faction_id_, *scout);
+            for (int stick = std::min(doctrine_.paradrop_stick, Simulation::kMaxParadropStick); stick >= 1; --stick) {
+                // A bigger stick must not eat the money a fuel shipment is waiting for.
+                if (stick > 1 && holding_for_fuel(price * static_cast<float>(stick))) continue;
+                if (!simulation_->paradrop_refusal(faction_id_, *scout, x, y, stick).empty()) continue;
+                if (simulation_->issue_paradrop_command(faction_id_, *scout, x, y, stick) == 0) return;
+                ++paradrops_ordered_;
+                next_paradrop_tick_ = simulation_->simulation_tick() + seconds_to_ticks(90.0f);
+                return;
+            }
         }
     }
 }

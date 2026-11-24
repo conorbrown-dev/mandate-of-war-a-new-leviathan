@@ -376,9 +376,10 @@ plus five times the units already down). Covered by four native tests
 `_test_paradrop_stick` in `test_match_flow.gd`. The Haulwing fly-in view from the old
 stabilise checkout was not ported: the drop already flies a real, shootable cargo aircraft.
 
-Known gaps: the AI does not
-use paratroop drops yet; Elite Precision has only the scout car to drop and Industrial
-none; a drop zone that is lost between order and landing is still used.
+Known gaps: the AI drops only
+its scout type (see "AI paradrop follow-up" and "AI sticks" below); Elite Precision has
+only the scout car to drop and Industrial none; a drop zone that is lost between order
+and landing is still used.
 
 ## Ports and cargo ships (issue #23, 2026-11-23)
 
@@ -1648,6 +1649,16 @@ cooldown and use the existing interceptable cargo aircraft and drop pipeline.
 The native scenario asserts no blind or unpaid order, a visible flank target,
 one inbound scout and no decision-tick spam. Removing the call makes its
 assertion fail.
+
+AI sticks (2026-11-23): each style in `data/ai_doctrines.json` has a
+`paradrop_stick` (balanced 2, swarm 4, turtle 1, tech 2; 1 to 6). The AI asks for
+that many scouts in one drop and steps down one at a time while the ordinary
+`paradrop_refusal` rules say no (Materials, the unit cap), so it never gets more
+than a player would; a bigger stick also does not take the money a fuel shipment
+is waiting for. Orders carry the stick size in the recorded command like a
+player's. Covered in `tests/test_ai_doctrine.cpp`: each style drops its own
+stick, money for three and a half scouts buys three, money for one buys one and
+none buys nothing; with the step-down removed the short-of-money test fails.
 Release build and all four CTest programs pass (20 unit, 21 snapshot, 305
 integration, balance); Godot `match_flow` passes 80 checks and
 `native_skirmish_match_to_result` passes 19. No rendered artifact or new
