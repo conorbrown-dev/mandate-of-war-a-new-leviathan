@@ -79,7 +79,10 @@ Mast (3,000 m, fixed).
 A recon plane flies a flight plan set when it is ordered: Strategic Command, Plot
 Recon Flight, then a click on the map. It needs no airfield. It comes in from the
 west map edge, flies straight to the point, circles there for
-`recon_loiter_seconds` and flies back off the map. It takes no further orders.
+`recon_loiter_seconds` and flies back off the map. Any order given to it (move, stop, attack,
+return) replaces the flight plan: the plane then flies as an ordinary aircraft, with a fresh
+airborne clock and its unit-data fuel rates, so it returns to an airfield if one exists and
+otherwise runs out of airframe time like any other plane (issue #32).
 
 `src/simulation/sighting_log.hpp` records where each faction last saw each enemy.
 The map shows these as `?` markers with their age, merged when they would overlap.

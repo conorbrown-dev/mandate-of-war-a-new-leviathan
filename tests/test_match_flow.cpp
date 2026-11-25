@@ -267,11 +267,11 @@ TEST(the_ai_finds_the_player_knowing_only_the_sector) {
     verify(front.simulation.match_result() == 1, "the AI searches out and destroys the player with no position to go on");
 }
 
-TEST(a_recon_flight_goes_straight_to_its_point_with_no_airfield) {
-    MatchFront front;
+namespace {
+// Orders a recon flight to (-3000, 2000) and runs until the plane is watching it.
+EntityId fly_recon_to_station(MatchFront& front, float target_y) {
     auto& simulation = front.simulation;
     simulation.enable_ai(false);
-    const float target_y = 2000.0f;
     verify(!simulation.territorial_control_manager().has_active_installation(FactionId::ELITE_PRECISION, InstallationType::AIRFIELD), "the player has no airfield");
     verify(!simulation.can_see(FactionId::ELITE_PRECISION, -3000.0f, target_y), "the target starts unwatched");
     verify(simulation.issue_build_commands({front.player_post}, FactionId::ELITE_PRECISION, -3000.0f, target_y, 14) == 1, "a recon flight is ordered");
@@ -286,12 +286,16 @@ TEST(a_recon_flight_goes_straight_to_its_point_with_no_airfield) {
     }
     verify(plane != INVALID_ENTITY, "the plane arrives without an airfield");
     verify(watched, "the plane watches the point it was sent to");
+    return plane;
+}
+}
 
-    const float x = simulation.get_unit_x(plane);
-    verify(simulation.issue_commands({plane}, FactionId::ELITE_PRECISION, CommandType::MOVE, x, -9000.0f) == 0, "a new order is refused");
-    front.run(40);
-    verify(simulation.get_unit_y(plane) > 0.0f, "a flight plan cannot be changed once it is set");
+TEST(a_recon_flight_goes_straight_to_its_point_with_no_airfield) {
+    MatchFront front;
+    auto& simulation = front.simulation;
+    const EntityId plane = fly_recon_to_station(front, 2000.0f);
 
+    // Left alone, the flight plan runs its course.
     bool left = false;
     for (int tick = 0; tick < 20 * 400 && !left; ++tick) {
         simulation.update(50.0f);
@@ -301,6 +305,32 @@ TEST(a_recon_flight_goes_straight_to_its_point_with_no_airfield) {
     verify(left, "the plane leaves the map when its time on station ends");
     verify(simulation.recon_flights_in_air(FactionId::ELITE_PRECISION) == 0, "the flight is over");
     verify(simulation.logistics_manager().crashed_aircraft_count() == 0, "it flew out, it did not crash");
+}
+
+TEST(a_recon_plane_obeys_orders_given_during_its_flight) {
+    MatchFront front;
+    auto& simulation = front.simulation;
+    const EntityId plane = fly_recon_to_station(front, 2000.0f);
+
+    // An order takes the plane off its plan: it goes where it is told and
+    // does not turn round and leave when the planned time on station ends.
+    verify(simulation.on_recon_flight(plane), "the plane is still on its flight plan");
+    const float x = simulation.get_unit_x(plane);
+    const float start_y = simulation.get_unit_y(plane);
+    verify(simulation.issue_commands({plane}, FactionId::ELITE_PRECISION, CommandType::MOVE, x, -9000.0f) == 1, "a new order is accepted");
+    front.run(40);
+    verify(!simulation.on_recon_flight(plane), "the order replaces the flight plan");
+    verify(simulation.get_unit_y(plane) < start_y, "the plane turns toward its new destination");
+    bool arrived = false;
+    for (int tick = 0; tick < 20 * 400 && !arrived; ++tick) {
+        simulation.update(50.0f);
+        arrived = std::hypot(simulation.get_unit_x(plane) - x, simulation.get_unit_y(plane) + 9000.0f) < 100.0f;
+    }
+    verify(arrived, "the plane reaches the point it was ordered to");
+    const auto entities = simulation.get_entity_list();
+    verify(std::find(entities.begin(), entities.end(), plane) != entities.end(), "it was not sent off the map");
+    verify(simulation.issue_commands({plane}, FactionId::ELITE_PRECISION, CommandType::MOVE, x, 2000.0f) == 1, "and takes another order");
+    verify(simulation.issue_commands({plane}, FactionId::ELITE_PRECISION, CommandType::STOP) == 1, "and a stop order");
 }
 
 TEST(a_combat_aircraft_still_needs_an_airfield) {
