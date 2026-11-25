@@ -49,6 +49,7 @@ needed unless it needs a new `visual_id`, which is defined in
 | `weapon` | `damage`, `range`, `fire_rate` (seconds between shots), `projectile_speed`, `aoe_radius`, `lead_bias`, and `targets`: which of `"ground"` and `"air"` it can engage, as the real system can (a tank gun cannot engage a jet in flight; a surface-to-air missile cannot engage a tank). An empty list means unarmed. Default `["ground"]`. An aircraft is an air target from take-off to touch-down |
 | `capabilities` | Territorial actions |
 | `construction_unit` | True for units that need a buildable site |
+| `support_unit` | True for long-range support (tactical missile launchers). The AI does not build these as its fighting line |
 | `fuel_per_km` | Fuel a ground vehicle draws from its side's store per kilometre driven, when the scenario sets `ground_vehicles_burn_fuel`. Default 0 |
 | `footprint_radius` | Ground units: half the hull length in metres, 0.5–50, default 4. Separation keeps two units' centres at least the sum of their radii apart |
 | `cargo_transport` | True for the unarmed aircraft that flies a side's fuel shipments in. It cannot be ordered and is left out of Strategic Command. Default false |

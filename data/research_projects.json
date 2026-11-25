@@ -8,7 +8,7 @@
             "total_cost": 500.0,
             "build_time_seconds": 50.0,
             "prerequisites": [],
-            "unlocks": ["ELITE_LONG_RANGE_ARTILLERY"]
+            "unlocks": ["ELITE_LONG_RANGE_ARTILLERY", "ELITE_TACTICAL_MISSILE"]
         },
         {
             "id": "advanced_targeting",
@@ -48,7 +48,7 @@
             "total_cost": 350.0,
             "build_time_seconds": 35.0,
             "prerequisites": ["swarm_coordination"],
-            "unlocks": ["MASS_ASSAULT_VEHICLE"]
+            "unlocks": ["MASS_ASSAULT_VEHICLE", "MASS_TACTICAL_MISSILE"]
         },
         {
             "id": "rapid_response",

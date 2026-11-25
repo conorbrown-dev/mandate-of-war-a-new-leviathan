@@ -627,7 +627,7 @@ void AIManager::produce_for_assault(EntityId base) {
         if (!production.can_queue_unit(base, faction_id_, type) || !can_receive(type)) continue;
         if (is_scout(prototype)) scout = type;
         else if (is_recon_plane(prototype)) { if (type == cheapest_plane) plane = type; }
-        else if (!prototype.is_aircraft && !prototype.is_naval && !prototype.construction_unit) fighters.push_back(type);
+        else if (!prototype.is_aircraft && !prototype.is_naval && !prototype.construction_unit && !prototype.support_unit) fighters.push_back(type);
     }
     // Fighters wait while scouts are short, or a scout sits behind them in the queue.
     for (EntityId unit : visible_units_) {

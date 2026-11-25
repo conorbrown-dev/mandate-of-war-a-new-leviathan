@@ -108,6 +108,9 @@ static UnitPrototype parse_unit_prototype(const rts::data::JsonValue& obj) {
     if (auto icon = obj.get("strategic_icon"); icon && icon->type() == rts::data::JsonValue::Type::String) {
         prototype.strategic_icon = icon->as_string();
     }
+    if (auto support = obj.get("support_unit"); support && support->type() == rts::data::JsonValue::Type::Bool) {
+        prototype.support_unit = support->as_bool();
+    }
     if (auto construction = obj.get("construction_unit"); construction && construction->type() == rts::data::JsonValue::Type::Bool) {
         prototype.construction_unit = construction->as_bool();
     }

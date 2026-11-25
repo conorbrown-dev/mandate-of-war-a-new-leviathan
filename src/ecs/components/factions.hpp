@@ -112,6 +112,8 @@ struct UnitPrototype {
     std::string nato_symbol = "";
     std::string strategic_icon = "";
     bool construction_unit = false;
+    // Long-range support (tactical missile launchers). The AI does not mass-produce these as its fighting line.
+    bool support_unit = false;
     // Light enough to be dropped by parachute from a transport aircraft.
     bool airdrop = false;
     // The aircraft that flies a side's fuel shipments in. Never ordered or built.
