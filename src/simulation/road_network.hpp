@@ -37,6 +37,8 @@ class RoadNetwork {
 public:
     bool queue(EntityId engineer, FactionId owner, float start_x, float start_y,
                float end_x, float end_y, float build_time_seconds);
+    // A finished road that belongs to nobody (scenery the map starts with).
+    bool add_completed(float start_x, float start_y, float end_x, float end_y, float width);
     std::vector<RoadSegment> update(float delta_ms);
     void reset();
 

@@ -50,6 +50,8 @@ set(SIMULATION_SOURCES
     src/simulation/skirmish.cpp
     src/simulation/terrain.cpp
     src/simulation/road_network.cpp
+    src/simulation/power_grid.cpp
+    src/simulation/ports.cpp
     src/simulation/off_road.cpp
     src/simulation/command_manager.cpp
     src/simulation/control_point_battle.cpp
@@ -212,6 +214,7 @@ add_executable(rts_integration_tests
     tests/test_pathfinding.cpp
     tests/test_content_id.cpp
     tests/test_combat.cpp
+    tests/test_air_altitude.cpp
     tests/test_health.cpp
     tests/test_mod_manifest.cpp
     tests/test_map_loader.cpp
@@ -219,6 +222,8 @@ add_executable(rts_integration_tests
     tests/test_economy.cpp
     tests/test_terrain.cpp
     tests/test_fuel_supply.cpp
+    tests/test_power_grid.cpp
+    tests/test_ports.cpp
     tests/test_radio_events.cpp
     tests/test_match_flow.cpp
     tests/test_ai_doctrine.cpp

@@ -51,12 +51,16 @@ void write_heightfield(const std::string& path, int width, int height, const std
     if (!output) throw std::runtime_error("Heightfield write failed: " + path);
 }
 
-void Terrain::load_from_file(const std::string& path) {
+void Terrain::load_from_file(const std::string& path, float height_scale) {
+    if (!std::isfinite(height_scale) || height_scale <= 0.0f) {
+        throw std::runtime_error("Terrain height scale must be positive: " + path);
+    }
     auto field = read_heightfield(path);
     if (field.width != GRID_SIZE || field.height != GRID_SIZE) {
         throw std::runtime_error("Terrain must be a " + std::to_string(GRID_SIZE) + " square grid: " + path);
     }
     heights_ = std::move(field.heights);
+    if (height_scale != 1.0f) for (float& height : heights_) height *= height_scale;
 }
 
 void Terrain::set_world_bounds(float width, float height) {

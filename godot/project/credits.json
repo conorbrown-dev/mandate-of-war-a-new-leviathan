@@ -1,0 +1,69 @@
+{
+  "schema_version": 1,
+  "purpose": "Third-party assets shown on the in-game Credits panel. Every sourced asset needs an entry here and in the CREDITS.md beside its files.",
+  "credits": [
+    {
+      "asset": "Highwatch strategic recon plane model (Sr-71)",
+      "author": "Kiiba",
+      "source": "Sketchfab",
+      "url": "https://sketchfab.com/3d-models/sr-71-79e6c14217ab417abe524a99ffbb472e",
+      "license": "CC BY 4.0"
+    },
+    {
+      "asset": "Longsight recon plane model (U2)",
+      "author": "manilov.ap",
+      "source": "Sketchfab",
+      "url": "https://sketchfab.com/3d-models/u2-615c4462e86f4a27b057203acad3702d",
+      "license": "CC BY 4.0"
+    },
+    {
+      "asset": "Farwatch recon plane model (MQ-9 Reaper Drone - Game Ready Military Asset)",
+      "author": "The Aesthetic Modeler (racingrevved)",
+      "source": "Sketchfab",
+      "url": "https://sketchfab.com/3d-models/mq-9-reaper-drone-game-ready-military-asset-a02057e7401a4f4ea130cb75cc73d8cb",
+      "license": "CC BY 4.0"
+    },
+    {
+      "asset": "Chinook transport helicopter model (Boeing CH-47 Chinook Military Transport Aircraft)",
+      "author": "Muhamad Mirza Arrafi (MirzaArrafiERV_45)",
+      "source": "Sketchfab",
+      "url": "https://sketchfab.com/3d-models/boeing-ch-47-chinook-military-transport-aircraft-cdac73e931f6482e86960a326fef73bf",
+      "license": "CC BY 4.0"
+    },
+    {
+      "asset": "Chinook low-poly helicopter model (Helicopter Low Poly - Chinook CH-47)",
+      "author": "Machine Meza (maurib98)",
+      "source": "Sketchfab",
+      "url": "https://sketchfab.com/3d-models/helicopter-low-poly-chinook-ch-47-72b5123bda964e9aa5343384734977e2",
+      "license": "CC BY 4.0"
+    },
+    {
+      "asset": "Airfield asphalt (Asphalt Track)",
+      "author": "Dimitrios Savva",
+      "source": "Poly Haven",
+      "url": "https://polyhaven.com/a/asphalt_track",
+      "license": "CC0"
+    },
+    {
+      "asset": "Airfield concrete (Concrete Floor 02)",
+      "author": "Rob Tuytel",
+      "source": "Poly Haven",
+      "url": "https://polyhaven.com/a/concrete_floor_02",
+      "license": "CC0"
+    },
+    {
+      "asset": "Tree generator and leaf textures (EZ-Tree)",
+      "author": "Daniel Greenheck; Godot port by leomclaughlin4",
+      "source": "GitHub",
+      "url": "https://github.com/dgreenheck/ez-tree",
+      "license": "MIT"
+    },
+    {
+      "asset": "Bark textures",
+      "author": "Lennart Demes",
+      "source": "ambientCG",
+      "url": "https://ambientcg.com/list?q=bark",
+      "license": "CC0"
+    }
+  ]
+}

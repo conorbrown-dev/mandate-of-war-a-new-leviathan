@@ -65,6 +65,8 @@ AIDoctrine parse_doctrine(const JsonValue& entry) {
     else if (preference == "mixed") doctrine.unit_preference = AIDoctrine::UnitPreference::MIXED;
     else throw std::runtime_error("ai_doctrines.json: " + where + " has unknown unit_preference " + preference);
     doctrine.scouts_wanted = whole(entry, "scouts_wanted", where, 0, 20);
+    // The native limit is Simulation::kMaxParadropStick (6); the simulation refuses more.
+    doctrine.paradrop_stick = whole(entry, "paradrop_stick", where, 1, 6);
     doctrine.first_recon_flight_seconds = number(entry, "first_recon_flight_seconds", where, 0.0f, 3600.0f);
     doctrine.recon_flight_interval_seconds = number(entry, "recon_flight_interval_seconds", where, 1.0f, 3600.0f);
     doctrine.queue_depth = whole(entry, "queue_depth", where, 1, 20);

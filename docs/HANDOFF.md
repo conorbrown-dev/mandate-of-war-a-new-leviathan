@@ -203,12 +203,24 @@ Release build and four CTest programs pass, but the full Godot sweep is not
 green. See STATUS.md for the failing scenarios; keep this package open until
 they are resolved or triaged with evidence.
 
+## Power grid (issue #4, 2026-11-10)
+
+Broken Strait has a power grid: three stations, steel pylons and wooden poles,
+drawn with generated models. Lines can be captured (`2` then right-click), cut
+(`3` then right-click) and repaired by the engineer for Materials. A side's
+Power in the HUD is what the grid delivers to its command post. See STATUS.md
+"Power grid and power lines" and `docs/POWER_ASSETS.md`. Open decisions for the
+user: what a power deficit should do, whether the AI should raid lines, and
+whether engineers should lay new lines.
+
 ## Radio callouts (issue #3, 2026-11-10)
 
 Slices A to C of the issue are implemented: native radio reports, a JSON alert
 catalog, the announcer with subtitles and an F3 log, and the offline ElevenLabs
 generator. Three alerts are live (hostile aircraft, fuel depot secured, fuel depot
-lost) and are text-only until clips are generated. See STATUS.md "Radio callouts"
+lost). Ten Elite Command clips now ship; other factions remain text-only.
+The user confirmed playback on macOS. WAVs load directly without an import pass
+and preserve the original audio without processing. See STATUS.md "Radio callouts"
 and `docs/adr/0001-radio-callouts.md`. To add speech: put voice ids in the catalog
 (or `ELEVENLABS_VOICE_<SET>`), set `ELEVENLABS_API_KEY`, run
 `tools/generate_radio_voice.py --generate`, listen, then `--approve-all`. Check

@@ -76,6 +76,7 @@ private:
         float x, y;
         FactionId faction;
         bool in_air = false;
+        float altitude = 0.0f;
     };
     void build_target_index(const std::vector<EntityId>& entities, ComponentManager& component_manager);
     std::vector<TargetCandidate> target_candidates_;
@@ -102,7 +103,8 @@ public:
         ComponentManager& component_manager,
         EntityId explicit_target = 0,
         bool hits_ground = true,
-        bool hits_air = false
+        bool hits_air = false,
+        float max_target_altitude = DEFAULT_WEAPON_CEILING_METERS
     );
     
     FireSolution calculate_fire_solution(

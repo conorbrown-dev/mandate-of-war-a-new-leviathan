@@ -1,0 +1,15 @@
+{
+  "category": "air",
+  "godot_forward": "+Z in the file; the visual definition turns it 180 degrees to -Z",
+  "godot_up": "+Y",
+  "bounds_m": {
+    "x": 213.385,
+    "y": 77.208,
+    "z": 313.218
+  },
+  "triangles_all_exported_meshes": 15386,
+  "units_note": "File units are not metres. The real CH-47 is about 30 m overall, so the Skybridge Airlifter visual scales it by 0.096 to give about 30 m.",
+  "origin_note": "Origin sits about 0.9 m (scaled) off the fuselage centre on X; wheels rest at y of about 0.9 file units.",
+  "collision_recommendation": "Use simple BoxShape3D/CapsuleShape3D or custom RTS footprint data; do not use render mesh collision per unit.",
+  "source_pipeline": "Sketchfab glTF-binary download (1k textures), imported unchanged; credit in godot/project/credits.json"
+}

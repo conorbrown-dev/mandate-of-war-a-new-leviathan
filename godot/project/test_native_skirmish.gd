@@ -17,6 +17,9 @@ func _run() -> void:
 	root.add_child(view)
 	await process_frame
 	check(view.load_error.is_empty(), "native route loads the validated deterministic scenario")
+	view._update_hud()
+	check(view.telemetry.text.contains("MATCH 00:00"), "native battle map shows a zeroed match clock")
+	view.set_process(false)
 	print("native state units=%d result=%d" % [view.state.get("units", []).size(), int(view.state.get("result", -2))])
 	check(int(view.state.get("result", -2)) == -1 and view.state.get("units", []).size() >= 24, "native route enters the authored two-landmass match with fog-limited state")
 	check(view.state.has("materials") and view.state.has("fuel") and view.state.has("power_reserve_mw") and not view.state.has("research"), "native route exposes canonical tactical Materials, Fuel, and Power without a Research balance")
@@ -46,16 +49,21 @@ func _run() -> void:
 	check(aircraft_id > 0 and vessel_id > 0, "native route exposes conventional aircraft and naval vessel telemetry")
 	var first_elite := 0
 	var first_enemy := 0
+	var seen_ids := {}
 	for unit in view.state.get("units", []):
+		seen_ids[int(unit.get("id", 0))] = true
 		if int(unit.get("faction", -1)) == 0 and not bool(unit.get("base", false)) and first_elite == 0:
 			first_elite = int(unit.get("id", 0))
-		if int(unit.get("faction", -1)) == 1 and first_enemy == 0:
-			first_enemy = int(unit.get("id", 0))
 	check(first_elite > 0 and view.state.get("units", []).any(func(unit): return int(unit.get("faction", -1)) == 0), "native route exposes the identified human force while respecting fog of war")
-	# The opposing command center is intentionally not visible at setup, but
-	# its deterministic ID is still a useful ownership rejection fixture.
+	# The intelligence checks below need an enemy the player cannot see, so its
+	# last-known record can age. The state lists only what is in sight (the
+	# patrol boat's 160 m of sight now reveals the nearest enemy units), so the
+	# fixture is the highest entity ID that the state does not list.
+	var all_ids: PackedInt32Array = view.extension.call("get_entity_ids")
+	for entity_id in all_ids:
+		if not seen_ids.has(int(entity_id)):
+			first_enemy = maxi(first_enemy, int(entity_id))
 	if first_enemy == 0:
-		var all_ids: PackedInt32Array = view.extension.call("get_entity_ids")
 		first_enemy = int(all_ids[all_ids.size() - 1]) if not all_ids.is_empty() else 2
 	# The logistics checks below need the vessel afloat, so the AI army holds until they finish.
 	view.extension.call("skirmish_set_ai_enabled", false)
@@ -66,6 +74,9 @@ func _run() -> void:
 	check(int(view.extension.call("skirmish_command", 0, PackedInt32Array([aircraft_id]), -80.0, 0.0, 0)) == 1, "native route accepts a conventional aircraft sortie order")
 	for _tick in range(60):
 		view.extension.call("skirmish_update", 50.0)
+	view.state = view.extension.call("skirmish_state")
+	view._update_hud()
+	check(view.telemetry.text.contains("MATCH 00:03"), "native battle map clock follows three simulated seconds")
 	var aircraft_state: Dictionary = {}
 	for unit in view.extension.call("skirmish_state").get("units", []):
 		if int(unit.get("id", 0)) == aircraft_id:
@@ -87,7 +98,6 @@ func _run() -> void:
 			vessel_state = unit
 	check(not bool(vessel_state.get("stranded", true)) and float(vessel_state.get("fuel", 0.0)) > 90.0, "native route restores naval endurance from its existing vessel fuel system")
 	check(float(view.extension.call("skirmish_state").get("materials", material_before_resupply)) < material_before_resupply, "native route deducts finite material stock for naval resupply")
-	view.extension.call("skirmish_set_ai_enabled", true)
 	# Seed one authoritative last-known contact, then prove it ages into a
 	# stale record without exposing a hidden live position.
 	view.extension.call("skirmish_update_intelligence", first_enemy, 105.0, 0.0, int(view.extension.call("skirmish_state").get("tick", 0)))
@@ -104,6 +114,9 @@ func _run() -> void:
 		if int(record.get("id", 0)) == first_enemy:
 			intel_later = record
 	check(bool(intel_later.get("stale", false)) and int(intel_later.get("age", 0)) >= 120, "native route marks aged intelligence stale while retaining last-known coordinates")
+	# The AI army stays held until here: a hidden contact it walks into view is
+	# seen again, so it could not age.
+	view.extension.call("skirmish_set_ai_enabled", true)
 	for _tick in range(20000):
 		if int(view.state.get("result", -1)) >= 0:
 			break

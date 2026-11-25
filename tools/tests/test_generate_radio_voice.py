@@ -93,9 +93,7 @@ class GeneratorTests(unittest.TestCase):
         master = tool.read_wav(self.folder / manifest["pending"][0]["master"])
         clip = tool.read_wav(self.folder / manifest["pending"][0]["file"])
         self.assertEqual(master, tone(), "the master is the untouched source")
-        self.assertLess(len(clip), len(master), "dead air is trimmed")
-        peak = max(abs(value) for value in tool.to_samples(clip))
-        self.assertAlmostEqual(20 * math.log10(peak), -3.0, delta=0.2)
+        self.assertEqual(clip, master, "voiceover samples remain untouched")
 
         code, out, _ = self.run_tool("--generate", "--event", "objective.fuel_depot_secured")
         self.assertEqual(code, 0)
@@ -144,10 +142,14 @@ class GeneratorTests(unittest.TestCase):
     def test_reprocess_rebuilds_from_masters_without_the_api(self):
         self.run_tool("--generate", "--event", "objective.fuel_depot_secured", "--voice-set", "elite_command")
         before = self.manifest()["pending"][0]["sha256"]
-        self.assertEqual(self.run_tool("--reprocess", "--no-radio")[0], 0)
+        entry = self.manifest()["pending"][0]
+        tool.write_wav(self.folder / entry["file"], b"\x00\x00" * 100)
+        self.assertEqual(self.run_tool("--reprocess")[0], 0)
         after = self.manifest()["pending"][0]
-        self.assertNotEqual(after["sha256"], before)
-        self.assertEqual(tool.sha256_file(self.folder / after["file"]), after["sha256"])
+        self.assertFalse(after["processing"]["radio"])
+        self.assertEqual(after["sha256"], before)
+        self.assertEqual(tool.read_wav(self.folder / after["file"]),
+                         tool.read_wav(self.folder / after["master"]))
         self.assertEqual(len(self.calls), 1)
 
     def test_rate_limits_are_retried_and_bad_keys_are_explained(self):
@@ -175,6 +177,12 @@ class GeneratorTests(unittest.TestCase):
         with patch("urllib.request.urlopen", refused):
             with self.assertRaisesRegex(tool.GeneratorError, "check ELEVENLABS_API_KEY"):
                 tool.synthesize("hello", config, "wrong", sleep=lambda _: None)
+
+    def test_tests_do_not_read_the_local_env_file(self):
+        code, _, err = self.run_tool("--generate", env={})
+        self.assertEqual(code, 1, "no key in the given environment means no run, whatever .env holds")
+        self.assertIn("ELEVENLABS_API_KEY is not set", err)
+        self.assertEqual(self.calls, [])
 
     def test_secrets_stay_out_of_version_control(self):
         ignored = subprocess.run(["git", "check-ignore", ".env"], cwd=ROOT, capture_output=True, text=True)

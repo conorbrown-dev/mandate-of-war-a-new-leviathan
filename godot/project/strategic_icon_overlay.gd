@@ -7,6 +7,10 @@ const UnitCatalog := preload("res://unit_catalog.gd")
 ## 3D unit meshes so they remain a fixed, legible size at full-map zoom.
 
 const STRATEGIC_ZOOM_DISTANCE := 600.0
+# Gap between the top of a unit as drawn and the centre of its icon.
+const ICON_LIFT_PIXELS := 30.0
+# Aircraft drawn at least this high get a drop line to the ground beneath them.
+const DROP_LINE_MIN_HEIGHT := 60.0
 const LAST_KNOWN_COLOR := Color("#ff8a6b")
 const LAST_KNOWN_MERGE_PIXELS := 42.0
 const LAST_KNOWN_FADE_SECONDS := 180.0
@@ -19,6 +23,7 @@ var match_view: Node3D
 # What the last _draw put on screen, for contracts: one entry per marker.
 var last_unit_symbols: Array[Dictionary] = []
 var last_resource_markers: Array[Dictionary] = []
+var last_power_markers: Array[Dictionary] = []
 
 
 func _ready() -> void:
@@ -37,6 +42,8 @@ func _draw() -> void:
 	last_unit_symbols.clear()
 	last_resource_markers.clear()
 	_draw_resource_markers(camera, viewport_bounds)
+	last_power_markers.clear()
+	_draw_power_markers(camera, viewport_bounds)
 	_draw_last_known(camera, viewport_bounds)
 	_draw_radar_contacts(camera, viewport_bounds)
 	if match_view.camera_distance < STRATEGIC_ZOOM_DISTANCE:
@@ -59,7 +66,17 @@ func _draw() -> void:
 		var faction_color: Color = match_view.entity_base_colors.get(entity_id, Color.WHITE)
 		var leader_color := Color("#b8bec0")
 		leader_color.a = 0.82
-		draw_line(anchor, icon_center + Vector2(0.0, 7.0), leader_color, 1.5, true)
+		# An aircraft high above the ground gets a faint drop line to the point
+		# beneath it, so its height and ground position both read at a glance.
+		var ground_y: float = match_view._terrain_height_at(world.x, world.z)
+		if world.y - ground_y > DROP_LINE_MIN_HEIGHT:
+			var ground_point := Vector3(world.x, ground_y, world.z)
+			if not camera.is_position_behind(ground_point):
+				var below := camera.unproject_position(ground_point)
+				var drop_color := Color(faction_color, 0.45)
+				draw_line(below, anchor + Vector2(0.0, float(placement.radius_pixels) * 0.3), drop_color, 1.0, true)
+				draw_circle(below, 2.5, drop_color)
+		draw_line(anchor + Vector2(0.0, -float(placement.radius_pixels)), icon_center + Vector2(0.0, 7.0), leader_color, 1.5, true)
 		draw_circle(anchor, 2.0, faction_color)
 		var hostile: bool = match_view.ai_entity_ids.has(entity_id)
 		var symbol: Dictionary = NatoMapSymbolScript.draw(self, icon_center, int(match_view.entity_unit_types.get(entity_id, 0)), hostile, symbol_font)
@@ -68,10 +85,19 @@ func _draw() -> void:
 		last_unit_symbols.append(symbol)
 
 
+## The icon sits above the unit as drawn, never on it: ICON_LIFT_PIXELS clear of
+## the top of the unit's drawn size on screen, joined to it by a leader line.
 func marker_placement(entity_id: int, camera: Camera3D) -> Dictionary:
 	var world: Vector3 = match_view._unit_overlay_anchor(entity_id)
 	var anchor := camera.unproject_position(world)
-	return {"world": world, "anchor": anchor, "icon_center": anchor+Vector2(0,-22)}
+	var radius_pixels := 0.0
+	var wrapper = match_view.prototype_visual_views.get(entity_id)
+	if wrapper != null and wrapper.has_method("drawn_radius"):
+		var top := world + camera.global_basis.y * float(wrapper.drawn_radius())
+		if not camera.is_position_behind(top):
+			radius_pixels = camera.unproject_position(top).distance_to(anchor)
+	var lift := radius_pixels + ICON_LIFT_PIXELS
+	return {"world": world, "anchor": anchor, "radius_pixels": radius_pixels, "icon_center": anchor + Vector2(0.0, -lift)}
 
 
 func _draw_radar_contacts(camera: Camera3D, viewport_bounds: Rect2) -> void:
@@ -200,6 +226,50 @@ func _draw_resource_markers(camera: Camera3D, viewport_bounds: Rect2) -> void:
 		draw_string_outline(font, text_at, label, HORIZONTAL_ALIGNMENT_LEFT, -1, 10, 3, Color(0.0, 0.0, 0.0, 0.8))
 		draw_string(font, text_at, label, HORIZONTAL_ALIGNMENT_LEFT, -1, 10, fill)
 		last_resource_markers.append(marker)
+
+
+## Power stations the player's side knows of, with the holder last seen.
+func power_markers(camera: Camera3D, viewport_bounds: Rect2) -> Array[Dictionary]:
+	var markers: Array[Dictionary] = []
+	var grid: Node3D = match_view.power_grid_view
+	if grid == null or not grid.active:
+		return markers
+	for node: Dictionary in grid.nodes.values():
+		if int(node.kind) != 0 or not bool(node.discovered):
+			continue
+		_append_resource_marker(markers, {"id": int(node.id), "position": node.position, "kind": "power_station",
+			"known_owner": int(node.known_owner)}, "power", camera, viewport_bounds)
+	return markers
+
+
+func _draw_power_markers(camera: Camera3D, viewport_bounds: Rect2) -> void:
+	var font: Font = preload("res://ui/theme/mandate_fonts.gd").label()
+	for marker in power_markers(camera, viewport_bounds):
+		var anchor: Vector2 = marker.anchor
+		var center: Vector2 = marker.center
+		var fill: Color = RESOURCE_UNCLAIMED_FILL
+		if marker.affiliation == "friendly":
+			fill = NatoMapSymbolScript.FRIENDLY_FILL
+		elif marker.affiliation == "hostile":
+			fill = NatoMapSymbolScript.HOSTILE_FILL
+		var ink := NatoMapSymbolScript.LINE_COLOR
+		draw_line(anchor, center + Vector2(0.0, 11.0), Color(0.0, 0.0, 0.0, 0.7), 1.5, true)
+		draw_circle(anchor, 2.5, fill)
+		# Diamond badge with a lightning bolt.
+		var outline := _regular_points(center, 12.0, 4)
+		draw_colored_polygon(outline, fill)
+		draw_colored_polygon(PackedVector2Array([
+			center + Vector2(1.8, -7.0), center + Vector2(-3.6, 1.0), center + Vector2(-0.4, 1.0),
+			center + Vector2(-1.8, 7.0), center + Vector2(3.6, -1.2), center + Vector2(0.4, -1.2)]), ink)
+		outline.append(outline[0])
+		draw_polyline(outline, Color(0.0, 0.0, 0.0, 0.55), 3.2, true)
+		draw_polyline(outline, ink, 1.6, true)
+		var label := "POWER"
+		var extent := font.get_string_size(label, HORIZONTAL_ALIGNMENT_LEFT, -1, 10)
+		var text_at := center + Vector2(-extent.x * 0.5, -16.0)
+		draw_string_outline(font, text_at, label, HORIZONTAL_ALIGNMENT_LEFT, -1, 10, 3, Color(0.0, 0.0, 0.0, 0.8))
+		draw_string(font, text_at, label, HORIZONTAL_ALIGNMENT_LEFT, -1, 10, fill)
+		last_power_markers.append(marker)
 
 
 func _draw_polygon(points: PackedVector2Array, fill: Color, outline: Color) -> void:

@@ -53,6 +53,8 @@ struct FuelShipment {
     // The cargo aircraft carrying it. If it is destroyed the fuel is lost.
     EntityId transport = INVALID_ENTITY;
     float total_ms = 0.0f;
+    // Non-zero for a shipment by sea: the port its cargo ship is bound for.
+    uint32_t port_id = 0;
 };
 
 struct FuelDepotStatus {

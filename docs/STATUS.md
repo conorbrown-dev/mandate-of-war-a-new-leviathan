@@ -1,5 +1,36 @@
 # Current Status
 
+## GitHub issues #11–#13 (2026-11-10)
+
+Esc now opens a themed confirmation with Stay in Match focused by default and
+Exit to Desktop as an explicit action. Esc dismisses the confirmation. While it
+is visible, match hotkeys are blocked. Existing Esc behavior still closes open
+panels or cancels placement first.
+
+The 3D HUD reads the native `match_state.seconds` value and shows `MATCH MM:SS`
+under the operation name. The deterministic 2D battle map shows the same format
+from its authoritative 20 Hz tick. These clocks track simulated match time,
+including game-speed changes and pauses, rather than wall time. The +/- speed
+keys play a short UI-bus cue only when the requested step changes the speed;
+clamped keys and multiplayer-locked speed stay silent.
+
+Validation (Apple M1 Pro, macOS arm64, Release): build passes. Focused Godot
+contracts pass: `exit_confirmation` 6/6, `game_speed` 31/31,
+`native_skirmish_match_to_result` 25/25, and `hotkey_sheet` 41/41. The game-speed
+checks confirm native simulation time advances at each speed and the HUD clock
+tracks it; the 2D scenario checks 00:00 then 00:03 after 60 native ticks.
+`git diff --check` passes.
+
+CTest discovers four programs. Two network-dependent CTest programs could not
+bind loopback TCP in the sandbox: `rts_tests` (18 pass, 2 loopback checks fail)
+and `rts_integration_tests` (317 pass, 1 loopback check fail); portable snapshot
+and faction balance pass. An attempted outside-sandbox rerun was rejected by
+automatic approval because its usage limit had been reached, so those two
+loopback checks remain unverified in this session. The sandboxed Godot harnesses
+also log a macOS certificate-access error after their assertions; focused runs
+were rerun outside the sandbox and passed. No rendered screenshot or hand-play
+acceptance was performed.
+
 ## Core design rules
 
 - **Research happens outside the skirmish.** It is not done in a warzone.
@@ -76,10 +107,49 @@ Earthworks change sight lines, because the height samples refresh with the terra
 Recon sources: Pathfinder Scout Car (650 m), Longsight Recon Plane (1,600 m), Radar
 Mast (3,000 m, fixed).
 
+Recon planes come in tiers: Farwatch (Mass, tier 1), Longsight (Elite, tier 2) and
+Highwatch Strategic Recon Plane (Elite, tier 3, unit id 20, 2,400 m sight). Any
+recon card in Strategic Command starts the map click for that plane's flight.
+
+Altitude decides which air-capable weapons can reach an aircraft. A weapon must
+first hit air at all (`weapon.targets`, see `src/combat/air_domain.hpp`). Then its
+ceiling (`weapon.max_target_altitude_m`, 15,000 m by default) must reach the
+aircraft's cruise altitude (`flight_altitude_m` in the unit data, 1,500 m by
+default). Aircraft on the ground count as zero. Highwatch flies at 24,000 m, so
+the T1 fighter and the VTOL cannot touch it, and ground guns never could. Only
+the two anti-air vehicles (ceiling 30,000 m) can. `CombatManager::find_target` and
+the projectile hit tests apply both rules (`src/combat/engagement_altitude.hpp`).
+They are covered by `tests/test_air_altitude.cpp` and the `high_altitude_recon`
+contract. The game has no tier 2 fighter yet. Highwatch is unarmed like the other
+recon planes.
+
+Aircraft are drawn so they stay readable at any zoom (presentation only). The
+main view keeps drawing them out to half of full zoom (13 km), on their own render
+layer, and enlarges them beyond 250 m camera distance so they keep the size they
+have there. Their drawn altitude is fixed, whatever the zoom: ordinary aircraft
+160 m, recon planes 1,200 m and Highwatch 2,500 m (`presented_cruise_height_m` in
+the visual definitions). So Highwatch is above the camera until it is zoomed out
+past about 4.5 km, and recon planes past about 2 km. A high aircraft gets a
+faint drop line to the ground beneath it. Strategic icons sit 30 px above the
+unit as drawn, not on it. Clicking, hovering and box selection pick an aircraft
+where it is drawn, not at its ground position. The `aircraft_presentation`
+contract covers this. The AI orders its
+cheapest recon plane. The recon planes use Sketchfab models under CC BY 4.0: an
+MQ-9 Reaper for Farwatch, a U-2 for Longsight and an SR-71 for Highwatch. They are
+credited in the AUDIO & CREDITS panel (F2, or the button on the startup screen),
+which lists every entry in `godot/project/credits.json`, and in
+`assets/source_3d/reference_models/CREDITS.md`. The U-2 has 30,511 triangles,
+above the 20,000 prototype budget, so its definition carries its own
+`triangle_budget`.
+
 A recon plane flies a flight plan set when it is ordered: Strategic Command, Plot
 Recon Flight, then a click on the map. It needs no airfield. It comes in from the
 west map edge, flies straight to the point, circles there for
-`recon_loiter_seconds` and flies back off the map. It takes no further orders.
+`recon_loiter_seconds` and flies back off the map. A move order re-plots its
+flight while it is on its mission: it flies straight to the new point and spends
+the rest of its time on station there (`Simulation::retask_recon_flight`). It
+takes no other order, no queued moves and nothing once it is leaving. Cargo
+airlifters take no orders at all.
 
 `src/simulation/sighting_log.hpp` records where each faction last saw each enemy.
 The map shows these as `?` markers with their age, merged when they would overlap.
@@ -122,6 +192,60 @@ sees the player's post at about 16.6 minutes, its first wave hits at about 22.3
 minutes, and the match ends the same minute. Before the AI was held to player
 limits it started with a position estimate and won at about 7.9 minutes. A tank
 takes about 6 minutes to reach the enemy.
+
+Scenery density (issue #22, 2026-11-23, first slice): trees now vary much more in size
+(`TerrainVegetation.tree_height`: conifers 8 to 38 m, broadleaves 7 to 30 m; each 350 m stand has
+its own age and 5% of trees are veterans). Villages and farms are generated on top of the authored
+towns (`main.gd` `_civilian_clusters`, about 0.012 settlements per km2 of land, 2 to 48, deterministic
+per map size) with two new small building types, so a map has about 46 buildings at 5 km, 227 at 40 km
+and 591 at 80 km (was about 64 at every size). They keep clear of spawns, sites, depots, power stations
+and transport routes; only 350 buildings use detailed models, the rest are batched boxes. Checked
+headless (`test_tree_sizes.gd`, `test_map_sizes.gd`), not seen on screen.
+
+Public roads (issue #22): the map now starts with real roads (`Simulation::add_public_road`, owned by
+nobody, finished at once). `main.gd` `_spawn_public_roads` links every town, base, Materials site, fuel
+depot and power station: nearest-neighbour straight roads that stay on land, joined as a minimum spanning
+network, plus about 20% extra loops; 34 roads at 5 km up to 89 at 80 km. They behave exactly like
+engineer-built roads (pathfinding cost 0.68, so units drive about 1.47x faster on them and plan along them,
+and wear 12x slower on them). Effect on the Broken Strait match flow (`test_match_flow.gd`, idle player):
+a tank now reaches the enemy in 307 s, and the AI's first contact moved from 519 s to 469 s. Native test:
+`a_public_road_is_real_it_is_kept_on_land_and_speeds_units_up` (a 6 km drive is at least 15% quicker on
+a road). Not seen on screen.
+
+Village power feeders (issue #22): each generated village is now a real node in the power grid
+(`main.gd` `_extend_power_grid`, `power_grid_view.gd` `append_grid`; ids from 500). Nearest-first, every
+village joins by exactly one line to the scenario's grid or to a village already joined, so each branch
+ends at a single existing node: the lines are real (seen once scouted, capturable, cuttable, repairable
+by an engineer, steel when they leave a station or cross water, wood otherwise) but open no new route
+between existing nodes, so each side's starting power is unchanged (player 320 MW against 40 MW, AI
+120 MW against 40 MW, checked at all five map sizes). 4 feeders at 5 km up to 49 at 80 km. Redundant
+loops between stations would make the lines matter to supply, but would change that balance (the
+civilian stations could feed the AI), so they were left out. `test_power_grid.gd` now counts only the
+scenario's own ten lines. Not seen on screen.
+
+Map sizes (issue #14, 2026-11-23): the startup screen has a MAP SIZE picker (5, 10, 20, 40 or
+80 km square, default 40). `godot/project/map_scale.gd` redraws the authored 40 km Broken Strait at
+the chosen size: every coordinate (theater, landmasses, spawns, the AI's search area, transport
+routes, Materials sites, fuel depots, civilian clusters, power grid) scales by size/40,000, so
+spawns are 0.9 km apart at 5 km and 14 km apart at 80 km. Terrain heights scale by the same
+factor (`Terrain::load_from_file(path, height_scale)`, `load_terrain_heightmap(path, scale)`) so
+slopes stay as authored. Camera zoom stops end at the whole map for each size. Native tests cover
+height scaling and a match with the AI wave at all five sizes
+(`terrain_height_scale_keeps_slopes_at_every_map_size`,
+`a_match_runs_and_the_ai_searches_at_every_supported_map_size`). Godot side checked headless on Godot 4.7.2 (2026-11-23): `test_map_scale.gd` passes and
+`test_map_sizes.gd` (50 checks) starts a match through the picker's code path at all five sizes;
+`test_camera_zoom_input`, `test_aircraft_presentation` and `test_match_flow` still pass. NOT
+verified: how the picker, terrain and fog look on screen at each size (no GPU or screenshots). Unit sizes, weapon ranges and the 2,000-unit
+cap do not scale, and 80 km is not benchmarked.
+
+Wave search (issue #18, 2026-11-23): a wave with no contact used to head for one shared
+sector at a time, so a blind wave swept the briefing sector far too slowly. Waves are now
+split into groups of about three (`AIManager::sweep_group`), and each group searches its own
+sector that no scout or other group is watching or heading for (`update_sweep`). Same fog and
+information as before. Headless probe, flat 40 km world, briefing sector from
+`commander_start_skirmish.json`, idle player 7 km away, AI given 15 materials per second: the
+old code had not found the post after 40 minutes (11 waves, 20 recon flights); the new code
+destroys it at 11.0 minutes. Not played in Godot. Test: `a_wave_with_no_contact_searches_in_groups_on_different_ground`.
 
 Vision cost, same date (Release, Windows, 3,902 stationary units on the real
 terrain, 200 ticks): 6.41 ms per tick with sight lines against 6.25 ms without, so
@@ -236,11 +360,102 @@ shot down first, the drop is lost, its price is not refunded and the HUD says
 "PARADROP TRANSPORT SHOT DOWN" (`paradrops_lost`, `delivery_state.airdrops_lost`).
 About 104 s for a drop beside the player's start.
 
-Known gaps: the AI does not
-use paratroop drops yet; Elite Precision has only the scout car to drop and Industrial
-none; a drop zone that is lost between order and landing is still used.
+**Sticks (2026-11-23):** one order can drop 1 to `kMaxParadropStick` (6) of the same
+unit. The **DROP STICK** button in the Strategic Command footer steps through 1, 2, 4
+and 6, and each PARADROP button shows the price of the whole stick. The sortie still uses
+one cargo aircraft, so shooting it down loses every unit in it. Price is per unit; each
+unit in the air holds a unit-cap slot (`inbound_unit_count`, not `inbound_count`, which
+still counts sorties for the 24-in-the-air limit). The stick size rides in bits 8 to 15
+of the recorded BUILD order (`PARADROP_COUNT_SHIFT`); zero there means one unit, so
+orders recorded before sticks still replay. `order_paradrop` and `paradrop_refusal` on
+the bridge take a trailing `count` (default 1), and `delivery_state.inbound` entries carry
+`count`. The map ring reads `PARADROP x4` and the inbound list `4X`. Units land one at a
+time on the same scatter pattern (each unit's place in the sequence is the drop's number
+plus five times the units already down). Covered by four native tests
+(`a_paradrop_stick_*`, `a_paradrop_order_recorded_without_a_stick_size_*`) and
+`_test_paradrop_stick` in `test_match_flow.gd`. The Haulwing fly-in view from the old
+stabilise checkout was not ported: the drop already flies a real, shootable cargo aircraft.
 
-Still not done under the transport rule: sea landings, and a refund if an airfield is
+Known gaps: the AI drops only
+its scout type (see "AI paradrop follow-up" and "AI sticks" below); Elite Precision has
+only the scout car to drop and Industrial none; a drop zone that is lost between order
+and landing is still used.
+
+## Ports and cargo ships (issue #23, 2026-11-23)
+
+Sea landings are done. A port is a coastal site (`src/simulation/ports.hpp`, `Simulation::add_port`).
+Broken Strait has five (`ports` in `commander_start_skirmish.json`, scaled with the map size): Eastern
+Pier (the player's), West Quay (the AI's) and three neutral, North Harbor, Central Quay and South Harbor.
+
+- **Capture.** Like depots and power stations: a ground unit within 140 m, with no enemy ground unit
+  there, takes the port after holding on for 8 s (`kPortHoldSeconds`). A claim fades if the unit leaves,
+  and a contested port is taken by neither side.
+- **Sea delivery.** `GroundTransport::SEA` (mode 3 in `order_ground_transport`, a SEA tab in Strategic
+  Command). A side with a port orders troops at the catalog price; after the unit's build time a real
+  cargo ship (Seaspan, Dockhorse or Bulkhead Freighter, unit ids 21 to 23, unarmed, 500 HP, 22 m/s)
+  sails from the start of the port's sea lane to its berth, unloads onto the quay and leaves. The order is
+  a recorded BUILD command (`SEA_DELIVERY_ORDER_FLAG`, port id in bits 8 to 15, 0 picks the nearest held
+  port with a clear lane).
+- **Seaway control.** A side ships only through a port it holds ("NO PORT HELD", "PORT NOT HELD"). An armed
+  enemy vessel that side can currently see within 700 m of the lane blocks new orders ("SEA LANE
+  CONTESTED"); a ship nobody can see never gives itself away. A cargo ship is a real vessel: ground and
+  naval weapons can sink it, its load is lost with it and the price is not refunded
+  (`delivery_state.ships_lost`). If the port changes hands while a ship is on its way, the ship waits at the
+  berth and unloads once its side holds the port again.
+- **The AI** keeps its air pipeline, because a ship takes minutes where an airlift takes seconds (an
+  early version that shipped from the start delayed its first wave from 69 s to 322 s). It orders by sea
+  only as a fallback when it has no prospect of an airfield (none, none queued, no engineer), and as
+  overflow when 22 of its 24 inbound slots are taken. After its first wave has gone, a two-unit squad
+  (once it has four fighting units to spare) drives to the nearest port it does not hold, neutral ports
+  before enemy ones, and stays until it is taken. Port positions are treated as public coastal sites.
+- **Presentation.** `ports_view.gd` draws the quay model, a holder ring and a name label with capture
+  progress. A port's holder is updated only while the quay is in sight (or held), then remembered.
+- **Evidence.** 11 native tests in `tests/test_ports.cpp` (capture, contest, refusals, a full voyage, a sunk
+  ship, a port lost in transit, recorded command, lane blocked by a visible armed ship, a hidden one, the
+  AI taking a port, the AI shipping in) and `test_ports.gd` through the real match scene, which also
+  proves the narrow strip along the west coast is sailable. Not seen on screen.
+- **Convoys.** A cargo ship carries up to four orders (`kShipCapacity`) for the same port. Orders placed
+  within 12 s of its departure share its hold (they all leave at the first order's build time; each further
+  ship leaves 8 s later). Sink the ship and every order aboard is lost; it counts as one loss.
+- **Fuel by sea.** `request_sea_fuel_shipment` (`fuel_shipment_request(faction, true)`, a SHIP FUEL BY SEA button)
+  sends the usual 2,000 fuel for 300 Materials in a cargo ship to a held port, with no airfield needed. A
+  sunk fuel ship delivers nothing ("FUEL SHIPMENT SUNK"). The AI uses it only when it has no prospect of an
+  airfield.
+- **Warships.** Warships are not shipped in: `order_naval_unit` (NAVAL tab) builds one at the nearest port
+  the side holds and launches it at the berth after its build time (15 s). Every faction now has an armed
+  patrol boat to contest a lane: Breakwater (Elite, 400, 300 HP), Pike (Mass, 250, 180 HP, 36 damage) and
+  Sentinel (Industrial, 350, 260 HP, 35 damage), all 12 m/s with a generated placeholder model each. The
+  Elite boat could not be built in Broken Strait before, because production spawns on land.
+- **Destructible ports.** A port that a side holds has 3,000 hit points and a hidden facility entity (`PortFacility`,
+  not in `get_entity_list`, not counted against the unit cap) with that side's faction, so enemy weapons find and
+  shoot it like any other target; neutral ports have none and cannot be damaged. At 0 HP the port is rubble: it still
+  belongs to its owner but serves nobody ("PORT DESTROYED": no sea delivery, warships or fuel by sea; a ship waits
+  off a ruined port). Engineers of the owner at the quay repair a standing or ruined port (60 HP/s each, 0.1 Materials
+  per HP, about 300 for a full rebuild); rubble returns to service past 20% (`kPortServiceFraction`). A ruined port
+  can still be captured; the new owner must repair it. Because the capture radius (140 m) is wider than most weapon
+  ranges, a force that reaches the quay captures the port rather than ruining it; only longer-range weapons (artillery
+  at 195 m, missiles) ruin a port without taking it. Evidence: 9 more native tests in `tests/test_ports.cpp` and
+  `test_ports.gd` through the real scene (47 checks). `ports_view.gd` shows HP and DESTROYED and hides the quay
+  model while it is rubble. Pacing effect: a held port is now a visible enemy structure, so the AI's waves find and
+  engage the player's Eastern Pier on their way, and in `test_match_flow` (idle player) first contact moved from 491 s
+  to 922 s and the defeat from 509 s to 955 s.
+- **Attacking and repairing ports.** Ctrl + right-click on a visible, standing enemy port (a unit nearer the click
+  wins, otherwise a click within 220 m of the quay) gives the selected units an ordinary ATTACK on the port's
+  facility (`Simulation::port_attack_target`, bridge `port_attack_target`). Like any attack order it does not move
+  units into range: they must already be within weapon range, outside the 140 m capture radius if the aim is to ruin
+  the port rather than take it. Units also still auto-fire at ports they see. The AI's engineer rebuilds a battered
+  (below 70%) or ruined port of its own (`AIManager::update_port_repair`): not before two minutes in, only while the
+  engineer is idle, it drives to the quay and the simulation's repair rule does the work; the AI holds back the
+  Materials the repair needs instead of spending them on units (`holding_for_repair`), though scouts and recon
+  flights are not held, so a poorly funded AI can leave a rebuild part-done until money arrives. The AI never
+  repairs a port it does not hold. Evidence: 4 more native tests (pick and attack a port, the AI rebuilding a ruin,
+  not touching the enemy's) and a check in `test_ports.gd`. The click handler in `main.gd` has no UI test (it needs a
+  camera and selection); the native pick and order it calls are tested.
+- **Known gaps.** The AI does not build warships or escort its cargo ships. The ships and boats are generated placeholder models with no wake or
+  animation, the strategic map has no port icon beyond the 3D label, and nothing has been seen on screen or
+  hand-played. Boat speed, cost and the 5 minute voyage are untuned guesses.
+
+Still not done under the transport rule: a refund if an airfield is
 destroyed with forces in the air (they wait for a landing site instead). The legacy
 single-package `reinforcement_delivery_*` native calls remain, and only anchor the
 parked F-15C.
@@ -1434,6 +1649,16 @@ cooldown and use the existing interceptable cargo aircraft and drop pipeline.
 The native scenario asserts no blind or unpaid order, a visible flank target,
 one inbound scout and no decision-tick spam. Removing the call makes its
 assertion fail.
+
+AI sticks (2026-11-23): each style in `data/ai_doctrines.json` has a
+`paradrop_stick` (balanced 2, swarm 4, turtle 1, tech 2; 1 to 6). The AI asks for
+that many scouts in one drop and steps down one at a time while the ordinary
+`paradrop_refusal` rules say no (Materials, the unit cap), so it never gets more
+than a player would; a bigger stick also does not take the money a fuel shipment
+is waiting for. Orders carry the stick size in the recorded command like a
+player's. Covered in `tests/test_ai_doctrine.cpp`: each style drops its own
+stick, money for three and a half scouts buys three, money for one buys one and
+none buys nothing; with the step-down removed the short-of-money test fails.
 Release build and all four CTest programs pass (20 unit, 21 snapshot, 305
 integration, balance); Godot `match_flow` passes 80 checks and
 `native_skirmish_match_to_result` passes 19. No rendered artifact or new
@@ -1621,13 +1846,81 @@ rendered `ground_transport_routes` report resources still in use at exit;
 The stale fighter hover description was corrected and `build_menu_hover` now
 passes 81/81. This package remains open pending those failures.
 
+## Power grid and power lines (2026-11-10, issue #4)
+
+Power is now carried by lines, not simply granted. `src/simulation/power_grid.hpp`
+holds the rules and `godot/project/scenarios/power_grid.json` places the grid.
+
+- **Stations, loads and lines.** A power station has an output in megawatts. A
+  load is a side's command post, with a demand (40 MW). A side's Power state is
+  the output of every station joined to one of its loads by an unbroken chain of
+  lines it may use. Lines always draw from a station: a line joined to none
+  carries nothing. Finished structures add demand wherever they stand (outpost
+  5 MW, radar 15, airfield 25, floodlight 2), but only in a match that has a
+  grid. A match with no grid (every native test and the other scenarios) leaves
+  Power untouched.
+- **Who may use what.** A civilian station or line (no owner) serves any side
+  joined to it. A side's own line carries power for that side only, and power
+  does not pass through a station the other side holds.
+- **Capture.** Any ground unit takes a station or an intact line when it comes
+  within 40 m of it. Capturing a line denies it to the side that held it.
+- **Cutting.** Any ground unit within 40 m of a line can cut it. The line then
+  carries nothing, so a side whose only feed is cut loses all its power income.
+- **Repair.** Only an engineer repairs a line, at the break. The price is paid
+  in Materials when it arrives: wooden lines 30 plus 0.01 per metre and 8 s plus
+  1 s per 500 m, steel lines 90 plus 0.03 per metre and 15 s plus 1 s per 300 m.
+  The player's 3.9 km wooden feed costs 72 Materials and takes 16 s. Whoever
+  repairs a line then holds it.
+- **Orders.** Grid work is a HARVEST command with `POWER_ORDER_FLAG`, the kind
+  of work and the target id in `extra`, so it is recorded and plays back. The
+  unit drives to the target and acts on arrival; a redirected or dead unit
+  gives up. The bridge call `power_order` answers at once with why not.
+- **Wood or steel.** Broken Strait has three stations and ten lines. Steel
+  pylons leave each station, run to the two west-shore cities and cross the
+  strait from the Eastern Hydro Plant, standing in the water on the way. Wooden
+  poles follow each side's supply road to its command post and run across open
+  ground to two small works. The player starts with 320 MW against 40 MW.
+- **What the player sees.** `power_grid_view.gd` draws stations, poles, pylons
+  and conductors. The player starts knowing its own line, the trunk and the
+  station that feed it. Everything else is drawn once seen and then shows the
+  holder and condition it had when last seen; a side is told at once when its
+  own line is cut or taken. Conductors take the holder's colour. A cut line is
+  drawn dashed with a gap at the break, a `LINE DOWN` label and sparks that
+  repeat every 2.4 s until a repair starts. Stations get a map marker (a
+  diamond with a lightning bolt) coloured by last-seen holder. Hovering names
+  the line, its holder and the repair price.
+- **Controls.** `2` then right-click captures a station or line, or sends the
+  engineer to repair a line that is down. `3` then right-click cuts a line.
+  These are the existing claim and demolish modes.
+- **Models.** Three original generated models; see
+  [POWER_ASSETS.md](POWER_ASSETS.md).
+
+Evidence (2026-11-10, Apple M1 Pro, macOS arm64, Release): 12 native tests in
+`tests/test_power_grid.cpp` cover supply, cutting on arrival, repair by an
+engineer for Materials, wood cheaper than steel, capture of lines and stations,
+"no station, no power", abandoned work, structure demand and playback from the
+command log. Eight rules were removed in turn and each made at least one test
+fail. The Godot contract `tools/validate.py power_grid` passes 42 checks
+through the real match scene. Rendered screenshots were inspected:
+`validation/artifacts/power_grid/rendered/`.
+
+Known gaps: a power deficit is shown in the HUD but changes nothing else yet.
+The AI never captures, cuts or repairs lines, so in a match against the AI the
+player's grid is not attacked. Lines cannot be shot: only a unit standing at a
+line cuts it. Engineers repair lines but cannot lay new ones. Poles and pylons
+are scenery: units drive through them, structures can be placed on them, and
+they are not in network snapshots. Not hand-played.
+
 ## Radio callouts and command voice alerts (2026-11-10, issue #3)
 
 Design and rules: [adr/0001-radio-callouts.md](adr/0001-radio-callouts.md).
 
 Three alerts work end to end: `air.hostile_inbound`, `objective.fuel_depot_secured`
-and `objective.fuel_depot_lost`. **No voice clips exist yet**, so every alert is
-text with a short attention tone. Generating speech needs an ElevenLabs key.
+and `objective.fuel_depot_lost`. Ten Elite Command recordings are shipped (eight aircraft directions plus depot
+secured/lost). Other faction voices remain text-only with an attention tone.
+Voice WAVs load directly even without Godot import metadata and preserve their
+original PCM; there is no voice EQ, filtering, static or squelch. Generating
+additional speech needs an ElevenLabs key.
 
 - Native: `Simulation::record_radio_event` raises a report for one side. A depot
   capture tells the captor and the previous holder once each. Hostile aircraft in
@@ -1669,7 +1962,11 @@ Evidence (Apple M1 Pro, macOS arm64, Release):
   the sweep and passed twice alone. Three `test_validation.py` tool tests error on
   a missing `resolution` argument, unrelated to this work. Cost: PERFORMANCE.md.
 
-Known gaps: no recorded speech and no human listening; ElevenLabs commercial
+Human playback acceptance: user confirmed the Elite recordings work on macOS.
+`radio_voice_source` verifies unimported WAV playback, original PCM and no voice
+effects; its negative control fails with the old announcer.
+
+Known gaps: other faction recordings are absent; ElevenLabs commercial
 rights not yet checked; voice ids in the catalog are empty; the catalog cannot be
 replaced by a mod without code; replays do not replay radio; the AI side's
 reports are produced but nothing presents them.

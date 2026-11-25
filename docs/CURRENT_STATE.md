@@ -1,6 +1,30 @@
 # Current state
 
+CI repair (2026-11-16): the Linux `contracts` job had failed on `main` since
+the fog-of-war and power-grid merges. `skirmish_presentation` still expected
+every resource site visible at start, unchanged power stores, and an airfield
+and floodlight built on the two command-post spawn points, all of which the
+newer rules now correctly refuse. The test now asserts the fog-of-war and
+no-overlap rules instead. `hud_bridge` caught a real overflow: with Linux font
+metrics the build catalog header made the card 610 px wide (cap 540), so the
+instruction line now wraps beside the title. `ground_transport` passed its
+checks but intermittently failed on Godot's exit-time "resources still in use"
+error for UI cues; it now gives the AudioServer 0.25 s to drop stopped
+playbacks before quitting (8/8 clean Linux runs). Full `contracts` passes on
+Windows and on Linux (WSL, Godot 4.7.2); `ctest` passes 4/4 on both.
+
+GitHub issues #11–#13 are implemented in the `codex/issues-11-13` worktree:
+Esc opens an exit confirmation; the 3D and deterministic 2D battle maps show
+simulated elapsed match time; and +/- plays a UI cue only when speed changes.
+Validation evidence is in STATUS.md under "GitHub issues #11–#13".
+
 Read [HANDOFF.md](HANDOFF.md), then [STATUS.md](STATUS.md) for authoritative scope.
+Issue #4 (2026-11-10) adds a native power grid to Broken Strait: three power
+stations, steel pylons and wooden poles, with lines that any ground unit can
+capture or cut and that an engineer repairs for Materials. A side's Power is
+what the grid delivers to its command post. Native tests (12) and the
+`power_grid` Godot contract (42 checks) pass; the AI does not use the grid and
+a deficit has no effect yet.
 Slice 3 is implemented and assertion-covered, but has not been hand-played.
 Slice 4 implementation is complete (2026-11-09): distinct weapon cues, bounded
 moving-vehicle/aircraft loops, persistent F2 audio controls and sound credits,
@@ -191,3 +215,54 @@ is removed. A rendered 1280x720 screenshot is in
 `validation/artifacts/resource_map/rendered/native_resource_markers.png`.
 Release build and four CTest programs pass. Water remains included in Materials;
 water towers are scenery rather than a separate resource.
+
+
+2026-11-10 voice playback fix: generated voice WAVs can exist in the manifest
+without Godot import metadata. The announcer now loads WAV source files directly
+with AudioStreamWAV.load_from_file, preserving PCM and bypassing the missing
+import. Other formats retain normal ResourceLoader loading. No EQ or treatment
+is added. `radio_voice_source` creates an unimported WAV and manifest and checks
+speech playback, no fallback blip, unchanged PCM, and zero Voice-bus effects.
+The regression fails against the old announcer and passes with the fix.
+Release build passes. CTest discovers/passes four programs (20 unit, 21 snapshot,
+318 integration, BALANCE_OK). Focused radio_voice_source scenario passes four
+checks outside the sandbox; Godot reports two ObjectDB leaks at shutdown.
+Human playback acceptance: user confirmed speech works in this worktree.
+The shipped pack contains ten Elite Command clips; other faction voices remain
+text-only. Generator output preserves original PCM without processing.
+Main integration: Release build, radio_voice_source (4), radio_callouts (88)
+and generator tests (11) pass. Human listening acceptance is confirmed.
+
+# Issue #10: overlapping structures (2026-11-10)
+
+Native placement now checks reserved construction footprints on level ground as
+well as earthworks sites. The same validation feeds the build ghost and order
+acceptance, so a queued structure reserves its site immediately. Native tests
+cover direct and earthworks orders, partial overlap, unchanged queue/Materials
+on rejection, and a separate valid site.
+
+The placement preview also treats the engineer's pending and waiting build
+orders as occupied before native handoff. An occupied cursor site stays under
+the cursor and turns the ghost red, including at strategic zoom; clicking it
+plays the UI `order_refused` cue and retains the placement mode and queued
+orders. `test_queued_builds.gd` includes assertions for these states and for
+the native claim after handoff.
+
+The Release build passes. The direct-site regression fails before the fix and
+passes afterward. CTest passes three of four programs; the integration program
+has one failure in the existing airfield engineer move fixture after construction
+finishes (318 passed, 1 failed). After importing the fresh worktree's assets,
+`queued_builds` passes 34/34 checks, including ghost colour, refusal cue and
+queue preservation. Human visual and listening checks remain open.
+
+Follow-up after hand play: the airfield ghost is now positioned after the
+camera's frame update and outlines the full native 250 x 750 m site around its
+offset runway. The construction preview contract checks that ghost and finished
+runway share the same local and world site coordinates (43 checks pass). Native
+structure placement now excludes both 56 x 42 m command posts, including
+partial airfield overlap, without changing engineer spawn suitability. The
+command-post Godot contract checks the red-site refusal path (75 checks pass);
+`match_flow` passes 80 checks and the AI builds its airfield. Native CTest still
+has the existing airfield engineer move failure (319 integration passed, 1
+failed); the other three programs pass. The queued-build contract passed 34
+checks on rerun; one earlier run hit its existing unreachable engineer fixture.

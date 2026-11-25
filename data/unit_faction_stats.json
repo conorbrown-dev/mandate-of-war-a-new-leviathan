@@ -63,7 +63,7 @@
       "capabilities": ["SEIZURE", "SECURE", "DEFEND"],
       "nato_symbol": "air_defense",
       "strategic_icon": "air_defense",
-      "weapon": {"damage": 25.9, "range": 100.0, "fire_rate": 1.0, "projectile_speed": 200.0, "aoe_radius": 1.0, "lead_bias": 0.5, "targets": ["air"]}
+      "weapon": {"damage": 25.9, "range": 100.0, "fire_rate": 1.0, "projectile_speed": 200.0, "aoe_radius": 1.0, "lead_bias": 0.5, "targets": ["air"], "max_target_altitude_m": 30000.0}
     },
     {
       "id": 3,
@@ -127,7 +127,7 @@
       "capabilities": ["SEIZURE", "SECURE", "DEFEND"],
       "nato_symbol": "air_defense",
       "strategic_icon": "air_defense",
-      "weapon": {"damage": 23.7, "range": 95.0, "fire_rate": 0.8, "projectile_speed": 200.0, "aoe_radius": 1.0, "lead_bias": 0.5, "targets": ["air"]}
+      "weapon": {"damage": 23.7, "range": 95.0, "fire_rate": 0.8, "projectile_speed": 200.0, "aoe_radius": 1.0, "lead_bias": 0.5, "targets": ["air"], "max_target_altitude_m": 30000.0}
     },
     {
       "id": 6,
@@ -252,7 +252,7 @@
     {
       "id": 13,
       "name": "Pathfinder Scout Car",
-      "visual_id": "visual.elite.anti_air.prototype",
+      "visual_id": "visual.elite.scout_car.prototype",
       "type": "ELITE_SCOUT_CAR",
       "fuel_per_km": 2.0,
       "airdrop": true,
@@ -274,7 +274,7 @@
     {
       "id": 14,
       "name": "Longsight Recon Plane",
-      "visual_id": "visual.elite.fighter.prototype",
+      "visual_id": "visual.elite.recon_plane.prototype",
       "type": "ELITE_RECON_PLANE",
       "faction": "ELITE_PRECISION",
       "material_cost": 320.0,
@@ -303,7 +303,7 @@
     {
       "id": 15,
       "name": "Outrider Scout Bike",
-      "visual_id": "visual.mass.assault_vehicle.prototype",
+      "visual_id": "visual.mass.scout_bike.prototype",
       "type": "MASS_SCOUT_BIKE",
       "fuel_per_km": 1.0,
       "airdrop": true,
@@ -345,7 +345,7 @@
     {
       "id": 16,
       "name": "Farwatch Recon Plane",
-      "visual_id": "visual.elite.fighter.prototype",
+      "visual_id": "visual.mass.recon_plane.prototype",
       "type": "MASS_RECON_PLANE",
       "faction": "MASS_WARFARE",
       "material_cost": 260.0,
@@ -381,16 +381,47 @@
       "recon_loiter_seconds": 45.0
     },
     {
+      "id": 20,
+      "name": "Highwatch Strategic Recon Plane",
+      "visual_id": "visual.elite.strategic_recon.prototype",
+      "type": "ELITE_STRATEGIC_RECON_PLANE",
+      "faction": "ELITE_PRECISION",
+      "material_cost": 900.0,
+      "build_time_seconds": 30.0,
+      "hp": 120.0,
+      "speed": 160.0,
+      "range": 40.0,
+      "view_range": 2400.0,
+      "intel_range": 4800,
+      "research_prerequisites": [],
+      "is_aircraft": true,
+      "requires_runway": true,
+      "payload": 1.0,
+      "operational_range": 12000.0,
+      "operational_energy": 240.0,
+      "operational_material": 30.0,
+      "max_airborne_time_seconds": 300.0,
+      "recon_loiter_seconds": 30.0,
+      "flight_altitude_m": 24000.0,
+      "energy_consumption_rate": 0.5,
+      "material_consumption_rate": 0.02,
+      "capabilities": ["RECON"],
+      "nato_symbol": "recon_aircraft",
+      "strategic_icon": "recon_aircraft",
+      "weapon": {"damage": 1.0, "range": 40.0, "fire_rate": 1.0, "projectile_speed": 120.0, "aoe_radius": 0.0, "lead_bias": 0.5, "targets": []}
+    },
+    {
       "id": 11,
       "name": "Breakwater Patrol Boat",
+      "visual_id": "visual.elite.patrol_boat.prototype",
       "type": "ELITE_PATROL_BOAT",
       "faction": "ELITE_PRECISION",
       "material_cost": 400.0,
       "build_time_seconds": 15.0,
       "hp": 300.0,
-      "speed": 8.0,
+      "speed": 12.0,
       "range": 90.0,
-      "view_range": 120.0,
+      "view_range": 160.0,
       "intel_range": 500,
       "is_naval": true,
       "operational_energy": 100.0,
@@ -400,9 +431,14 @@
       "strategic_icon": "naval_surface",
       "weapon": {"damage": 40.0, "range": 90.0, "fire_rate": 1.5, "projectile_speed": 160.0, "aoe_radius": 2.0, "lead_bias": 0.5, "targets": ["ground"]}
     },
-    {"id": 17, "name": "Skybridge Airlifter", "visual_id": "visual.elite.fighter.prototype", "type": "ELITE_AIRLIFTER", "faction": "ELITE_PRECISION", "cargo_transport": true, "material_cost": 0.0, "build_time_seconds": 0.0, "hp": 160.0, "speed": 90.0, "range": 0.0, "view_range": 300.0, "intel_range": 900, "research_prerequisites": [], "is_aircraft": true, "requires_runway": true, "payload": 20.0, "operational_range": 40000.0, "operational_energy": 1.0, "operational_material": 1.0, "max_airborne_time_seconds": 900.0, "energy_consumption_rate": 0.1, "material_consumption_rate": 0.0, "capabilities": [], "nato_symbol": "transport_aircraft", "strategic_icon": "cargo_aircraft", "weapon": {"damage": 0.0, "range": 0.0, "fire_rate": 1.0, "projectile_speed": 1.0, "aoe_radius": 0.0, "lead_bias": 0.0, "targets": []}},
-    {"id": 18, "name": "Packhorse Airlifter", "visual_id": "visual.elite.fighter.prototype", "type": "MASS_AIRLIFTER", "faction": "MASS_WARFARE", "cargo_transport": true, "material_cost": 0.0, "build_time_seconds": 0.0, "hp": 160.0, "speed": 90.0, "range": 0.0, "view_range": 300.0, "intel_range": 900, "research_prerequisites": [], "is_aircraft": true, "requires_runway": true, "payload": 20.0, "operational_range": 40000.0, "operational_energy": 1.0, "operational_material": 1.0, "max_airborne_time_seconds": 900.0, "energy_consumption_rate": 0.1, "material_consumption_rate": 0.0, "capabilities": [], "nato_symbol": "transport_aircraft", "strategic_icon": "cargo_aircraft", "weapon": {"damage": 0.0, "range": 0.0, "fire_rate": 1.0, "projectile_speed": 1.0, "aoe_radius": 0.0, "lead_bias": 0.0, "targets": []}},
-    {"id": 19, "name": "Hauler Airlifter", "visual_id": "visual.elite.fighter.prototype", "type": "INDUSTRIAL_AIRLIFTER", "faction": "INDUSTRIAL_EXPERIMENTAL", "cargo_transport": true, "material_cost": 0.0, "build_time_seconds": 0.0, "hp": 160.0, "speed": 90.0, "range": 0.0, "view_range": 300.0, "intel_range": 900, "research_prerequisites": [], "is_aircraft": true, "requires_runway": true, "payload": 20.0, "operational_range": 40000.0, "operational_energy": 1.0, "operational_material": 1.0, "max_airborne_time_seconds": 900.0, "energy_consumption_rate": 0.1, "material_consumption_rate": 0.0, "capabilities": [], "nato_symbol": "transport_aircraft", "strategic_icon": "cargo_aircraft", "weapon": {"damage": 0.0, "range": 0.0, "fire_rate": 1.0, "projectile_speed": 1.0, "aoe_radius": 0.0, "lead_bias": 0.0, "targets": []}}
+    {"id": 17, "name": "Skybridge Airlifter", "visual_id": "visual.elite.airlifter.prototype", "type": "ELITE_AIRLIFTER", "faction": "ELITE_PRECISION", "cargo_transport": true, "material_cost": 0.0, "build_time_seconds": 0.0, "hp": 160.0, "speed": 90.0, "range": 0.0, "view_range": 300.0, "intel_range": 900, "research_prerequisites": [], "is_aircraft": true, "requires_runway": true, "payload": 20.0, "operational_range": 40000.0, "operational_energy": 1.0, "operational_material": 1.0, "max_airborne_time_seconds": 900.0, "energy_consumption_rate": 0.1, "material_consumption_rate": 0.0, "capabilities": [], "nato_symbol": "transport_aircraft", "strategic_icon": "cargo_aircraft", "weapon": {"damage": 0.0, "range": 0.0, "fire_rate": 1.0, "projectile_speed": 1.0, "aoe_radius": 0.0, "lead_bias": 0.0, "targets": []}},
+    {"id": 18, "name": "Packhorse Airlifter", "visual_id": "visual.mass.airlifter.prototype", "type": "MASS_AIRLIFTER", "faction": "MASS_WARFARE", "cargo_transport": true, "material_cost": 0.0, "build_time_seconds": 0.0, "hp": 160.0, "speed": 90.0, "range": 0.0, "view_range": 300.0, "intel_range": 900, "research_prerequisites": [], "is_aircraft": true, "requires_runway": true, "payload": 20.0, "operational_range": 40000.0, "operational_energy": 1.0, "operational_material": 1.0, "max_airborne_time_seconds": 900.0, "energy_consumption_rate": 0.1, "material_consumption_rate": 0.0, "capabilities": [], "nato_symbol": "transport_aircraft", "strategic_icon": "cargo_aircraft", "weapon": {"damage": 0.0, "range": 0.0, "fire_rate": 1.0, "projectile_speed": 1.0, "aoe_radius": 0.0, "lead_bias": 0.0, "targets": []}},
+    {"id": 19, "name": "Hauler Airlifter", "visual_id": "visual.industrial.airlifter.prototype", "type": "INDUSTRIAL_AIRLIFTER", "faction": "INDUSTRIAL_EXPERIMENTAL", "cargo_transport": true, "material_cost": 0.0, "build_time_seconds": 0.0, "hp": 160.0, "speed": 90.0, "range": 0.0, "view_range": 300.0, "intel_range": 900, "research_prerequisites": [], "is_aircraft": true, "requires_runway": true, "payload": 20.0, "operational_range": 40000.0, "operational_energy": 1.0, "operational_material": 1.0, "max_airborne_time_seconds": 900.0, "energy_consumption_rate": 0.1, "material_consumption_rate": 0.0, "capabilities": [], "nato_symbol": "transport_aircraft", "strategic_icon": "cargo_aircraft", "weapon": {"damage": 0.0, "range": 0.0, "fire_rate": 1.0, "projectile_speed": 1.0, "aoe_radius": 0.0, "lead_bias": 0.0, "targets": []}},
+    {"id": 21, "name": "Seaspan Freighter", "visual_id": "visual.elite.cargo_ship.prototype", "type": "ELITE_CARGO_SHIP", "faction": "ELITE_PRECISION", "cargo_transport": true, "material_cost": 0.0, "build_time_seconds": 0.0, "hp": 500.0, "speed": 22.0, "range": 0.0, "view_range": 250.0, "intel_range": 600, "research_prerequisites": [], "is_naval": true, "operational_energy": 100000.0, "energy_consumption_rate": 0.001, "capabilities": [], "nato_symbol": "patrol_boat", "strategic_icon": "naval_surface", "weapon": {"damage": 0.0, "range": 0.0, "fire_rate": 1.0, "projectile_speed": 1.0, "aoe_radius": 0.0, "lead_bias": 0.0, "targets": []}},
+    {"id": 22, "name": "Dockhorse Freighter", "visual_id": "visual.mass.cargo_ship.prototype", "type": "MASS_CARGO_SHIP", "faction": "MASS_WARFARE", "cargo_transport": true, "material_cost": 0.0, "build_time_seconds": 0.0, "hp": 500.0, "speed": 22.0, "range": 0.0, "view_range": 250.0, "intel_range": 600, "research_prerequisites": [], "is_naval": true, "operational_energy": 100000.0, "energy_consumption_rate": 0.001, "capabilities": [], "nato_symbol": "patrol_boat", "strategic_icon": "naval_surface", "weapon": {"damage": 0.0, "range": 0.0, "fire_rate": 1.0, "projectile_speed": 1.0, "aoe_radius": 0.0, "lead_bias": 0.0, "targets": []}},
+    {"id": 23, "name": "Bulkhead Freighter", "visual_id": "visual.industrial.cargo_ship.prototype", "type": "INDUSTRIAL_CARGO_SHIP", "faction": "INDUSTRIAL_EXPERIMENTAL", "cargo_transport": true, "material_cost": 0.0, "build_time_seconds": 0.0, "hp": 500.0, "speed": 22.0, "range": 0.0, "view_range": 250.0, "intel_range": 600, "research_prerequisites": [], "is_naval": true, "operational_energy": 100000.0, "energy_consumption_rate": 0.001, "capabilities": [], "nato_symbol": "patrol_boat", "strategic_icon": "naval_surface", "weapon": {"damage": 0.0, "range": 0.0, "fire_rate": 1.0, "projectile_speed": 1.0, "aoe_radius": 0.0, "lead_bias": 0.0, "targets": []}},
+    {"id": 24, "name": "Pike Patrol Boat", "visual_id": "visual.mass.patrol_boat.prototype", "type": "MASS_PATROL_BOAT", "faction": "MASS_WARFARE", "material_cost": 250.0, "build_time_seconds": 15.0, "hp": 180.0, "speed": 12.0, "range": 90.0, "view_range": 160.0, "intel_range": 500, "is_naval": true, "operational_energy": 100000.0, "energy_consumption_rate": 0.001, "capabilities": ["RECON", "SEIZURE", "SECURE", "DEFEND"], "nato_symbol": "patrol_boat", "strategic_icon": "naval_surface", "weapon": {"damage": 36.0, "range": 90.0, "fire_rate": 1.5, "projectile_speed": 160.0, "aoe_radius": 2.0, "lead_bias": 0.5, "targets": ["ground"]}},
+    {"id": 25, "name": "Sentinel Patrol Boat", "visual_id": "visual.industrial.patrol_boat.prototype", "type": "INDUSTRIAL_PATROL_BOAT", "faction": "INDUSTRIAL_EXPERIMENTAL", "material_cost": 350.0, "build_time_seconds": 15.0, "hp": 260.0, "speed": 12.0, "range": 90.0, "view_range": 160.0, "intel_range": 500, "is_naval": true, "operational_energy": 100000.0, "energy_consumption_rate": 0.001, "capabilities": ["RECON", "SEIZURE", "SECURE", "DEFEND"], "nato_symbol": "patrol_boat", "strategic_icon": "naval_surface", "weapon": {"damage": 35.0, "range": 90.0, "fire_rate": 1.5, "projectile_speed": 160.0, "aoe_radius": 2.0, "lead_bias": 0.5, "targets": ["ground"]}}
   ],
   "faction_start_data": [
     {

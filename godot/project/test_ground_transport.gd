@@ -88,5 +88,9 @@ func _run() -> void:
 	check(view.ground_transport_views.is_empty(), "convoy visuals clear after unloading")
 	view.queue_free()
 	await process_frame
+	# The order and panel cues were stopped when the view left the tree, but the
+	# AudioServer only drops stopped playbacks on its mix thread. Give it time,
+	# or Godot reports the cue streams as still in use at exit.
+	await create_timer(0.25).timeout
 	print("GROUND_TRANSPORT checks=%d failures=%d" % [checks, failures])
 	quit(1 if failures else 0)

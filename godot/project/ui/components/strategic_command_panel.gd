@@ -12,8 +12,11 @@ extends Control
 ## footer with forces in flight and logistics requests.
 
 signal order_unit(unit_type: int, mode: int)
-signal order_paradrop(unit_type: int)
+## A paratroop drop: the unit and how many jump. The map click that picks the
+## drop zone follows, and the native rules decide whether it is allowed.
+signal order_paradrop(unit_type: int, count: int)
 signal request_fuel
+signal request_fuel_by_sea
 signal request_recon
 signal dismissed
 
@@ -32,6 +35,7 @@ const DESCRIPTION_HINT := "HOVER A CARD FOR THE UNIT'S ROLE AND WHAT IT ENGAGES"
 
 const TAB_GROUND := 0
 const TAB_AIR := 1
+const TAB_NAVAL := 2
 const WINDOW_WIDTH := 1120.0
 const CARD_WIDTH := 252.0
 ## The status line above the cards already explains a shared refusal at length.
@@ -40,9 +44,21 @@ const SHORT_REASONS := {
 	"INSUFFICIENT MATERIALS": "NOT ENOUGH MATERIALS",
 	"ROAD ROUTE UNAVAILABLE": "NEEDS ROAD ROUTE",
 	"RAIL ROUTE UNAVAILABLE": "NEEDS RAIL ROUTE",
+	"NO PORT HELD": "NEEDS A PORT",
+	"PORT NOT HELD": "NEEDS A PORT",
+	"SEA LANE CONTESTED": "SEA LANE BLOCKED",
+	"NO CARGO SHIP": "NO CARGO SHIP",
+	"PORT DESTROYED": "PORT DESTROYED",
+	"UNKNOWN WARSHIP": "UNAVAILABLE",
 }
 
+## Units per drop: the stick button cycles through these. The native limit is
+## Simulation::kMaxParadropStick (6).
+const STICK_SIZES := [1, 2, 4, 6]
+
 var _tab := TAB_GROUND
+var _stick_index := 0
+var _stick_button: Button
 var _ground_transport_mode := 0
 var _catalog: Array = []
 var _inbound: Array = []
@@ -124,11 +140,11 @@ func _ready() -> void:
 	_tabs = TabsComponent.new()
 	_tabs.name = "Tabs"
 	tab_row.add_child(_tabs)
-	_tabs.set_tabs(PackedStringArray(["GROUND", "AIR"]))
+	_tabs.set_tabs(PackedStringArray(["GROUND", "AIR", "NAVAL"]))
 	_tabs.tab_selected.connect(_select_tab)
 	_transport_tabs = TabsComponent.new()
 	_transport_tabs.name = "GroundTransportTabs"
-	_transport_tabs.set_tabs(PackedStringArray(["AIRLIFT", "ROAD", "RAIL"]))
+	_transport_tabs.set_tabs(PackedStringArray(["AIRLIFT", "ROAD", "RAIL", "SEA"]))
 	_transport_tabs.tab_selected.connect(_select_ground_transport)
 	column.add_child(_transport_tabs)
 	var status_box := HBoxContainer.new()
@@ -190,6 +206,14 @@ func _ready() -> void:
 	fuel_button.tooltip_text = "Fly in a fuel shipment on an unarmed cargo aircraft. It can be shot down.  [J]"
 	fuel_button.pressed.connect(request_fuel.emit)
 	footer.add_child(fuel_button)
+	var sea_fuel_button := ButtonComponent.new()
+	sea_fuel_button.name = "RequestFuelBySea"
+	sea_fuel_button.text = "SHIP FUEL BY SEA"
+	sea_fuel_button.variant = "secondary"
+	sea_fuel_button.icon_id = &"resource.fuel"
+	sea_fuel_button.tooltip_text = "Sail in a fuel shipment on an unarmed cargo ship to a port you hold. It needs no airfield and can be sunk."
+	sea_fuel_button.pressed.connect(request_fuel_by_sea.emit)
+	footer.add_child(sea_fuel_button)
 	var recon_button := ButtonComponent.new()
 	recon_button.name = "RequestRecon"
 	recon_button.text = "PLOT RECON FLIGHT"
@@ -198,12 +222,19 @@ func _ready() -> void:
 	recon_button.tooltip_text = "Plot a reconnaissance flight over the map."
 	recon_button.pressed.connect(request_recon.emit)
 	footer.add_child(recon_button)
+	_stick_button = ButtonComponent.new()
+	_stick_button.name = "StickSize"
+	_stick_button.variant = "secondary"
+	_stick_button.tooltip_text = "How many units jump in one paradrop. They share one aircraft, so shooting it down loses them all. Each is paid for."
+	_stick_button.pressed.connect(_cycle_stick)
+	footer.add_child(_stick_button)
+	_update_stick_text()
 	var help := Label.new()
 	help.name = "Help"
 	help.theme_type_variation = "CaptionLabel"
 	help.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	help.custom_minimum_size.x = WINDOW_WIDTH - Tokens.SPACE_XL * 2
-	help.text = "Forces arrive from outside the theater. AIRLIFT needs an airfield; ROAD and RAIL use their marked corridors and unload at separate terminals. RAIL is faster. PARADROP sends light units to ground you can see."
+	help.text = "Forces arrive from outside the theater. AIRLIFT needs an airfield; ROAD and RAIL use their marked corridors and unload at separate terminals. RAIL is faster. SEA needs a port you hold: a cargo ship sails in and can be sunk, and an enemy warship in the lane blocks it. PARADROP sends light units to ground you can see."
 	var help_margin := _margin(Tokens.SPACE_XL, 0, Tokens.SPACE_XL, Tokens.SPACE_LG)
 	root.add_child(help_margin)
 	help_margin.add_child(help)
@@ -224,6 +255,23 @@ func _notification(what: int) -> void:
 		# Fewer columns on a narrow window rather than overflowing the screen.
 		var usable := size.x - Tokens.SPACE_2XL * 2 - Tokens.SPACE_XL * 2
 		_cards.columns = clampi(int((usable + Tokens.SPACE_MD) / (CARD_WIDTH + Tokens.SPACE_MD)), 2, 4)
+
+
+func stick_size() -> int:
+	return int(STICK_SIZES[_stick_index])
+
+
+func _cycle_stick() -> void:
+	_stick_index = (_stick_index + 1) % STICK_SIZES.size()
+	_update_stick_text()
+	# The drop buttons show the price of a whole stick.
+	_fingerprint = ""
+	_refresh()
+
+
+func _update_stick_text() -> void:
+	if is_instance_valid(_stick_button):
+		_stick_button.text = "DROP STICK: %d" % stick_size()
 
 
 func _select_tab(index: int) -> void:
@@ -255,7 +303,8 @@ func tab_entries() -> Array:
 			continue
 		var is_air := bool(entry.get("is_aircraft", false))
 		var delivered := bool(entry.get("delivered", false))
-		if (_tab == TAB_AIR and is_air) or (_tab == TAB_GROUND and delivered and not is_air):
+		var is_warship := bool(entry.get("is_warship", false))
+		if (_tab == TAB_AIR and is_air) or (_tab == TAB_GROUND and delivered and not is_air) or (_tab == TAB_NAVAL and is_warship):
 			entries.append(entry)
 	entries.sort_custom(func(left, right): return int(left.get("type", -1)) < int(right.get("type", -1)))
 	return entries
@@ -297,12 +346,15 @@ func _refresh() -> void:
 	var lines: PackedStringArray = []
 	for force in _inbound:
 		var mode := int(force.get("route_mode", 0))
-		var drop := "PARADROP " if bool(force.get("airdrop", false)) else ("ROAD " if mode == 1 else "RAIL " if mode == 2 else "AIR ")
-		lines.append("%s%s  %.0f S" % [drop, String(_unit_names.get(int(force.type), "UNIT")).to_upper(), float(force.remaining_ms) / 1000.0])
+		var drop := "PARADROP " if bool(force.get("airdrop", false)) else ("ROAD " if mode == 1 else "RAIL " if mode == 2 else "SEA " if mode == 3 else "AIR ")
+		var unit_name := String(_unit_names.get(int(force.type), "UNIT")).to_upper()
+		if bool(force.get("airdrop", false)) and int(force.get("count", 1)) > 1:
+			unit_name = "%dX %s" % [int(force.get("count", 1)), unit_name]
+		lines.append("%s%s  %.0f S" % [drop, unit_name, float(force.remaining_ms) / 1000.0])
 	_inbound_label.text = "INBOUND  //  " + ("   ·   ".join(lines) if not lines.is_empty() else "NONE")
 	_inbound_label.add_theme_color_override("font_color", Tokens.ACCENT_STRONG if not lines.is_empty() else Tokens.TEXT_MUTED)
 	var entries := tab_entries()
-	var next := "%d|%d|%s" % [_tab, _ground_transport_mode, JSON.stringify(entries)]
+	var next := "%d|%d|%d|%s" % [_tab, _ground_transport_mode, stick_size(), JSON.stringify(entries)]
 	if next == _fingerprint:
 		return
 	_fingerprint = next
@@ -311,7 +363,7 @@ func _refresh() -> void:
 		child.queue_free()
 	if entries.is_empty():
 		var empty := Label.new()
-		empty.text = "NO FORCES AVAILABLE" if _tab == TAB_GROUND else "NO AIRCRAFT AVAILABLE"
+		empty.text = "NO FORCES AVAILABLE" if _tab == TAB_GROUND else "NO AIRCRAFT AVAILABLE" if _tab == TAB_AIR else "NO WARSHIPS AVAILABLE"
 		empty.theme_type_variation = "MutedLabel"
 		_cards.add_child(empty)
 		return
@@ -324,8 +376,11 @@ func _refresh() -> void:
 func _add_card(entry: Dictionary) -> void:
 	var available := bool(entry.get("available", false))
 	var reason := String(entry.get("reason", ""))
-	if _tab == TAB_GROUND and _ground_transport_mode > 0:
-		reason = String(entry.get("road_reason" if _ground_transport_mode == 1 else "rail_reason", ""))
+	if _tab == TAB_NAVAL:
+		reason = String(entry.get("naval_reason", ""))
+		available = reason.is_empty()
+	elif _tab == TAB_GROUND and _ground_transport_mode > 0:
+		reason = String(entry.get("road_reason" if _ground_transport_mode == 1 else "rail_reason" if _ground_transport_mode == 2 else "sea_reason", ""))
 		available = reason.is_empty()
 	var holder := VBoxContainer.new()
 	holder.name = "Card_%d" % int(entry.get("type", -1))
@@ -335,7 +390,7 @@ func _add_card(entry: Dictionary) -> void:
 	var card := CardComponent.new()
 	card.title = String(entry.get("name", "UNIT")).to_upper()
 	var is_air := bool(entry.get("is_aircraft", false))
-	card.subtitle = ("AIRCRAFT" if is_air else "GROUND FORCE") + ("  ·  PARADROP CAPABLE" if bool(entry.get("airdrop", false)) else "")
+	card.subtitle = ("AIRCRAFT" if is_air else "WARSHIP" if _tab == TAB_NAVAL else "GROUND FORCE") + ("  ·  PARADROP CAPABLE" if bool(entry.get("airdrop", false)) else "")
 	card.disabled = not available
 	card.accent = Tokens.ACCENT if available else Tokens.BORDER_STRONG
 	var symbol := StringName(String(entry.get("nato_symbol_id", "")))
@@ -357,7 +412,7 @@ func _add_card(entry: Dictionary) -> void:
 	cost.insufficient = reason == "INSUFFICIENT MATERIALS"
 	stats.add_child(cost)
 	var time := Label.new()
-	time.text = "%.0f S + %s" % [float(entry.get("build_seconds", 0.0)), "FLIGHT" if is_air or _ground_transport_mode == 0 else "ROAD" if _ground_transport_mode == 1 else "RAIL"]
+	time.text = "%.0f S + %s" % [float(entry.get("build_seconds", 0.0)), "AT PORT" if _tab == TAB_NAVAL else "FLIGHT" if is_air or _ground_transport_mode == 0 else "ROAD" if _ground_transport_mode == 1 else "RAIL" if _ground_transport_mode == 2 else "SEA"]
 	time.theme_type_variation = "MutedLabel"
 	time.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	time.tooltip_text = "Build time before the transport departs, then its flight time."
@@ -375,8 +430,8 @@ func _add_card(entry: Dictionary) -> void:
 	order.variant = "primary"
 	order.disabled = not available
 	order.custom_minimum_size.y = 40
-	order.tooltip_text = "Order %s for %d Materials via %s." % [String(entry.get("name", "unit")), int(float(entry.get("material", 0.0))), "air" if is_air or _ground_transport_mode == 0 else "road" if _ground_transport_mode == 1 else "rail"]
-	order.pressed.connect(func(): order_unit.emit(int(entry.get("type", -1)), 0 if is_air else _ground_transport_mode))
+	order.tooltip_text = "Order %s for %d Materials via %s." % [String(entry.get("name", "unit")), int(float(entry.get("material", 0.0))), "the nearest port you hold" if _tab == TAB_NAVAL else "air" if is_air or _ground_transport_mode == 0 else "road" if _ground_transport_mode == 1 else "rail" if _ground_transport_mode == 2 else "sea"]
+	order.pressed.connect(func(): order_unit.emit(int(entry.get("type", -1)), 4 if _tab == TAB_NAVAL else 0 if is_air else _ground_transport_mode))
 	order.mouse_entered.connect(show_description.bind(entry))
 	holder.add_child(order)
 	if bool(entry.get("airdrop", false)):
@@ -385,13 +440,14 @@ func _add_card(entry: Dictionary) -> void:
 		var drop_open := available or reason == "AIRFIELD REQUIRED FOR REINFORCEMENTS"
 		var paradrop := ButtonComponent.new()
 		paradrop.name = "Paradrop"
-		paradrop.text = "PARADROP"
+		var stick := stick_size()
+		paradrop.text = "PARADROP" if stick == 1 else "PARADROP x%d" % stick
 		paradrop.variant = "secondary"
 		paradrop.icon_id = &"logistics.airlift"
 		paradrop.disabled = not drop_open
 		paradrop.custom_minimum_size.y = 40
-		paradrop.tooltip_text = "Drop by parachute onto ground you can see. No airfield needed; then click the map."
-		paradrop.pressed.connect(func(): order_paradrop.emit(int(entry.get("type", -1))))
+		paradrop.tooltip_text = "Drop %d by parachute onto ground you can see, for %d Materials. No airfield needed; then click the map." % [stick, int(float(entry.get("material", 0.0))) * stick]
+		paradrop.pressed.connect(func(): order_paradrop.emit(int(entry.get("type", -1)), stick))
 		paradrop.mouse_entered.connect(show_description.bind(entry))
 		holder.add_child(paradrop)
 	else:

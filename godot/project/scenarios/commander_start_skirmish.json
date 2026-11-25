@@ -20,6 +20,14 @@
     {"faction_id": 0, "road": {"entry": [-12150, 4200], "terminal": [-12150, 650]}, "rail": {"entry": [-13000, 4200], "terminal": [-13000, 650]}},
     {"faction_id": 1, "road": {"entry": [-18000, -11000], "terminal": [-18000, -7400]}, "rail": {"entry": [-18500, -11000], "terminal": [-18500, -7400]}}
   ],
+  "ports": [
+    {"id": 1, "name": "NORTH HARBOR", "quay": [-5700, 11000], "berth": [-5300, 11000], "entry": [-5300, 17500], "owner": -1},
+    {"id": 2, "name": "CENTRAL QUAY", "quay": [-5700, -3500], "berth": [-5300, -3500], "entry": [-5300, -9500], "owner": -1},
+    {"id": 3, "name": "SOUTH HARBOR", "quay": [-5700, -12500], "berth": [-5300, -12500], "entry": [-5300, -18500], "owner": -1},
+    {"id": 4, "name": "EASTERN PIER", "quay": [-5700, 2500], "berth": [-5300, 2500], "entry": [-5300, 8500], "owner": 0},
+    {"id": 5, "name": "WEST QUAY", "quay": [-19350, -6500], "berth": [-19750, -6500], "entry": [-19750, -12500], "owner": 1}
+  ],
   "ground_vehicles_burn_fuel": true,
+  "power_grid": "res://scenarios/power_grid.json",
   "victory": {"type": "command_center_or_key_sites", "description": "Destroy the enemy command post, or hold two of three key sites for two minutes.", "key_sites": [900, 903, 913], "required": 2, "hold_seconds": 120}
 }

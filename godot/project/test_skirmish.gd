@@ -107,7 +107,7 @@ func _run() -> void:
 	check(not view.debug_panel.visible, "F8 closes the developer environment panel")
 	check(view.player_entity_ids.size() == 1 and view.ai_entity_ids.size() == 1 and view.player_entity_ids[0] == view._player_engineer_id(), "each side starts with a visible Field Engineer while production bases stay presentation-hidden")
 	check(view.prototype_visual_views.size() == 2, "each opening Field Engineer receives its registered imported model")
-	check(view.material_site_state.size() == 4 and view.fuel_depot_state.size() == 6 and view.resource_sites.get_child_count() == 8 and view.extension.call("economy_get_resource_node_count") == 10, "four material facilities and six fuel depots are registered, with the two enemy depots still undiscovered")
+	check(view.material_site_state.size() == 4 and view.fuel_depot_state.size() == 6 and view.resource_sites.get_child_count() == 0 and view.extension.call("economy_get_resource_node_count") == 10, "four material facilities and six fuel depots are registered, and fog of war hides every one until it is seen")
 	check(view.civilian_building_instance_count >= 20 and view.civilian_buildings.get_child_count() >= 20, "civilian dressing creates clustered building models")
 	var civilian_land_only := true
 	var first_civilian_position := Vector3.INF
@@ -180,7 +180,9 @@ func _run() -> void:
 	var stores_before: Array = view.extension.call("economy_get_tactical_resources", commander_id)
 	view.extension.call("update_simulation", 50.0)
 	var stores_after: Array = view.extension.call("economy_get_tactical_resources", commander_id)
-	check(stores_after == stores_before, "hidden production base has no automatic local resource income")
+	# Materials and fuel are the first four entries; power (the last three) comes
+	# from the scenario power grid, not from the production base.
+	check(stores_after.slice(0, 4) == stores_before.slice(0, 4), "hidden production base has no automatic local resource income")
 	var neutral_site: Dictionary = view.material_site_state[900]
 	var materials_before_claim := float(stores_after[0])
 	var camera_target_before_sites: Vector3 = view.camera_target
@@ -206,7 +208,7 @@ func _run() -> void:
 	view.camera_distance = camera_distance_before_sites
 	view.target_camera_distance = camera_distance_before_sites
 	view._update_camera(1.0)
-	check(bool(view.material_site_state[902].destroyed) and view.resource_sites.get_child_count() == 7 and view.extension.call("economy_get_resource_node_count") == 9, "commander can demolish an enemy material facility")
+	check(bool(view.material_site_state[902].destroyed) and view.resource_sites.get_node_or_null("MaterialFacility_902") == null and view.extension.call("economy_get_resource_node_count") == 9, "commander can demolish an enemy material facility")
 	# Forces are flown in, so with no airfield there is nowhere to land one.
 	var materials_before_order: Array = view.extension.call("economy_get_tactical_resources", commander_id)
 	view._order_commander_unit(0, Vector2.ZERO)
@@ -245,9 +247,11 @@ func _run() -> void:
 		if outline != null and outline.mesh is ArrayMesh and outline.mesh.get_surface_count() > 0:
 			player_outlines.append(outline)
 	check(player_outlines.size() == 3 and not visibility_hex.visible and not radar_hex.visible and not attack_hex.visible, "the player's units show flat blue visibility, purple radar, and red attack curved line ranges, merged into one outline each")
-	var requested_airfield_target := Vector2(-12500.0, 0.0)
+	# The command post stands on the spawn point (-12500, 0) and structures may not
+	# overlap it, so the airfield goes on the clear ground east of it.
+	var requested_airfield_target := Vector2(-11500.0, 0.0)
 	var airfield_target := requested_airfield_target
-	check(bool(view.extension.call("validate_structure_placement", 2, airfield_target.x, airfield_target.y)), "Airfield placement accepts the exact cursor location on the level starting pad")
+	check(bool(view.extension.call("validate_structure_placement", 2, airfield_target.x, airfield_target.y)), "Airfield placement accepts the exact cursor location on clear ground beside the command post")
 	view._set_selected(engineer_id, true)
 	view._order_commander_to_build(102, airfield_target)
 	var pending_airfield_order: Dictionary = view.pending_build_order
@@ -286,7 +290,9 @@ func _run() -> void:
 	var produced_position: PackedFloat32Array = view.extension.call("get_unit_position", view.player_entity_ids[1])
 	var delivery_site := Vector2(float(landing.get("x", 0.0)), float(landing.get("y", 0.0)))
 	check(produced_position.size() == 2 and Vector2(produced_position[0], produced_position[1]).distance_to(delivery_site) < 120.0, "the delivered unit stands at the landing site beside the airfield")
-	var beacon_target := Vector2(-15000.0, -6500.0)
+	# Clear ground west of the player's command post; the old target was the
+	# enemy spawn, where the enemy command post now blocks construction.
+	var beacon_target := Vector2(-13500.0, 0.0)
 	var beacon_catalog: Array = view.extension.call("get_build_catalog", 0)
 	var beacon_entry: Dictionary = beacon_catalog.filter(func(entry): return int(entry.get("type", -1)) == 103).front() if not beacon_catalog.filter(func(entry): return int(entry.get("type", -1)) == 103).is_empty() else {}
 	check(beacon_entry.get("name", "") == "FLOODLIGHT" and float(beacon_entry.get("material", 0.0)) > 0.0, "Floodlight is an authoritative Materials build option")
@@ -444,10 +450,19 @@ func _run() -> void:
 	view._update_hud()
 	check(is_equal_approx(float(enemy_depot.stock), 4000.0), "an enemy depot holds its stock until captured")
 	var fuel_before_capture := float(view.extension.call("economy_get_tactical_resources", commander_id)[2])
-	var capture_spawn: Vector2 = civilian_depot.position + Vector2(300.0, 0.0)
+	# Inside the tank's 150 m view range but well outside the 40 m capture radius.
+	var capture_spawn: Vector2 = civilian_depot.position + Vector2(120.0, 0.0)
 	var capture_unit: int = view.extension.call("create_unit_with_type", capture_spawn.x, capture_spawn.y, 0, 0)
 	check(capture_unit > 0, "depot capture fixture is created")
 	view._register_presented_unit(capture_unit, 0, 0, capture_spawn)
+	# Fog of war: the player can only order a capture on a depot it has seen,
+	# so the fixture unit spots it first. Sight is recomputed every few ticks.
+	for _sight_tick in range(40):
+		view.extension.call("update_simulation", 50.0)
+		view._refresh_site_intel()
+		if bool(civilian_depot.discovered):
+			break
+	check(bool(civilian_depot.discovered), "the capture unit spots the civilian depot before it is ordered there")
 	view._clear_selection()
 	view._set_selected(capture_unit, true)
 	aim_camera_at(view, civilian_depot.position)

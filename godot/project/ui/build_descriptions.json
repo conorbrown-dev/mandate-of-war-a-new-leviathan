@@ -16,8 +16,11 @@
     "ELITE_SCOUT_CAR": "Fast scout car with 650 m of sight. Engages ground targets only, out to 60 m. Paradrop capable: it can drop by parachute onto ground you can see, with no airfield.",
     "ELITE_RECON_PLANE": "Unarmed reconnaissance aircraft with 1,600 m of sight. Plot its flight on the map: it flies in from off the map, watches the area for 45 s, then leaves. Needs no airfield.",
     "MASS_SCOUT_BIKE": "Fast scout bike with 550 m of sight. Engages ground targets only, out to 60 m. Paradrop capable: it can drop by parachute onto ground you can see, with no airfield.",
+    "ELITE_STRATEGIC_RECON_PLANE": "Unarmed strategic reconnaissance aircraft with 2,400 m of sight. Flies at 24,000 m: fighters cannot reach it, only anti-air vehicles. Plot its flight on the map: it flies in from off the map, watches the area for 30 s, then leaves. Needs no airfield.",
     "MASS_RECON_PLANE": "Unarmed reconnaissance aircraft with 1,400 m of sight. Plot its flight on the map: it flies in from off the map, watches the area for 45 s, then leaves. Needs no airfield.",
-    "ELITE_PATROL_BOAT": "Naval patrol boat. Operates on water. Engages ground targets only, out to 90 m; it cannot fire at aircraft."
+    "ELITE_PATROL_BOAT": "Naval patrol boat. Operates on water. Engages ground targets only, out to 90 m; it cannot fire at aircraft.",
+    "MASS_PATROL_BOAT": "Cheap patrol boat that works the coast. Operates on water. Engages ground targets only, out to 90 m; it cannot fire at aircraft.",
+    "INDUSTRIAL_PATROL_BOAT": "Armoured patrol boat. Operates on water. Engages ground targets only, out to 90 m; it cannot fire at aircraft."
   },
   "structures": {
     "FORWARD_OUTPOST": "Forward observation post. Gives 400 m of sight from a 20 m vantage point. It has no weapons.",

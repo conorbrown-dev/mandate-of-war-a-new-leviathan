@@ -92,6 +92,7 @@ func _run() -> void:
 	var enemy_post: Node3D = view.command_post_views.get(1)
 	check(post != null and enemy_post != null, "both command post views exist")
 	_test_model(view, post, enemy_post)
+	_test_build_exclusion(view, post)
 	_test_selection(view, post)
 	_test_actions(view)
 	_test_orders(view, post)
@@ -101,6 +102,23 @@ func _run() -> void:
 	view.queue_free()
 	await process_frame
 	quit(1 if failures > 0 else 0)
+
+
+func _test_build_exclusion(view: Node, post: Node3D) -> void:
+	var site := _post_position(view, 0)
+	var outpost: Dictionary = view.extension.call("get_structure_site", 0, site.x, site.y)
+	var airfield: Dictionary = view.extension.call("get_structure_site", 2, site.x + 100.0, site.y)
+	check(bool(outpost.get("claimed", false)) and not bool(outpost.get("buildable", true)), "command post rejects an outpost ghost")
+	check(bool(airfield.get("claimed", false)) and not bool(airfield.get("buildable", true)), "command post rejects a partially overlapping airfield ghost")
+	check(view._resolve_build_target(100, site) == Vector2.INF, "post overlap cannot snap to a nearby valid build site")
+	view._set_selected(view._player_engineer_id(), true)
+	view._begin_build_placement(100)
+	_aim(view, site)
+	var before: int = view.ui_audio._next_voice
+	_click(view, _screen(view, post, Vector3.ZERO))
+	check(view.ui_audio._next_voice == (before + 1) % view.ui_audio.VOICE_LIMIT and view.pending_build_order.is_empty(),
+		"clicking the red command post ghost plays refusal without ordering a structure")
+	view._cancel_tactical_modes()
 
 
 func _test_model(view: Node, post: Node3D, enemy_post: Node3D) -> void:

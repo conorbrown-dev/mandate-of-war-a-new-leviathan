@@ -17,9 +17,11 @@ const EXPECTED_FUNCTION := {
 	"Pathfinder Scout Car": "recon", "Outrider Scout Bike": "recon",
 	"Kestrel T1 Fighter": "fighter",
 	"Harrierwing T1 VTOL": "attack_helicopter",
-	"Longsight Recon Plane": "recon_aircraft", "Farwatch Recon Plane": "recon_aircraft",
+	"Longsight Recon Plane": "recon_aircraft", "Farwatch Recon Plane": "recon_aircraft", "Highwatch Strategic Recon Plane": "recon_aircraft",
 	"Skybridge Airlifter": "cargo_aircraft", "Packhorse Airlifter": "cargo_aircraft", "Hauler Airlifter": "cargo_aircraft",
 	"Breakwater Patrol Boat": "naval_surface",
+	"Pike Patrol Boat": "naval_surface", "Sentinel Patrol Boat": "naval_surface",
+	"Seaspan Freighter": "naval_surface", "Dockhorse Freighter": "naval_surface", "Bulkhead Freighter": "naval_surface",
 }
 # Build-catalog symbol (UI icon registry id) that agrees with each map function.
 const CATALOG_SYMBOL := {

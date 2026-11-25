@@ -7,6 +7,7 @@
 #include <algorithm>
 #include <cmath>
 #include <map>
+#include <optional>
 #include <stdexcept>
 #include <string>
 #include <vector>
@@ -95,6 +96,11 @@ TEST(ai_styles_and_difficulties_load_from_data) {
     verify(doctrine("swarm").unit_preference == AIDoctrine::UnitPreference::CHEAPEST, "swarm buys cheap");
     verify(doctrine("tech").unit_preference == AIDoctrine::UnitPreference::STRONGEST, "tech buys the best");
     verify(doctrine("turtle").home_guard > 0 && doctrine("turtle").attack_only_known_enemy, "turtle guards home and waits");
+    verify(doctrine("swarm").paradrop_stick > doctrine("balanced").paradrop_stick &&
+           doctrine("balanced").paradrop_stick > doctrine("turtle").paradrop_stick, "swarm drops the biggest stick and turtle the smallest");
+    for (const auto& style : catalog.doctrines) {
+        verify(style.paradrop_stick >= 1 && style.paradrop_stick <= Simulation::kMaxParadropStick, "every style's stick is within the native limit");
+    }
 }
 
 TEST(the_built_in_ai_defaults_match_the_data_file) {
@@ -103,7 +109,8 @@ TEST(the_built_in_ai_defaults_match_the_data_file) {
     verify(built_in.key == file.key && built_in.first_wave == file.first_wave && built_in.wave_growth == file.wave_growth &&
            built_in.max_wave == file.max_wave && built_in.home_guard == file.home_guard &&
            built_in.defence_radius == file.defence_radius && built_in.unit_preference == file.unit_preference &&
-           built_in.scouts_wanted == file.scouts_wanted && built_in.first_recon_flight_seconds == file.first_recon_flight_seconds &&
+           built_in.scouts_wanted == file.scouts_wanted && built_in.paradrop_stick == file.paradrop_stick &&
+           built_in.first_recon_flight_seconds == file.first_recon_flight_seconds &&
            built_in.recon_flight_interval_seconds == file.recon_flight_interval_seconds && built_in.queue_depth == file.queue_depth &&
            built_in.save_for_recon_flight == file.save_for_recon_flight && built_in.attack_only_known_enemy == file.attack_only_known_enemy,
            "the built-in style is the file's default style");
@@ -288,6 +295,8 @@ TEST(the_ai_orders_a_paid_paradrop_only_onto_ground_it_currently_watches) {
                (command.extra & Simulation::PARADROP_ORDER_FLAG) != 0;
     });
     verify(order != commands.end(), "the AI uses the recorded player paradrop command");
+    // Copied now: the log grows as the simulation runs on, which invalidates `order`.
+    const uint32_t order_extra = order->extra;
     verify(front.simulation.can_see(FactionId::MASS_WARFARE, order->target_x, order->target_y),
            "the selected flank point is currently watched");
     verify(front.simulation.inbound_count(FactionId::MASS_WARFARE) == 1 &&
@@ -297,6 +306,54 @@ TEST(the_ai_orders_a_paid_paradrop_only_onto_ground_it_currently_watches) {
                }), "the paid scout is in the shared cargo delivery pipeline");
     front.run(20 * 5);
     verify(front.ai().paradrops_ordered() == 1, "contact does not trigger a drop every decision");
+    verify(std::any_of(front.simulation.inbound_forces().begin(), front.simulation.inbound_forces().end(),
+               [](const Simulation::InboundForce& force) { return force.airdrop && force.count == doctrine("balanced").paradrop_stick; }),
+           "the drop carries the stick its style asks for");
+    verify(((order_extra >> Simulation::PARADROP_COUNT_SHIFT) & 0xFFu) == static_cast<uint32_t>(doctrine("balanced").paradrop_stick),
+           "and the recorded order says so");
+}
+
+namespace {
+// The scene of the test above, parameterised: a visible contact far enough
+// forward, then `materials` in the bank. Returns the AI's first drop in the air.
+std::optional<Simulation::InboundForce> first_ai_drop(const char* style, float materials_per_scout_price) {
+    Front front(style);
+    front.simulation.set_forces_by_transport(true);
+    front.ai().configure_assault(-2000.0f, -1000.0f, 2000.0f, 4000.0f, 100, 4, 200);
+    front.fund(0.0f);
+    front.run(20);
+    const EntityId target = front.simulation.create_unit_with_type(0.0f, 750.0f, static_cast<UnitType>(13), FactionId::ELITE_PRECISION);
+    const EntityId spotter = front.simulation.create_unit_with_type(0.0f, 1050.0f, static_cast<UnitType>(15), FactionId::MASS_WARFARE);
+    front.simulation.stop_unit(target);
+    front.simulation.stop_unit(spotter);
+    front.run(20);
+    const float price = front.simulation.production_manager().get_unit_metal_cost(FactionId::MASS_WARFARE, static_cast<UnitType>(15));
+    front.fund(price * materials_per_scout_price);
+    front.run(40);
+    for (const auto& force : front.simulation.inbound_forces()) {
+        if (force.faction == FactionId::MASS_WARFARE && force.airdrop) return force;
+    }
+    return std::nullopt;
+}
+} // namespace
+
+TEST(each_ai_style_drops_the_stick_its_data_asks_for) {
+    for (const auto& style : get_ai_doctrines().doctrines) {
+        const auto drop = first_ai_drop(style.key.c_str(), 20.0f);
+        verify(drop.has_value(), "a funded AI with a forward contact orders a drop");
+        verify(drop->count == style.paradrop_stick, "carrying the stick its style names");
+    }
+}
+
+TEST(an_ai_short_of_materials_drops_a_smaller_stick_and_never_a_free_one) {
+    // Swarm wants four. With money for three and a half scouts, four is refused
+    // by the same rule a player meets, so it drops three.
+    const auto short_of_four = first_ai_drop("swarm", 3.5f);
+    verify(short_of_four.has_value() && short_of_four->count == 3, "money for three and a half scouts buys a stick of three");
+    const auto one_only = first_ai_drop("swarm", 1.2f);
+    verify(one_only.has_value() && one_only->count == 1, "money for one buys a stick of one");
+    const auto broke = first_ai_drop("swarm", 0.5f);
+    verify(!broke.has_value(), "and with money for none it drops nothing");
 }
 
 namespace {

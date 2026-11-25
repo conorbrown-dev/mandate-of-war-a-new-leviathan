@@ -22,6 +22,8 @@
 #include "structure_sites.hpp"
 #include "airfield_approach.hpp"
 #include "road_network.hpp"
+#include "power_grid.hpp"
+#include "ports.hpp"
 #include "off_road.hpp"
 #include "../ecs/components/off_road.hpp"
 #include "../ecs/components/factions.hpp"
@@ -202,7 +204,9 @@ public:
     int render_get_instance_count() const { return renderer_.get_instance_count(); }
 
     size_t entity_count() const { return entity_manager_.entity_count(); }
-    std::vector<EntityId> get_entity_list() const { return entity_manager_.get_entities(); }
+    // Every unit and structure. A port's facility entity is not one: it exists
+    // only so weapons can shoot at a held port.
+    std::vector<EntityId> get_entity_list() const;
     float last_tick_ms() const { return last_tick_ms_; }
 
     bool get_unit_position(EntityId entity, float& x, float& y);
@@ -288,12 +292,16 @@ public:
     bool is_land_position(float x, float y) const;
     void block_civilian_area(float x, float y, float radius);
     bool validate_structure_placement(uint8_t structure_type, float x, float y) const;
-    StructureSite assess_structure_site(uint8_t structure_type, float x, float y) const;
+    bool structure_site_claimed(uint8_t structure_type, float x, float y) const;
+    StructureSite assess_structure_site(uint8_t structure_type, float x, float y, bool check_command_post = true, bool check_site_claims = true) const;
     // Queues the structure, with an earthworks job first when the ground needs it.
     bool queue_structure(EntityId line, FactionId faction, uint8_t structure_type, float x, float y);
     bool validate_engineer_placement(float x, float y) const;
     bool validate_road_placement(float start_x, float start_y, float end_x, float end_y) const;
     bool queue_road(EntityId engineer, FactionId owner, float start_x, float start_y, float end_x, float end_y);
+    // A finished public road, drawn and driven on from the start. It must lie
+    // wholly on walkable land and be 50 m to 20 km long.
+    bool add_public_road(float start_x, float start_y, float end_x, float end_y);
     const RoadNetwork& road_network() const { return road_network_; }
     void enable_theater_water_rules(bool enabled = true) { theater_water_rules_enabled_ = enabled; }
 
@@ -355,6 +363,10 @@ public:
         float drop_y = 0.0f;
         // Orders the drop count from, so each paratrooper lands on its own spot.
         uint32_t drop_sequence = 0;
+        // A stick jumps together from one aircraft: units still to land, and
+        // how many are already down (always 1 and 0 for anything but a drop).
+        int count = 1;
+        int dropped = 0;
         // A drop flies in on a cargo aircraft once its unit is ready. It is
         // released over the zone; if the aircraft is shot down first it is lost.
         uint32_t launch_tick = 0;
@@ -364,8 +376,12 @@ public:
         // ground corridors and unload at their respective terminal.
         uint8_t route_mode = 0;
         uint32_t order_id = 0;
+        // SEA: the port the cargo ship is bound for.
+        uint32_t port_id = 0;
+        // A warship ordered at a port: it is launched at the berth, not shipped.
+        bool naval_build = false;
     };
-    enum class GroundTransport : uint8_t { AIR = 0, ROAD = 1, RAIL = 2 };
+    enum class GroundTransport : uint8_t { AIR = 0, ROAD = 1, RAIL = 2, SEA = 3 };
     struct TransportRoute {
         bool enabled = false;
         float entry_x = 0.0f, entry_y = 0.0f;
@@ -408,10 +424,15 @@ public:
     static constexpr uint32_t PARADROP_ORDER_FLAG = 0x20000000u;
     static constexpr uint32_t ROAD_DELIVERY_ORDER_FLAG = 0x08000000u;
     static constexpr uint32_t RAIL_DELIVERY_ORDER_FLAG = 0x04000000u;
+    // A sea delivery: this bit, the port id (0 for the best one) in bits 8 to 15
+    // and the unit type in the low byte.
+    static constexpr uint32_t SEA_DELIVERY_ORDER_FLAG = 0x02000000u;
+    // A warship ordered at a port: this bit and the unit type in the low byte.
+    static constexpr uint32_t NAVAL_ORDER_FLAG = 0x01000000u;
     // A BUILD from the command post with this bit asks for a fuel shipment,
     // so a shipment order is recorded and plays back like any other order.
     static constexpr uint32_t FUEL_SHIPMENT_ORDER_FLAG = 0x10000000u;
-    size_t issue_fuel_shipment_command(FactionId faction);
+    size_t issue_fuel_shipment_command(FactionId faction, bool by_sea = false);
     static constexpr float kParachuteSeconds = 12.0f;
     // The cargo aircraft releases the drop when it is this close to the zone.
     static constexpr float kParadropReleaseRadius = 100.0f;
@@ -420,13 +441,56 @@ public:
     // The side's unarmed cargo aircraft, which flies shipments and drops in.
     std::optional<UnitType> cargo_aircraft_type(FactionId faction) const;
     static constexpr float kParadropScatterMeters = 150.0f;
-    // Empty when the faction can drop this unit at this point now, else why not.
-    std::string paradrop_refusal(FactionId faction, UnitType type, float x, float y) const;
-    bool order_paradrop(FactionId faction, UnitType type, float x, float y);
-    size_t issue_paradrop_command(FactionId faction, UnitType type, float x, float y);
+    // A stick is up to this many of one unit in a single sortie. Each pays the
+    // catalog price and holds a unit-cap slot from the order; the one aircraft
+    // carries them all, so shooting it down loses the whole stick.
+    static constexpr int kMaxParadropStick = 6;
+    // The stick size rides in bits 8 to 15 of a paradrop order, the unit type
+    // in the low byte. Zero there means one unit, as orders recorded before
+    // sticks existed read.
+    static constexpr uint32_t PARADROP_COUNT_SHIFT = 8;
+    // Empty when the faction can drop `count` of this unit at this point now, else why not.
+    std::string paradrop_refusal(FactionId faction, UnitType type, float x, float y, int count = 1) const;
+    bool order_paradrop(FactionId faction, UnitType type, float x, float y, int count = 1);
+    size_t issue_paradrop_command(FactionId faction, UnitType type, float x, float y, int count = 1);
     // Seconds from the order until the unit is on the ground at this point.
     float paradrop_seconds(UnitType type, float x) const;
+    // Sorties and shipments in the air: what the in-air limit counts.
     int inbound_count(FactionId faction) const;
+    // Units in the air: a stick of three counts three. What the unit cap counts.
+    int inbound_unit_count(FactionId faction) const;
+
+    // Ports and the sea lanes. A side ships in only through a port it holds;
+    // an armed enemy ship it can see in the lane blocks the order. Cargo ships
+    // are real unarmed vessels: shoot one down and its load is lost.
+    bool add_port(uint32_t id, float x, float y, float berth_x, float berth_y, float entry_x, float entry_y, int owner);
+    PortNetwork& port_network() { return port_network_; }
+    const PortNetwork& port_network() const { return port_network_; }
+    std::optional<UnitType> cargo_ship_type(FactionId faction) const;
+    // The held port with a clear lane nearest the side's command post, or 0.
+    uint32_t choose_port(FactionId faction) const;
+    bool sea_lane_contested(FactionId faction, uint32_t port_id) const;
+    // The facility to attack for the enemy port whose quay is nearest (x, y) and
+    // within `radius`, if this side can see it now and it is still standing.
+    // INVALID_ENTITY otherwise. The result is an ordinary ATTACK target.
+    EntityId port_attack_target(FactionId faction, float x, float y, float radius = 220.0f) const;
+    // Empty when the side can ship this unit in now (port 0 picks the best port).
+    std::string sea_delivery_refusal(FactionId faction, UnitType type, uint32_t port_id) const;
+    bool order_sea_delivery(FactionId faction, UnitType type, uint32_t port_id);
+    size_t issue_sea_delivery_command(FactionId faction, UnitType type, uint32_t port_id);
+    // Warships are not shipped in: they are built at a port the side holds and
+    // launched at its berth after their build time.
+    bool is_warship(UnitType type) const;
+    std::string naval_order_refusal(FactionId faction, UnitType type) const;
+    bool order_naval_unit(FactionId faction, UnitType type);
+    size_t issue_naval_command(FactionId faction, UnitType type);
+    // Cargo ships shot down on their way, since the match began.
+    int ships_lost(FactionId faction) const { return ships_lost_[static_cast<size_t>(faction)]; }
+    static constexpr float kSeaLaneClearance = 700.0f;
+    // A cargo ship carries up to this many orders for the same port. Orders
+    // placed within kConvoyWindowSeconds of its departure share its hold.
+    static constexpr int kShipCapacity = 4;
+    static constexpr float kConvoyWindowSeconds = 12.0f;
     const std::vector<InboundForce>& inbound_forces() const { return inbound_forces_; }
 
     // Arms the win condition: a side loses when its command post is destroyed.
@@ -462,6 +526,8 @@ public:
     std::vector<EntityId> seen_enemies(FactionId faction) const;
 
     bool request_fuel_shipment(FactionId player);
+    // The same load by cargo ship to a port the side holds (needs no airfield).
+    bool request_sea_fuel_shipment(FactionId player);
     const FuelShipment* fuel_shipment(FactionId faction) const;
     const std::string& fuel_supply_reason(FactionId faction) const;
     bool assign_fuel_depot(EntityId depot, FactionId holder);
@@ -470,6 +536,32 @@ public:
     std::vector<FuelDepotStatus> fuel_depots() const;
     // Every Materials site, its holder and whether a unit is on its way to take it.
     std::vector<MaterialSiteStatus> material_sites() const;
+
+    // The power grid. A scenario adds its stations, loads and lines before the
+    // match; from then on each side's Power state is what the grid delivers.
+    PowerGrid& power_grid() { return power_grid_; }
+    const PowerGrid& power_grid() const { return power_grid_; }
+    // Work on the grid is a HARVEST command with this bit, the kind of work
+    // and the station or line id in `extra`, so it is recorded and plays back.
+    // The unit drives to the target and acts when it arrives.
+    static constexpr uint32_t POWER_ORDER_FLAG = 0x40000000u;
+    enum class PowerOrder : uint8_t { CAPTURE_STATION = 1, CAPTURE_LINE = 2, SEVER_LINE = 3, REPAIR_LINE = 4 };
+    static constexpr uint32_t power_order_extra(PowerOrder order, uint32_t target) {
+        return POWER_ORDER_FLAG | (static_cast<uint32_t>(order) << 16) | (target & 0xFFFFu);
+    }
+    // Empty when the unit can be sent to do this now, else why not.
+    std::string power_order_refusal(EntityId unit, PowerOrder order, uint32_t target) const;
+    size_t issue_power_command(EntityId unit, FactionId faction, PowerOrder order, uint32_t target);
+    struct PowerTask {
+        EntityId unit = INVALID_ENTITY;
+        PowerOrder order = PowerOrder::CAPTURE_LINE;
+        uint32_t target = 0;
+        float x = 0.0f;
+        float y = 0.0f;
+    };
+    const std::vector<PowerTask>& power_tasks() const { return power_tasks_; }
+    // The last thing that went wrong with a side's grid work, for its HUD.
+    const std::string& power_notice(FactionId faction) const { return power_notices_[static_cast<size_t>(faction)]; }
 
 private:
     void record_combat_event(CombatEventKind kind, EntityId entity, float vx = 0, float vy = 0);
@@ -526,6 +618,7 @@ private:
         float x, y, half_x, half_y, pad_height;
     };
     bool site_claimed(float x, float y, float half_x, float half_y) const;
+    bool command_post_site_claimed(float x, float y, float half_x, float half_y) const;
     std::vector<SiteClaim> site_claims_;
     void refresh_contact_grid();
     bool near_enemy(float x, float y, FactionId faction) const;
@@ -553,6 +646,7 @@ private:
         int leg = 0;
     };
     std::map<EntityId, ReconFlight> recon_flights_;
+    bool retask_recon_flight(const InputCommand& cmd);
     // Manufactured runway aircraft ferrying in to their side's airfield.
     // They roll out on the main runway, then taxi to distinct apron slots.
     // `sortie` marks a plane heading home on low fuel; with no airfield left it
@@ -611,6 +705,12 @@ private:
     std::vector<FuelShipment> fuel_shipments_;
     std::array<std::string, FACTION_COUNT> fuel_supply_reasons_{};
     RoadNetwork road_network_;
+    PowerGrid power_grid_;
+    std::vector<PowerTask> power_tasks_;
+    std::array<std::string, FACTION_COUNT> power_notices_{};
+    bool power_work_point(EntityId unit, PowerOrder order, uint32_t target, float& x, float& y) const;
+    void order_power_work(EntityId unit, uint32_t extra);
+    void update_power_grid(float delta_ms);
     TerritorialControlManager territorial_control_;
      ControlPointBattle control_point_battle_;
      ReinforcementDelivery reinforcement_delivery_;
@@ -623,6 +723,13 @@ private:
      std::array<std::array<TransportRoute, 2>, FACTION_COUNT> transport_routes_{};
      uint32_t next_transport_order_id_ = 1;
      uint32_t paradrop_sequence_ = 0;
+    PortNetwork port_network_;
+    std::array<int, FACTION_COUNT> ships_lost_{};
+    EntityId launch_cargo_ship(FactionId faction, const Port& port);
+    bool unload_at_port(const InboundForce& force, const Port& port);
+    void update_ports(float delta_ms);
+    void sync_port_facilities();
+    void repair_ports(float delta_ms);
      std::array<int, FACTION_COUNT> paradrops_lost_{};
      // Puts a side's cargo aircraft in the air at the west map edge, level with
      // its destination, flying straight there. INVALID_ENTITY if it cannot.

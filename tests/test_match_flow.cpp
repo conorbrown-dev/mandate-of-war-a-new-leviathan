@@ -287,10 +287,11 @@ TEST(a_recon_flight_goes_straight_to_its_point_with_no_airfield) {
     verify(plane != INVALID_ENTITY, "the plane arrives without an airfield");
     verify(watched, "the plane watches the point it was sent to");
 
-    const float x = simulation.get_unit_x(plane);
-    verify(simulation.issue_commands({plane}, FactionId::ELITE_PRECISION, CommandType::MOVE, x, -9000.0f) == 0, "a new order is refused");
+    // A move order re-plots the flight (tests/test_air_altitude.cpp); any other
+    // order is refused, so the plane cannot be stopped or kept on the map.
+    verify(simulation.issue_stop_commands({plane}, FactionId::ELITE_PRECISION) == 0, "a stop order is refused");
     front.run(40);
-    verify(simulation.get_unit_y(plane) > 0.0f, "a flight plan cannot be changed once it is set");
+    verify(simulation.get_unit_y(plane) > 0.0f, "the flight plan carries on");
 
     bool left = false;
     for (int tick = 0; tick < 20 * 400 && !left; ++tick) {
@@ -916,6 +917,109 @@ TEST(a_paradrop_obeys_the_unit_cap_like_any_delivery) {
            "a second is refused while the first is in the air");
 }
 
+TEST(a_paradrop_stick_is_validated_priced_per_unit_and_holds_a_cap_slot_each) {
+    DropFront drop;
+    auto& simulation = drop.simulation;
+    const FactionId elite = FactionId::ELITE_PRECISION;
+    const float x = DropFront::kDropX;
+    const float y = DropFront::kDropY;
+    verify(simulation.paradrop_refusal(elite, kScoutCar, x, y, 0) == "BAD STICK SIZE", "an empty stick is refused");
+    verify(simulation.paradrop_refusal(elite, kScoutCar, x, y, Simulation::kMaxParadropStick + 1) == "BAD STICK SIZE", "an oversized stick is refused");
+    verify(simulation.paradrop_refusal(elite, kScoutCar, x, y, Simulation::kMaxParadropStick).empty(), "a full stick is allowed");
+    verify(simulation.issue_paradrop_command(elite, kScoutCar, x, y, 0) == 0 &&
+           simulation.issue_paradrop_command(elite, kScoutCar, x, y, Simulation::kMaxParadropStick + 1) == 0, "and an absurd stick never becomes an order");
+    const float price = simulation.production_manager().get_unit_metal_cost(elite, kScoutCar);
+
+    // The price is per unit, and a stick the side cannot pay for is refused whole.
+    simulation.set_reinforcement_resources(elite, price * 2.5f, 3000.0f);
+    verify(simulation.paradrop_refusal(elite, kScoutCar, x, y, 3) == "INSUFFICIENT MATERIALS", "three units cost more than two and a half prices");
+    const float before = drop.materials();
+    verify(simulation.order_paradrop(elite, kScoutCar, x, y, 2), "two units can be paid for");
+    verify(std::abs(before - drop.materials() - 2.0f * price) < 0.5f, "and cost two prices");
+
+    // One slot under the unit cap for every unit in the air, not one per aircraft.
+    simulation.set_reinforcement_resources(elite, 5000.0f, 3000.0f);
+    simulation.set_unit_cap_per_player(simulation.unit_count(elite) + 5);
+    verify(simulation.inbound_count(elite) == 1 && simulation.inbound_unit_count(elite) == 2, "one sortie carries two units");
+    verify(simulation.paradrop_refusal(elite, kScoutCar, x, y, 4) == "UNIT CAP REACHED", "four more would pass the cap");
+    verify(simulation.paradrop_refusal(elite, kScoutCar, x, y, 3).empty(), "three more fit exactly");
+    verify(simulation.order_paradrop(elite, kScoutCar, x, y, 3), "and are accepted");
+    verify(simulation.paradrop_refusal(elite, kScoutCar, x, y, 1) == "UNIT CAP REACHED", "then the cap is full");
+}
+
+TEST(a_paradrop_stick_jumps_together_from_one_aircraft_and_lands_spread_out) {
+    DropFront drop;
+    auto& simulation = drop.simulation;
+    const FactionId elite = FactionId::ELITE_PRECISION;
+    const int units_before = simulation.unit_count(elite);
+    const float before = drop.materials();
+    const float price = simulation.production_manager().get_unit_metal_cost(elite, kScoutCar);
+    verify(simulation.issue_paradrop_command(elite, kScoutCar, DropFront::kDropX, DropFront::kDropY, 4) == 1, "a stick of four is one recorded order");
+    simulation.update(50.0f);
+    const auto& commands = simulation.command_log();
+    verify(std::count_if(commands.begin(), commands.end(), [](const InputCommand& command) {
+        return (command.extra & Simulation::PARADROP_ORDER_FLAG) != 0 &&
+               ((command.extra >> Simulation::PARADROP_COUNT_SHIFT) & 0xFFu) == 4u && (command.extra & 0xFFu) == static_cast<uint32_t>(kScoutCar);
+    }) == 1, "that records the stick size beside the unit type");
+    verify(simulation.inbound_count(elite) == 1 && simulation.inbound_unit_count(elite) == 4, "one sortie is in the air carrying four");
+    verify(std::abs(before - drop.materials() - 4.0f * price) < 0.5f, "four units were paid for, once");
+    const auto cargo_aircraft = [&simulation]() {
+        int count = 0;
+        for (const EntityId unit : simulation.get_entity_list()) {
+            const auto* data = simulation.component_manager().get_component<UnitData>(unit);
+            const auto prototype = data ? get_unit_prototypes().find(static_cast<UnitType>(data->unit_type)) : get_unit_prototypes().end();
+            count += prototype != get_unit_prototypes().end() && prototype->second.cargo_transport ? 1 : 0;
+        }
+        return count;
+    };
+    const int build_ticks = static_cast<int>(std::ceil(get_unit_prototypes().at(kScoutCar).build_time_seconds * 20.0f));
+    for (int tick = 1; tick < build_ticks + 2; ++tick) simulation.update(50.0f);
+    verify(cargo_aircraft() == 1, "the whole stick takes off on a single cargo aircraft");
+    for (int tick = 0; tick < 20 * 400 && !simulation.inbound_forces().empty(); ++tick) simulation.update(50.0f);
+    for (int tick = 0; tick < 20; ++tick) simulation.update(50.0f);
+    const auto landed = drop.scout_cars();
+    verify(landed.size() == 4 && simulation.inbound_forces().empty(), "all four land and the sortie ends");
+    verify(simulation.unit_count(elite) == units_before + 4, "and count as the player's units");
+    verify(std::abs(before - drop.materials() - 4.0f * price) < 0.5f, "with no second charge");
+    float nearest_pair = std::numeric_limits<float>::max();
+    for (size_t first = 0; first < landed.size(); ++first) {
+        const float x = simulation.get_unit_x(landed[first]);
+        const float y = simulation.get_unit_y(landed[first]);
+        verify(std::hypot(x - DropFront::kDropX, y - DropFront::kDropY) <= Simulation::kParadropScatterMeters + 1.0f, "each lands around the drop point");
+        for (size_t second = first + 1; second < landed.size(); ++second) {
+            nearest_pair = std::min(nearest_pair, std::hypot(x - simulation.get_unit_x(landed[second]), y - simulation.get_unit_y(landed[second])));
+        }
+    }
+    verify(nearest_pair > 10.0f, "spread out, not stacked on one spot");
+}
+
+TEST(a_paradrop_stick_shot_down_is_lost_whole) {
+    DropFront drop;
+    auto& simulation = drop.simulation;
+    for (int index = 0; index < 8; ++index) {
+        const EntityId sam = static_cast<EntityId>(simulation.create_unit_with_type(
+            -9000.0f + static_cast<float>(index) * 60.0f, DropFront::kDropY + 30.0f, UnitType::MASS_ANTI_AIR, FactionId::MASS_WARFARE));
+        simulation.stop_unit(sam);
+    }
+    verify(simulation.order_paradrop(FactionId::ELITE_PRECISION, kScoutCar, DropFront::kDropX, DropFront::kDropY, 3), "a stick of three is ordered");
+    for (int tick = 0; tick < 20 * 300 && !simulation.inbound_forces().empty(); ++tick) simulation.update(50.0f);
+    verify(drop.scout_cars().empty(), "shooting the one aircraft down lands nobody");
+    verify(simulation.paradrops_lost(FactionId::ELITE_PRECISION) == 1, "and counts as one lost sortie");
+    verify(simulation.inbound_unit_count(FactionId::ELITE_PRECISION) == 0, "the three cap slots are free again");
+}
+
+TEST(a_paradrop_order_recorded_without_a_stick_size_still_drops_one_unit) {
+    DropFront drop;
+    auto& simulation = drop.simulation;
+    const FactionId elite = FactionId::ELITE_PRECISION;
+    const EntityId post = simulation.production_manager().faction_line(elite);
+    // The order as it was recorded before sticks existed: flag and unit type only.
+    verify(simulation.issue_commands({post}, elite, CommandType::BUILD, DropFront::kDropX, DropFront::kDropY,
+               Simulation::PARADROP_ORDER_FLAG | static_cast<uint32_t>(kScoutCar)) == 1, "the old form is still accepted");
+    simulation.update(50.0f);
+    verify(simulation.inbound_count(elite) == 1 && simulation.inbound_unit_count(elite) == 1, "and means a single unit");
+}
+
 namespace {
 // A tank on open ground with a known fuel store, for the ground fuel burn.
 struct FuelFront {
@@ -1219,4 +1323,85 @@ TEST(radar_respects_terrain_sensor_loss_and_reset) {
     sim.reset();
     verify(sim.radar_contacts(FactionId::ELITE_PRECISION).empty(), "reset clears contacts");
     (void)enemy;
+}
+
+TEST(a_wave_with_no_contact_searches_in_groups_on_different_ground) {
+    MatchFront front;
+    front.ai().configure_assault(-6000.0f, -6000.0f, 6000.0f, 6000.0f, 3, 2, 12);
+    std::vector<EntityId> wave;
+    for (int unit = 0; unit < 6; ++unit) wave.push_back(front.spawn_enemy(static_cast<float>(unit) * 20.0f));
+    front.run(20 * 60);
+    verify(front.ai().waves_launched() >= 1, "the wave leaves");
+    std::vector<std::pair<float, float>> targets;
+    for (const EntityId unit : wave) {
+        const auto* path = &front.simulation;
+        verify(path->has_move_target(unit), "every wave unit is searching");
+        targets.emplace_back(front.simulation.get_unit_x(unit), front.simulation.get_unit_y(unit));
+    }
+    float widest = 0.0f;
+    for (const auto& a : targets) for (const auto& b : targets) widest = std::max(widest, std::hypot(a.first - b.first, a.second - b.second));
+    verify(widest > 400.0f, "the wave's groups head for different sectors rather than one point");
+}
+
+TEST(a_match_runs_and_the_ai_searches_at_every_supported_map_size) {
+    // The Broken Strait layout, scaled from its authored 40 km to each size.
+    for (const float size : {5000.0f, 10000.0f, 20000.0f, 40000.0f, 80000.0f}) {
+        const float scale = size / 40000.0f;
+        Simulation simulation;
+        simulation.configure_world_size(size, size);
+        simulation.start();
+        const EntityId player_post = simulation.create_faction_base(FactionId::ELITE_PRECISION, -12500.0f * scale, 0.0f);
+        const EntityId enemy_post = simulation.create_faction_base(FactionId::MASS_WARFARE, -15000.0f * scale, -6500.0f * scale);
+        verify(player_post != INVALID_ENTITY && enemy_post != INVALID_ENTITY, "both command posts fit on the map");
+        simulation.begin_match(player_post, enemy_post);
+        simulation.ai_manager().configure_assault(-19500.0f * scale, -19000.0f * scale, -5500.0f * scale, 19000.0f * scale, 3, 2, 8);
+        std::vector<EntityId> wave;
+        for (int unit = 0; unit < 4; ++unit) {
+            const EntityId id = simulation.create_unit_with_type(-15000.0f * scale + unit * 15.0f, -6500.0f * scale + 80.0f,
+                UnitType::MASS_SWARM_TANK, FactionId::MASS_WARFARE);
+            verify(id != INVALID_ENTITY, "a unit can be placed at this size");
+            simulation.stop_unit(id);
+            wave.push_back(id);
+        }
+        for (int tick = 0; tick < 20 * 90; ++tick) simulation.update(50.0f);
+        verify(simulation.ai_manager().waves_launched() >= 1, "the AI launches its wave");
+        bool moved = false;
+        for (const EntityId id : wave) {
+            if (simulation.get_unit_is_dead(id)) continue;
+            const float x = simulation.get_unit_x(id), y = simulation.get_unit_y(id);
+            verify(std::abs(x) <= size * 0.5f && std::abs(y) <= size * 0.5f, "the wave stays on the map");
+            moved = moved || std::hypot(x - (-15000.0f * scale), y - (-6500.0f * scale)) > 30.0f;
+        }
+        verify(moved, "the wave leaves home to search");
+        simulation.stop();
+    }
+}
+
+TEST(a_public_road_is_real_it_is_kept_on_land_and_speeds_units_up) {
+    const auto travel_ticks = [](bool with_road) {
+        Simulation simulation;
+        simulation.configure_world_size(40000.0f, 40000.0f);
+        simulation.configure_theater_landmasses(-12500.0f, 0.0f, 14000.0f, 38000.0f, 12500.0f, 0.0f, 14000.0f, 38000.0f);
+        simulation.start();
+        if (with_road) {
+            // Over open sea the road is refused; on the landmass it is accepted.
+            verify(!simulation.add_public_road(-2000.0f, 0.0f, 2000.0f, 0.0f), "a road over open sea is refused");
+            verify(simulation.add_public_road(-12500.0f, -3000.0f, -12500.0f, 3000.0f), "a road on land is accepted");
+            verify(!simulation.add_public_road(-12500.0f, 0.0f, -12500.0f, 10.0f), "a stub of a road is refused");
+            verify(simulation.road_network().segments().size() == 1 && simulation.road_network().segments().front().completed, "the road is finished and recorded");
+        }
+        const EntityId tank = simulation.create_unit_with_type(-12500.0f, -3000.0f, UnitType::ELITE_MAIN_BATTLE_TANK, FactionId::ELITE_PRECISION);
+        simulation.issue_commands({tank}, FactionId::ELITE_PRECISION, CommandType::MOVE, -12500.0f, 3000.0f);
+        int ticks = 0;
+        while (ticks < 20 * 60 * 30 && std::hypot(simulation.get_unit_x(tank) + 12500.0f, simulation.get_unit_y(tank) - 3000.0f) > 40.0f) {
+            simulation.update(50.0f);
+            ++ticks;
+        }
+        simulation.stop();
+        return ticks;
+    };
+    const int off_road = travel_ticks(false);
+    const int on_road = travel_ticks(true);
+    verify(off_road < 20 * 60 * 30 && on_road < 20 * 60 * 30, "the tank completes the 6 km drive both ways");
+    verify(on_road < off_road * 0.85, "the same drive is clearly quicker on a road");
 }

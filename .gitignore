@@ -55,6 +55,8 @@ validation/artifacts/
 # historical import evidence and are not removed by this change.
 godot/project/.godot/
 *.import
+# Read as raw bytes by height_map.gd, so it is exported as is, not imported.
+!godot/project/scenarios/terrain_masks.png.import
 __pycache__/
 *.py[cod]
 

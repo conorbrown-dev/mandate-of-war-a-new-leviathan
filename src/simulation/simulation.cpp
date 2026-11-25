@@ -83,7 +83,12 @@ void Simulation::start() {
     next_transport_order_id_ = 1;
     paradrop_sequence_ = 0;
     paradrops_lost_.fill(0);
+    ships_lost_.fill(0);
+    port_network_.reset();
     road_network_.reset();
+    power_grid_.reset();
+    power_tasks_.clear();
+    power_notices_.fill({});
     site_claims_.clear();
     fuel_captures_.clear();
     site_captures_.clear();
@@ -608,6 +613,12 @@ int Simulation::inbound_count(FactionId faction) const {
     return count;
 }
 
+int Simulation::inbound_unit_count(FactionId faction) const {
+    int count = 0;
+    for (const auto& force : inbound_forces_) count += force.faction == faction ? force.count : 0;
+    return count;
+}
+
 bool Simulation::set_landing_zone(FactionId faction, float x, float y) {
     const auto index = static_cast<size_t>(faction);
     if (index >= FACTION_COUNT || !std::isfinite(x) || !std::isfinite(y) ||
@@ -668,7 +679,7 @@ std::string Simulation::delivery_refusal(FactionId faction, UnitType type) const
     float y = 0.0f;
     if (!landing_site(faction, x, y)) return "AIRFIELD REQUIRED FOR REINFORCEMENTS";
     if (inbound_count(faction) >= kMaxInboundForces) return "TRANSPORT QUEUE FULL";
-    if (unit_count(faction) + inbound_count(faction) >= unit_cap_per_player_) return "UNIT CAP REACHED";
+    if (unit_count(faction) + inbound_unit_count(faction) >= unit_cap_per_player_) return "UNIT CAP REACHED";
     const EntityId line = production_manager_.faction_line(faction);
     const auto line_it = production_manager_.production_lines().find(line);
     if (line_it == production_manager_.production_lines().end()) return "NO PRODUCTION LINE";
@@ -728,12 +739,13 @@ Simulation::TransportRoute Simulation::transport_route(FactionId faction, Ground
 
 std::string Simulation::delivery_refusal_via(FactionId faction, UnitType type, GroundTransport mode) const {
     if (mode == GroundTransport::AIR) return delivery_refusal(faction, type);
+    if (mode == GroundTransport::SEA) return sea_delivery_refusal(faction, type, 0);
     const auto proto = get_unit_prototypes().find(type);
     if (!forces_by_transport_ || proto == get_unit_prototypes().end() || proto->second.faction != faction ||
         !needs_delivery(type)) return "UNKNOWN GROUND FORCE";
     if (!transport_route(faction, mode).enabled) return mode == GroundTransport::RAIL ? "RAIL ROUTE UNAVAILABLE" : "ROAD ROUTE UNAVAILABLE";
     if (inbound_count(faction) >= kMaxInboundForces) return "TRANSPORT QUEUE FULL";
-    if (unit_count(faction) + inbound_count(faction) >= unit_cap_per_player_) return "UNIT CAP REACHED";
+    if (unit_count(faction) + inbound_unit_count(faction) >= unit_cap_per_player_) return "UNIT CAP REACHED";
     const EntityId line = production_manager_.faction_line(faction);
     const auto line_it = production_manager_.production_lines().find(line);
     if (line_it == production_manager_.production_lines().end()) return "NO PRODUCTION LINE";
@@ -746,6 +758,7 @@ std::string Simulation::delivery_refusal_via(FactionId faction, UnitType type, G
 
 bool Simulation::order_delivery_via(FactionId faction, UnitType type, GroundTransport mode) {
     if (mode == GroundTransport::AIR) return order_delivery(faction, type);
+    if (mode == GroundTransport::SEA) return order_sea_delivery(faction, type, 0);
     if (!delivery_refusal_via(faction, type, mode).empty()) return false;
     const float cost = production_manager_.get_unit_metal_cost(faction, type);
     if (!production_manager_.deduct_faction_resources(faction, cost, 0.0f)) return false;
@@ -774,22 +787,350 @@ size_t Simulation::issue_ground_transport_command(FactionId faction, UnitType ty
     return issue_commands({post}, faction, CommandType::BUILD, 0.0f, 0.0f, flag | static_cast<uint32_t>(type));
 }
 
-std::string Simulation::paradrop_refusal(FactionId faction, UnitType type, float x, float y) const {
+bool Simulation::add_port(uint32_t id, float x, float y, float berth_x, float berth_y, float entry_x, float entry_y, int owner) {
+    Port port;
+    port.id = id;
+    port.x = x;
+    port.y = y;
+    port.berth_x = berth_x;
+    port.berth_y = berth_y;
+    port.entry_x = entry_x;
+    port.entry_y = entry_y;
+    port.owner = owner;
+    return port_network_.add(port);
+}
+
+std::optional<UnitType> Simulation::cargo_ship_type(FactionId faction) const {
+    std::optional<UnitType> cargo;
+    for (const auto& [type, prototype] : get_unit_prototypes()) {
+        if (prototype.faction == faction && prototype.cargo_transport && prototype.is_naval && (!cargo || type < *cargo)) cargo = type;
+    }
+    return cargo;
+}
+
+bool Simulation::sea_lane_contested(FactionId faction, uint32_t port_id) const {
+    const Port* port = port_network_.port(port_id);
+    if (!port) return true;
+    const float lane_x = port->berth_x - port->entry_x;
+    const float lane_y = port->berth_y - port->entry_y;
+    const float lane_length_squared = std::max(lane_x * lane_x + lane_y * lane_y, 1.0f);
+    // Only what the side can see blocks it, so a lane never gives away a hidden ship.
+    for (const EntityId enemy : seen_enemies(faction)) {
+        const auto* position = component_manager_.get_component<Position>(enemy);
+        const auto* data = component_manager_.get_component<UnitData>(enemy);
+        const auto* weapon = component_manager_.get_component<Weapon>(enemy);
+        if (!position || !data || !weapon || weapon->damage <= 0.0f) continue;
+        const auto prototype = get_unit_prototypes().find(static_cast<UnitType>(data->unit_type));
+        if (prototype == get_unit_prototypes().end() || !prototype->second.is_naval) continue;
+        const float along = std::clamp(((position->x - port->entry_x) * lane_x + (position->y - port->entry_y) * lane_y) / lane_length_squared, 0.0f, 1.0f);
+        const float nearest_x = port->entry_x + lane_x * along;
+        const float nearest_y = port->entry_y + lane_y * along;
+        if (std::hypot(position->x - nearest_x, position->y - nearest_y) <= kSeaLaneClearance) return true;
+    }
+    return false;
+}
+
+EntityId Simulation::port_attack_target(FactionId faction, float x, float y, float radius) const {
+    EntityId best = INVALID_ENTITY;
+    float best_distance = radius;
+    for (const auto& [id, port] : port_network_.ports()) {
+        if (port.owner < 0 || port.owner == static_cast<int>(faction) || port.destroyed || port.entity == INVALID_ENTITY) continue;
+        if (!is_visible_to(faction, port.entity)) continue;
+        const float distance = std::hypot(port.x - x, port.y - y);
+        if (distance <= best_distance) {
+            best_distance = distance;
+            best = port.entity;
+        }
+    }
+    return best;
+}
+
+uint32_t Simulation::choose_port(FactionId faction) const {
+    const EntityId line = production_manager_.faction_line(faction);
+    const auto storage = production_manager_.storages().find(line);
+    uint32_t best = 0;
+    float best_distance = std::numeric_limits<float>::infinity();
+    for (const uint32_t id : port_network_.usable_by(static_cast<int>(faction))) {
+        if (sea_lane_contested(faction, id)) continue;
+        const Port& port = *port_network_.port(id);
+        const float distance = storage == production_manager_.storages().end() ? 0.0f
+            : std::hypot(port.x - storage->second.x, port.y - storage->second.y);
+        if (distance < best_distance) {
+            best_distance = distance;
+            best = id;
+        }
+    }
+    return best;
+}
+
+std::string Simulation::sea_delivery_refusal(FactionId faction, UnitType type, uint32_t port_id) const {
+    const auto proto = get_unit_prototypes().find(type);
+    if (!forces_by_transport_ || proto == get_unit_prototypes().end() || proto->second.faction != faction ||
+        !needs_delivery(type)) return "UNKNOWN GROUND FORCE";
+    if (!cargo_ship_type(faction)) return "NO CARGO SHIP";
+    if (port_network_.owned_by(static_cast<int>(faction)).empty()) return "NO PORT HELD";
+    if (port_network_.usable_by(static_cast<int>(faction)).empty()) return "PORT DESTROYED";
+    if (port_id != 0) {
+        const Port* port = port_network_.port(port_id);
+        if (!port || port->owner != static_cast<int>(faction)) return "PORT NOT HELD";
+        if (port->destroyed) return "PORT DESTROYED";
+        if (sea_lane_contested(faction, port_id)) return "SEA LANE CONTESTED";
+    } else if (choose_port(faction) == 0) {
+        return "SEA LANE CONTESTED";
+    }
+    if (inbound_count(faction) >= kMaxInboundForces) return "TRANSPORT QUEUE FULL";
+    if (unit_count(faction) + inbound_unit_count(faction) >= unit_cap_per_player_) return "UNIT CAP REACHED";
+    const EntityId line = production_manager_.faction_line(faction);
+    const auto line_it = production_manager_.production_lines().find(line);
+    if (line_it == production_manager_.production_lines().end()) return "NO PRODUCTION LINE";
+    const auto storage = production_manager_.storages().find(line_it->second.storage_id);
+    const float cost = production_manager_.get_unit_metal_cost(faction, type);
+    if (storage == production_manager_.storages().end() || storage->second.tactical.materials.current < cost)
+        return "INSUFFICIENT MATERIALS";
+    return {};
+}
+
+bool Simulation::order_sea_delivery(FactionId faction, UnitType type, uint32_t port_id) {
+    if (!sea_delivery_refusal(faction, type, port_id).empty()) return false;
+    if (port_id == 0) port_id = choose_port(faction);
+    const Port* port = port_network_.port(port_id);
+    if (!port) return false;
+    const float cost = production_manager_.get_unit_metal_cost(faction, type);
+    if (!production_manager_.deduct_faction_resources(faction, cost, 0.0f)) return false;
+    const auto ship = cargo_ship_type(faction);
+    const float speed = ship ? std::max(get_unit_prototypes().at(*ship).speed, 1.0f) : 7.0f;
+    const float sailing = std::hypot(port->berth_x - port->entry_x, port->berth_y - port->entry_y) / speed;
+    int queued_by_sea = 0;
+    for (const auto& inbound : inbound_forces_)
+        if (inbound.faction == faction && inbound.route_mode == static_cast<uint8_t>(GroundTransport::SEA)) ++queued_by_sea;
+    // Orders fill a ship four at a time; each further ship leaves a little later.
+    const float departure_seconds = get_unit_prototypes().at(type).build_time_seconds + (queued_by_sea / kShipCapacity) * 8.0f;
+    InboundForce force{faction, type, tick_ + static_cast<uint32_t>(std::ceil((departure_seconds + sailing) * 20.0f))};
+    force.route_mode = static_cast<uint8_t>(GroundTransport::SEA);
+    force.port_id = port_id;
+    force.order_id = next_transport_order_id_++;
+    force.launch_tick = tick_ + static_cast<uint32_t>(std::ceil(departure_seconds * 20.0f));
+    inbound_forces_.push_back(force);
+    return true;
+}
+
+bool Simulation::is_warship(UnitType type) const {
+    const auto proto = get_unit_prototypes().find(type);
+    return proto != get_unit_prototypes().end() && proto->second.is_naval && !proto->second.cargo_transport;
+}
+
+std::string Simulation::naval_order_refusal(FactionId faction, UnitType type) const {
+    const auto proto = get_unit_prototypes().find(type);
+    if (!forces_by_transport_ || proto == get_unit_prototypes().end() || proto->second.faction != faction || !is_warship(type))
+        return "UNKNOWN WARSHIP";
+    if (port_network_.owned_by(static_cast<int>(faction)).empty()) return "NO PORT HELD";
+    if (port_network_.usable_by(static_cast<int>(faction)).empty()) return "PORT DESTROYED";
+    if (inbound_count(faction) >= kMaxInboundForces) return "TRANSPORT QUEUE FULL";
+    if (unit_count(faction) + inbound_unit_count(faction) >= unit_cap_per_player_) return "UNIT CAP REACHED";
+    const EntityId line = production_manager_.faction_line(faction);
+    const auto line_it = production_manager_.production_lines().find(line);
+    if (line_it == production_manager_.production_lines().end()) return "NO PRODUCTION LINE";
+    const auto storage = production_manager_.storages().find(line_it->second.storage_id);
+    const float cost = production_manager_.get_unit_metal_cost(faction, type);
+    if (storage == production_manager_.storages().end() || storage->second.tactical.materials.current < cost)
+        return "INSUFFICIENT MATERIALS";
+    return {};
+}
+
+bool Simulation::order_naval_unit(FactionId faction, UnitType type) {
+    if (!naval_order_refusal(faction, type).empty()) return false;
+    // Built at the held port nearest the command post, contested or not.
+    const EntityId line = production_manager_.faction_line(faction);
+    const auto storage = production_manager_.storages().find(line);
+    uint32_t port_id = 0;
+    float best = std::numeric_limits<float>::infinity();
+    for (const uint32_t id : port_network_.usable_by(static_cast<int>(faction))) {
+        const Port& port = *port_network_.port(id);
+        const float distance = storage == production_manager_.storages().end() ? 0.0f
+            : std::hypot(port.x - storage->second.x, port.y - storage->second.y);
+        if (distance < best) {
+            best = distance;
+            port_id = id;
+        }
+    }
+    if (port_id == 0) return false;
+    const float cost = production_manager_.get_unit_metal_cost(faction, type);
+    if (!production_manager_.deduct_faction_resources(faction, cost, 0.0f)) return false;
+    const float seconds = get_unit_prototypes().at(type).build_time_seconds;
+    InboundForce force{faction, type, tick_ + static_cast<uint32_t>(std::ceil(seconds * 20.0f))};
+    force.route_mode = static_cast<uint8_t>(GroundTransport::SEA);
+    force.port_id = port_id;
+    force.naval_build = true;
+    force.order_id = next_transport_order_id_++;
+    force.launch_tick = force.arrive_tick;
+    inbound_forces_.push_back(force);
+    return true;
+}
+
+size_t Simulation::issue_naval_command(FactionId faction, UnitType type) {
+    if (!naval_order_refusal(faction, type).empty()) return 0;
+    const EntityId post = production_manager_.faction_line(faction);
+    if (post == INVALID_ENTITY) return 0;
+    return issue_commands({post}, faction, CommandType::BUILD, 0.0f, 0.0f, NAVAL_ORDER_FLAG | static_cast<uint32_t>(type));
+}
+
+size_t Simulation::issue_sea_delivery_command(FactionId faction, UnitType type, uint32_t port_id) {
+    if (port_id > 255 || !sea_delivery_refusal(faction, type, port_id).empty()) return 0;
+    const EntityId post = production_manager_.faction_line(faction);
+    if (post == INVALID_ENTITY) return 0;
+    return issue_commands({post}, faction, CommandType::BUILD, 0.0f, 0.0f,
+        SEA_DELIVERY_ORDER_FLAG | (port_id << 8) | static_cast<uint32_t>(type));
+}
+
+EntityId Simulation::launch_cargo_ship(FactionId faction, const Port& port) {
+    const auto ship_type = cargo_ship_type(faction);
+    if (!ship_type) return INVALID_ENTITY;
+    const int spawned = create_unit_with_type(port.entry_x, port.entry_y, *ship_type, faction);
+    if (spawned < 0) return INVALID_ENTITY;
+    const auto ship = static_cast<EntityId>(spawned);
+    move_unit(ship, port.berth_x, port.berth_y);
+    return ship;
+}
+
+// The cargo comes ashore on open ground beside the quay, on its own spot.
+bool Simulation::unload_at_port(const InboundForce& force, const Port& port) {
+    constexpr float kGoldenAngle = 2.39996323f;
+    for (int attempt = 0; attempt < 24; ++attempt) {
+        const float turn = static_cast<float>(force.order_id + static_cast<uint32_t>(attempt) * 5u);
+        const float radius = 25.0f + 8.0f * static_cast<float>(attempt);
+        const float x = port.x + std::cos(turn * kGoldenAngle) * radius;
+        const float y = port.y + std::sin(turn * kGoldenAngle) * radius;
+        if (!is_land_position(x, y)) continue;
+        if (create_unit_with_type(x, y, force.type, force.faction) >= 0) return true;
+    }
+    return false;
+}
+
+std::vector<EntityId> Simulation::get_entity_list() const {
+    auto entities = entity_manager_.get_entities();
+    std::erase_if(entities, [this](EntityId entity) { return component_manager_.get_component<PortFacility>(entity) != nullptr; });
+    return entities;
+}
+
+void Simulation::update_ports(float delta_ms) {
+    if (!port_network_.active()) return;
+    std::vector<PortPresence> presence;
+    const auto entities = component_manager_.entities_with<Position, Faction, GroundSteering>(entity_manager_.get_entities());
+    presence.reserve(entities.size());
+    for (const auto entity : entities) {
+        const auto* position = component_manager_.get_component<Position>(entity);
+        const auto* faction = component_manager_.get_component<Faction>(entity);
+        const auto* health = component_manager_.get_component<Health>(entity);
+        if (position && faction && (!health || !health->is_dead)) {
+            presence.push_back({static_cast<int>(faction->faction_id), position->x, position->y});
+        }
+    }
+    port_network_.update(delta_ms, presence);
+    repair_ports(delta_ms);
+    sync_port_facilities();
+}
+
+// Engineers of the side that holds a port rebuild it, at a price in Materials.
+// Rubble comes back into service once repair passes kPortServiceFraction.
+void Simulation::repair_ports(float delta_ms) {
+    const float seconds = delta_ms / 1000.0f;
+    for (const auto& [id, held] : port_network_.ports()) {
+        if (held.owner < 0 || held.hp >= kPortMaxHealth) continue;
+        int engineers = 0;
+        for (const auto unit : component_manager_.entities_with<Position, Faction, GroundSteering>(entity_manager_.get_entities())) {
+            const auto* position = component_manager_.get_component<Position>(unit);
+            const auto* faction = component_manager_.get_component<Faction>(unit);
+            const auto* health = component_manager_.get_component<Health>(unit);
+            if (!position || !faction || static_cast<int>(faction->faction_id) != held.owner || (health && health->is_dead) ||
+                !is_construction_unit(unit)) continue;
+            if (std::hypot(position->x - held.x, position->y - held.y) <= kPortCaptureRadius) ++engineers;
+        }
+        if (engineers == 0) continue;
+        Port* port = port_network_.mutable_port(id);
+        const float repaired = std::min(kPortMaxHealth - port->hp, kPortRepairRate * static_cast<float>(engineers) * seconds);
+        if (repaired <= 0.0f || !production_manager_.deduct_faction_resources(static_cast<FactionId>(port->owner), repaired * kPortRepairCostPerHealth, 0.0f)) continue;
+        port->hp = std::min(kPortMaxHealth, port->hp + repaired);
+        // A standing port's hit points live on its facility; repair mends that.
+        if (port->entity != INVALID_ENTITY) {
+            if (auto* facility = component_manager_.get_component<Health>(port->entity))
+                facility->current = std::min(kPortMaxHealth, facility->current + repaired);
+        }
+        if (port->destroyed && port->hp >= kPortMaxHealth * kPortServiceFraction) port->destroyed = false;
+    }
+}
+
+// A held, standing port has a facility entity with the port's hit points and
+// its owner's faction, so enemy weapons see it and shoot it. Neutral and ruined
+// ports have none. When the facility is shot to nothing the port becomes rubble.
+void Simulation::sync_port_facilities() {
+    for (const auto& [id, held] : port_network_.ports()) {
+        Port* port = port_network_.mutable_port(id);
+        const bool alive = port->entity != INVALID_ENTITY && entity_manager_.is_alive(port->entity);
+        if (port->destroyed) {
+            // Rubble has no facility, whatever its hit points were a moment ago.
+            if (alive) destroy_unit(port->entity);
+            port->entity = INVALID_ENTITY;
+            continue;
+        }
+        if (alive) {
+            const auto* health = component_manager_.get_component<Health>(port->entity);
+            if (health) port->hp = std::clamp(health->current, 0.0f, kPortMaxHealth);
+            if (!health || health->is_dead || health->current <= 0.0f) {
+                port->hp = 0.0f;
+                port->destroyed = true;
+                destroy_unit(port->entity);
+                port->entity = INVALID_ENTITY;
+                continue;
+            }
+        } else if (port->entity != INVALID_ENTITY) {
+            // The facility was removed elsewhere: it was destroyed.
+            port->hp = 0.0f;
+            port->destroyed = true;
+            port->entity = INVALID_ENTITY;
+        }
+        const bool should_stand = port->owner >= 0 && !port->destroyed;
+        if (!should_stand) {
+            if (port->entity != INVALID_ENTITY) {
+                destroy_unit(port->entity);
+                port->entity = INVALID_ENTITY;
+            }
+            continue;
+        }
+        if (port->entity == INVALID_ENTITY) {
+            const Entity facility = entity_manager_.create_entity();
+            component_manager_.add_component(facility.id, Position{port->x, port->y, terrain_.height_at(port->x, port->y)});
+            component_manager_.add_component(facility.id, Health{port->hp, kPortMaxHealth});
+            component_manager_.add_component(facility.id, Faction{static_cast<FactionId>(port->owner)});
+            component_manager_.add_component(facility.id, PortFacility{id});
+            spatial_grid_.insert(facility.id, port->x, port->y);
+            port->entity = facility.id;
+        } else {
+            // Capture changes the faction the facility belongs to.
+            if (auto* faction = component_manager_.get_component<Faction>(port->entity)) {
+                faction->faction_id = static_cast<FactionId>(port->owner);
+            }
+            if (auto* health = component_manager_.get_component<Health>(port->entity)) health->max = kPortMaxHealth;
+        }
+    }
+}
+
+std::string Simulation::paradrop_refusal(FactionId faction, UnitType type, float x, float y, int count) const {
     const auto proto = get_unit_prototypes().find(type);
     if (proto == get_unit_prototypes().end() || proto->second.faction != faction) return "UNKNOWN UNIT";
     if (!forces_by_transport_ || !needs_delivery(type) || !proto->second.airdrop) return "CANNOT BE AIRDROPPED";
+    if (count < 1 || count > kMaxParadropStick) return "BAD STICK SIZE";
     if (!cargo_aircraft_type(faction)) return "NO CARGO AIRCRAFT";
     if (!std::isfinite(x) || !std::isfinite(y) || !is_land_position(x, y) ||
         !pathfinding_.is_walkable(pathfinding_.to_grid_x(x), pathfinding_.to_grid_y(y))) return "NO DROP ZONE THERE";
     // Nobody jumps blind: the drop zone must be watched when the drop is ordered.
     if (!can_see(faction, x, y)) return "DROP ZONE NOT SCOUTED";
     if (inbound_count(faction) >= kMaxInboundForces) return "TRANSPORT QUEUE FULL";
-    if (unit_count(faction) + inbound_count(faction) >= unit_cap_per_player_) return "UNIT CAP REACHED";
+    if (unit_count(faction) + inbound_unit_count(faction) + count > unit_cap_per_player_) return "UNIT CAP REACHED";
     const EntityId line = production_manager_.faction_line(faction);
     const auto line_it = production_manager_.production_lines().find(line);
     if (line_it == production_manager_.production_lines().end()) return "NO PRODUCTION LINE";
     const auto storage = production_manager_.storages().find(line_it->second.storage_id);
-    const float cost = production_manager_.get_unit_metal_cost(faction, type);
+    const float cost = production_manager_.get_unit_metal_cost(faction, type) * static_cast<float>(count);
     if (storage == production_manager_.storages().end() || storage->second.tactical.materials.current < cost) {
         return "INSUFFICIENT MATERIALS";
     }
@@ -809,7 +1150,7 @@ float Simulation::paradrop_seconds(UnitType type, float x) const {
 std::optional<UnitType> Simulation::cargo_aircraft_type(FactionId faction) const {
     std::optional<UnitType> cargo;
     for (const auto& [type, prototype] : get_unit_prototypes()) {
-        if (prototype.faction == faction && prototype.cargo_transport && (!cargo || type < *cargo)) cargo = type;
+        if (prototype.faction == faction && prototype.cargo_transport && prototype.is_aircraft && (!cargo || type < *cargo)) cargo = type;
     }
     return cargo;
 }
@@ -832,12 +1173,13 @@ EntityId Simulation::launch_cargo_aircraft(FactionId faction, float x, float y) 
     return transport;
 }
 
-bool Simulation::order_paradrop(FactionId faction, UnitType type, float x, float y) {
-    if (!paradrop_refusal(faction, type, x, y).empty()) return false;
-    const float cost = production_manager_.get_unit_metal_cost(faction, type);
+bool Simulation::order_paradrop(FactionId faction, UnitType type, float x, float y, int count) {
+    if (!paradrop_refusal(faction, type, x, y, count).empty()) return false;
+    const float cost = production_manager_.get_unit_metal_cost(faction, type) * static_cast<float>(count);
     if (!production_manager_.deduct_faction_resources(faction, cost, 0.0f)) return false;
     InboundForce force{faction, type, tick_ + static_cast<uint32_t>(std::ceil(paradrop_seconds(type, x) * 20.0f))};
     force.airdrop = true;
+    force.count = count;
     force.launch_tick = tick_ + static_cast<uint32_t>(std::ceil(get_unit_prototypes().at(type).build_time_seconds * 20.0f));
     force.drop_x = x;
     force.drop_y = y;
@@ -846,16 +1188,18 @@ bool Simulation::order_paradrop(FactionId faction, UnitType type, float x, float
     return true;
 }
 
-size_t Simulation::issue_fuel_shipment_command(FactionId faction) {
+size_t Simulation::issue_fuel_shipment_command(FactionId faction, bool by_sea) {
     const EntityId post = production_manager_.faction_line(faction);
     if (post == INVALID_ENTITY) return 0;
-    return issue_commands({post}, faction, CommandType::BUILD, 0.0f, 0.0f, FUEL_SHIPMENT_ORDER_FLAG);
+    return issue_commands({post}, faction, CommandType::BUILD, 0.0f, 0.0f,
+        FUEL_SHIPMENT_ORDER_FLAG | (by_sea ? SEA_DELIVERY_ORDER_FLAG : 0u));
 }
 
-size_t Simulation::issue_paradrop_command(FactionId faction, UnitType type, float x, float y) {
+size_t Simulation::issue_paradrop_command(FactionId faction, UnitType type, float x, float y, int count) {
     const EntityId post = production_manager_.faction_line(faction);
-    if (post == INVALID_ENTITY) return 0;
-    return issue_commands({post}, faction, CommandType::BUILD, x, y, PARADROP_ORDER_FLAG | static_cast<uint32_t>(type));
+    if (post == INVALID_ENTITY || count < 1 || count > kMaxParadropStick) return 0;
+    return issue_commands({post}, faction, CommandType::BUILD, x, y,
+        PARADROP_ORDER_FLAG | (static_cast<uint32_t>(count) << PARADROP_COUNT_SHIFT) | static_cast<uint32_t>(type));
 }
 
 void Simulation::deliver_inbound_forces() {
@@ -897,15 +1241,114 @@ void Simulation::deliver_inbound_forces() {
             continue;
         }
         if (force.airdrop) {
-            if (force.arrive_tick > tick_ || unit_count(force.faction) >= unit_cap_per_player_) {
+            if (force.arrive_tick > tick_) {
                 ++index;
                 continue;
             }
-            if (land_paradrop(force)) {
+            // The stick jumps together. A unit the cap or the ground refuses
+            // stays in the air with the rest until there is room.
+            auto& drop = inbound_forces_[index];
+            while (drop.count > 0 && unit_count(drop.faction) < unit_cap_per_player_ && land_paradrop(drop)) {
+                ++drop.dropped;
+                --drop.count;
+            }
+            if (drop.count <= 0) {
                 inbound_forces_.erase(inbound_forces_.begin() + static_cast<std::ptrdiff_t>(index));
             } else {
                 ++index;
             }
+            continue;
+        }
+        if (force.naval_build) {
+            // A warship is launched at its port's berth once it is built, on the
+            // first free spot of water; it waits there if its port is lost.
+            const Port* port = port_network_.port(force.port_id);
+            if (force.arrive_tick > tick_ || !port || port->owner != static_cast<int>(force.faction) || port->destroyed ||
+                unit_count(force.faction) >= unit_cap_per_player_) {
+                ++index;
+                continue;
+            }
+            bool launched = false;
+            for (int attempt = 0; attempt < 16 && !launched; ++attempt) {
+                const float angle = static_cast<float>(force.order_id + static_cast<uint32_t>(attempt) * 3u) * 2.39996323f;
+                const float radius = attempt == 0 ? 0.0f : 30.0f + 12.0f * static_cast<float>(attempt);
+                launched = create_unit_with_type(port->berth_x + std::cos(angle) * radius, port->berth_y + std::sin(angle) * radius,
+                    force.type, force.faction) >= 0;
+            }
+            if (launched) inbound_forces_.erase(inbound_forces_.begin() + static_cast<std::ptrdiff_t>(index));
+            else ++index;
+            continue;
+        }
+        if (force.route_mode == static_cast<uint8_t>(GroundTransport::SEA)) {
+            auto& voyage = inbound_forces_[index];
+            const Port* port = port_network_.port(voyage.port_id);
+            const auto same_voyage = [&](const InboundForce& other) {
+                return other.route_mode == static_cast<uint8_t>(GroundTransport::SEA) && !other.naval_build &&
+                    other.faction == voyage.faction && other.port_id == voyage.port_id;
+            };
+            if (voyage.transport == INVALID_ENTITY) {
+                // Ready: the cargo ship sails in from the start of the sea lane,
+                // taking along other orders for this port that are about to leave.
+                if (tick_ >= voyage.launch_tick && port) {
+                    const EntityId ship = launch_cargo_ship(voyage.faction, *port);
+                    if (ship != INVALID_ENTITY) {
+                        voyage.transport = ship;
+                        int carried = 1;
+                        const uint32_t window = tick_ + static_cast<uint32_t>(kConvoyWindowSeconds * 20.0f);
+                        for (size_t other = 0; other < inbound_forces_.size() && carried < kShipCapacity; ++other) {
+                            auto& candidate = inbound_forces_[other];
+                            if (other == index || !same_voyage(candidate) || candidate.transport != INVALID_ENTITY ||
+                                candidate.launch_tick > window) continue;
+                            candidate.transport = ship;
+                            ++carried;
+                        }
+                    }
+                }
+                ++index;
+                continue;
+            }
+            const EntityId ship = voyage.transport;
+            const auto* position = component_manager_.get_component<Position>(ship);
+            if (!position || get_unit_is_dead(ship)) {
+                // The ship is lost with everything aboard; it counts as one loss.
+                ++ships_lost_[static_cast<size_t>(voyage.faction)];
+                std::erase_if(inbound_forces_, [ship](const InboundForce& other) { return other.transport == ship; });
+                index = 0;
+                continue;
+            }
+            if (!port) {
+                ++index;
+                continue;
+            }
+            const float distance = std::hypot(position->x - port->berth_x, position->y - port->berth_y);
+            const auto* data = component_manager_.get_component<UnitData>(ship);
+            const float speed = std::max(data ? data->speed : 7.0f, 1.0f);
+            voyage.arrive_tick = tick_ + static_cast<uint32_t>(std::ceil(std::max(0.0f, distance - kPortBerthRadius) / speed * 20.0f));
+            // A ship waits at the berth until its side holds the port and there is room.
+            if (distance <= kPortBerthRadius && port->owner == static_cast<int>(voyage.faction) && !port->destroyed) {
+                bool all_ashore = true;
+                const size_t aboard_before = inbound_forces_.size();
+                for (size_t aboard = 0; aboard < inbound_forces_.size();) {
+                    if (inbound_forces_[aboard].transport != ship) {
+                        ++aboard;
+                        continue;
+                    }
+                    const InboundForce cargo = inbound_forces_[aboard];
+                    if (unit_count(cargo.faction) < unit_cap_per_player_ && unload_at_port(cargo, *port)) {
+                        inbound_forces_.erase(inbound_forces_.begin() + static_cast<std::ptrdiff_t>(aboard));
+                    } else {
+                        all_ashore = false;
+                        ++aboard;
+                    }
+                }
+                if (all_ashore) destroy_unit(ship);
+                // The list changed if anything came ashore: start the pass again.
+                // Otherwise the ship is waiting for room, and the pass moves on.
+                if (inbound_forces_.size() != aboard_before) index = 0;
+                else ++index;
+                continue;
+            }
+            ++index;
             continue;
         }
         // A force waits for an intact terminal if its route becomes unavailable.
@@ -952,10 +1395,13 @@ void Simulation::deliver_inbound_forces() {
 // stand on is passed over for the next one out, then the point itself.
 bool Simulation::land_paradrop(const InboundForce& force) {
     constexpr float kGoldenAngle = 2.39996323f;
-    uint32_t hash = force.drop_sequence * 2654435761u;
+    // Each unit of a stick has its own place in the sequence; the first of a
+    // drop keeps the drop's own number, so single drops land where they did.
+    const uint32_t sequence = force.drop_sequence + static_cast<uint32_t>(force.dropped) * 5u;
+    uint32_t hash = sequence * 2654435761u;
     hash ^= hash >> 15;
     for (int attempt = 0; attempt < 12; ++attempt) {
-        const float turn = static_cast<float>(force.drop_sequence + static_cast<uint32_t>(attempt) * 7u);
+        const float turn = static_cast<float>(sequence + static_cast<uint32_t>(attempt) * 7u);
         const float spread = 0.35f + 0.65f * static_cast<float>((hash >> 8) % 1000u) / 1000.0f;
         const float radius = kParadropScatterMeters * spread * std::min(1.0f, 0.4f + 0.1f * static_cast<float>(attempt));
         const float x = force.drop_x + std::cos(turn * kGoldenAngle) * radius;
@@ -1169,9 +1615,14 @@ bool Simulation::is_position_visible_to(FactionId faction, float x, float y) con
 }
 
 bool Simulation::validate_command(const InputCommand& cmd, uint32_t execution_tick) const {
-    // A flight plan is set before the plane reaches the map, and a cargo
-    // aircraft flies straight to its airfield.
-    if (recon_flights_.contains(static_cast<EntityId>(cmd.entity_id))) return false;
+    // A recon plane flies a flight plan. A plain move order re-plots it to a new
+    // point (retask_recon_flight) while the plane is still on its mission; it
+    // takes no other order, and none once it is leaving. A cargo aircraft flies
+    // straight to its airfield.
+    if (const auto flight = recon_flights_.find(static_cast<EntityId>(cmd.entity_id)); flight != recon_flights_.end()) {
+        if (cmd.cmd_type != static_cast<uint8_t>(CommandType::MOVE) || (cmd.extra & MOVE_QUEUE_FLAG) != 0 ||
+            flight->second.leaving) return false;
+    }
     if (const auto* cargo = component_manager_.get_component<UnitData>(cmd.entity_id)) {
         const auto prototype = get_unit_prototypes().find(static_cast<UnitType>(cargo->unit_type));
         if (prototype != get_unit_prototypes().end() && prototype->second.cargo_transport) return false;
@@ -1197,7 +1648,9 @@ bool Simulation::validate_command(const InputCommand& cmd, uint32_t execution_ti
         return false;
     }
     if (cmd.cmd_type == static_cast<uint8_t>(CommandType::HARVEST)) {
-        return cmd.extra == 0;
+        if ((cmd.extra & POWER_ORDER_FLAG) == 0) return cmd.extra == 0;
+        return (cmd.extra & ~(POWER_ORDER_FLAG | 0x00FFFFFFu)) == 0 &&
+            power_order_refusal(cmd.entity_id, static_cast<PowerOrder>((cmd.extra >> 16) & 0xFFu), cmd.extra & 0xFFFFu).empty();
     }
     const auto type = static_cast<CommandType>(cmd.cmd_type);
     // BUILD carries the player-selected rally/output target. It is not a
@@ -1268,7 +1721,7 @@ bool Simulation::validate_command(const InputCommand& cmd, uint32_t execution_ti
         if (!ok) fprintf(stderr, "VALIDATE_FAIL: structure order needs a construction unit (entity=%u extra=%u)\n", cmd.entity_id, cmd.extra);
         return ok;
     }
-    if (type == CommandType::BUILD && cmd.extra == FUEL_SHIPMENT_ORDER_FLAG) {
+    if (type == CommandType::BUILD && (cmd.extra == FUEL_SHIPMENT_ORDER_FLAG || cmd.extra == (FUEL_SHIPMENT_ORDER_FLAG | SEA_DELIVERY_ORDER_FLAG))) {
         const bool ok = production_manager_.faction_line(owner->faction_id) == static_cast<EntityId>(cmd.entity_id);
         if (!ok) fprintf(stderr, "VALIDATE_FAIL: fuel shipment order must come from the command post (entity=%u)\n", cmd.entity_id);
         return ok;
@@ -1276,9 +1729,25 @@ bool Simulation::validate_command(const InputCommand& cmd, uint32_t execution_ti
     if (type == CommandType::BUILD && (cmd.extra & PARADROP_ORDER_FLAG) != 0) {
         // A paratroop drop is ordered from the command post. Whether it can
         // fly is decided when it runs, with the refusal rules above.
-        const bool ok = (cmd.extra & ~PARADROP_ORDER_FLAG) <= 255 &&
+        const uint32_t stick = (cmd.extra >> PARADROP_COUNT_SHIFT) & 0xFFu;
+        const bool ok = (cmd.extra & ~(PARADROP_ORDER_FLAG | (0xFFu << PARADROP_COUNT_SHIFT))) <= 255 &&
+                        stick <= static_cast<uint32_t>(kMaxParadropStick) &&
                         production_manager_.faction_line(owner->faction_id) == static_cast<EntityId>(cmd.entity_id);
         if (!ok) fprintf(stderr, "VALIDATE_FAIL: paradrop order must come from the command post (entity=%u extra=%u)\n", cmd.entity_id, cmd.extra);
+        return ok;
+    }
+    if (type == CommandType::BUILD && (cmd.extra & NAVAL_ORDER_FLAG) != 0) {
+        const bool ok = (cmd.extra & ~(NAVAL_ORDER_FLAG | 0xFFu)) == 0 &&
+            production_manager_.faction_line(owner->faction_id) == static_cast<EntityId>(cmd.entity_id) &&
+            naval_order_refusal(owner->faction_id, static_cast<UnitType>(cmd.extra & 0xFFu)).empty();
+        if (!ok) fprintf(stderr, "VALIDATE_FAIL: warship order refused (entity=%u extra=%u)\n", cmd.entity_id, cmd.extra);
+        return ok;
+    }
+    if (type == CommandType::BUILD && (cmd.extra & SEA_DELIVERY_ORDER_FLAG) != 0) {
+        const bool ok = (cmd.extra & ~(SEA_DELIVERY_ORDER_FLAG | 0xFFFFu)) == 0 &&
+            production_manager_.faction_line(owner->faction_id) == static_cast<EntityId>(cmd.entity_id) &&
+            sea_delivery_refusal(owner->faction_id, static_cast<UnitType>(cmd.extra & 0xFFu), (cmd.extra >> 8) & 0xFFu).empty();
+        if (!ok) fprintf(stderr, "VALIDATE_FAIL: sea delivery refused (entity=%u extra=%u)\n", cmd.entity_id, cmd.extra);
         return ok;
     }
     if (type == CommandType::BUILD &&
@@ -2347,7 +2816,7 @@ void Simulation::economy_phase(float delta_ms) {
          const auto faction = static_cast<FactionId>(index);
          // An inbound delivery was paid for, so production must leave it a slot.
          const int reserved = (reinforcement_delivery_.state() == ReinforcementDeliveryState::INCOMING &&
-             reinforcement_delivery_.owner() == faction ? 1 : 0) + inbound_count(faction);
+             reinforcement_delivery_.owner() == faction ? 1 : 0) + inbound_unit_count(faction);
          production_manager_.set_unit_slots(faction, unit_cap_per_player_ - unit_counts_[index] - reserved);
      }
      production_manager_.update_all(delta_ms);
@@ -2376,6 +2845,8 @@ void Simulation::economy_phase(float delta_ms) {
 			pathfinding_.block_world_rectangle(comp.x, comp.y, half_width, half_height);
 			evict_ground_units(comp.x, comp.y, half_width, half_height);
 			vision_sources_.push_back({comp.faction_id, comp.x, comp.y, structure_view_range(comp.structure_type), structure_eye_height(comp.structure_type)});
+			if (power_grid_.active())
+				power_grid_.add_structure_demand(static_cast<int>(comp.faction_id), structure_power_demand(comp.structure_type));
             if (comp.structure_type == 2)
                 territorial_control_.add_installation(comp.x, comp.y, InstallationType::AIRFIELD, comp.faction_id);
             continue;
@@ -2493,6 +2964,8 @@ void Simulation::environment_phase(float delta_ms) {
         create_unit_with_type(deploy_x, deploy_y, package.unit_type, reinforcement_delivery_.owner());
     }
     update_fuel_supply(delta_ms);
+    update_power_grid(delta_ms);
+    update_ports(delta_ms);
     update_recon_flights(delta_ms);
     update_ferry_flights(delta_ms);
     update_air_discipline();
@@ -2943,6 +3416,16 @@ uint64_t Simulation::state_hash() const {
             mix(&resources->fuel.current, sizeof(resources->fuel.current));
         }
     }
+    for (const auto& [id, node] : power_grid_.nodes()) {
+        mix(&id, sizeof(id));
+        mix(&node.owner, sizeof(node.owner));
+    }
+    for (const auto& [id, line] : power_grid_.lines()) {
+        mix(&id, sizeof(id));
+        mix(&line.owner, sizeof(line.owner));
+        mix(&line.intact, sizeof(line.intact));
+        mix(&line.repair_remaining_ms, sizeof(line.repair_remaining_ms));
+    }
     mix(&match_result_, sizeof(match_result_));
     mix(&match_victory_reason_, sizeof(match_victory_reason_));
     for (const auto held : key_sites_held_) mix(&held, sizeof(held));
@@ -3064,7 +3547,21 @@ void Simulation::update_fuel_supply(float delta_ms) {
         auto& reason = fuel_supply_reasons_[static_cast<size_t>(shipment.faction)];
         const auto* position = component_manager_.get_component<Position>(shipment.transport);
         if (!position || get_unit_is_dead(shipment.transport)) {
-            reason = "FUEL SHIPMENT SHOT DOWN";
+            reason = shipment.port_id != 0 ? "FUEL SHIPMENT SUNK" : "FUEL SHIPMENT SHOT DOWN";
+            if (shipment.port_id != 0) ++ships_lost_[static_cast<size_t>(shipment.faction)];
+            return true;
+        }
+        if (shipment.port_id != 0) {
+            const Port* port = port_network_.port(shipment.port_id);
+            if (!port) return true;
+            const float distance = std::hypot(position->x - port->berth_x, position->y - port->berth_y);
+            const auto* ship = component_manager_.get_component<UnitData>(shipment.transport);
+            shipment.remaining_ms = std::max(0.0f, distance - kPortBerthRadius) / std::max(ship ? ship->speed : 20.0f, 1.0f) * 1000.0f;
+            // The ship waits at the berth until its side holds the port.
+            if (distance > kPortBerthRadius || port->owner != static_cast<int>(shipment.faction) || port->destroyed) return false;
+            destroy_unit(shipment.transport);
+            production_manager_.update_storage(production_manager_.faction_storage(shipment.faction), 0.0f, kFuelShipmentLoad);
+            reason = "FUEL SHIPMENT DELIVERED";
             return true;
         }
         const float distance = std::hypot(position->x - shipment.x, position->y - shipment.y);
@@ -3132,11 +3629,216 @@ bool Simulation::request_fuel_shipment(FactionId player) {
     return true;
 }
 
+bool Simulation::request_sea_fuel_shipment(FactionId player) {
+    auto& reason = fuel_supply_reasons_[static_cast<size_t>(player)];
+    if (fuel_shipment(player)) {
+        reason = "FUEL SHIPMENT ALREADY INBOUND";
+        return false;
+    }
+    const auto storage = production_manager_.storages().find(production_manager_.faction_storage(player));
+    if (storage == production_manager_.storages().end()) return false;
+    const auto& funds = storage->second.tactical;
+    if (!cargo_ship_type(player)) {
+        reason = "NO CARGO SHIP";
+        return false;
+    }
+    if (port_network_.owned_by(static_cast<int>(player)).empty()) {
+        reason = "NO PORT HELD";
+        return false;
+    }
+    if (port_network_.usable_by(static_cast<int>(player)).empty()) {
+        reason = "PORT DESTROYED";
+        return false;
+    }
+    const uint32_t port_id = choose_port(player);
+    if (port_id == 0) {
+        reason = "SEA LANE CONTESTED";
+        return false;
+    }
+    if (funds.fuel.capacity - funds.fuel.current < kFuelShipmentLoad) {
+        reason = "FUEL STORAGE FULL";
+        return false;
+    }
+    if (at_unit_cap(player)) {
+        reason = "UNIT CAP REACHED";
+        return false;
+    }
+    if (funds.materials.current < kFuelShipmentMaterialCost ||
+        !production_manager_.deduct_faction_resources(player, kFuelShipmentMaterialCost, 0.0f)) {
+        reason = "INSUFFICIENT MATERIALS";
+        return false;
+    }
+    const Port& port = *port_network_.port(port_id);
+    const EntityId ship = launch_cargo_ship(player, port);
+    if (ship == INVALID_ENTITY) {
+        production_manager_.update_storage(production_manager_.faction_storage(player), kFuelShipmentMaterialCost, 0.0f);
+        reason = "UNIT CAP REACHED";
+        return false;
+    }
+    const float speed = std::max(get_unit_prototypes().at(*cargo_ship_type(player)).speed, 1.0f);
+    const float total_ms = std::hypot(port.berth_x - port.entry_x, port.berth_y - port.entry_y) / speed * 1000.0f;
+    FuelShipment shipment{player, port.berth_x, port.berth_y, total_ms, ship, total_ms};
+    shipment.port_id = port_id;
+    fuel_shipments_.push_back(shipment);
+    reason = "FUEL SHIPMENT INBOUND BY SEA";
+    return true;
+}
+
 const FuelShipment* Simulation::fuel_shipment(FactionId faction) const {
     for (const auto& shipment : fuel_shipments_) {
         if (shipment.faction == faction) return &shipment;
     }
     return nullptr;
+}
+
+// Where a unit goes to work on a station or line: the station itself, or the
+// nearest stretch of the line it can stand on.
+bool Simulation::power_work_point(EntityId unit, PowerOrder order, uint32_t target, float& x, float& y) const {
+    const auto* position = component_manager_.get_component<Position>(unit);
+    if (!position) return false;
+    const auto& navigation = navigation_for(unit);
+    const auto reachable = [&](float px, float py) {
+        return navigation.is_walkable(navigation.to_grid_x(px), navigation.to_grid_y(py)) &&
+            (!theater_water_rules_enabled_ || is_land_position(px, py));
+    };
+    if (order == PowerOrder::CAPTURE_STATION) {
+        const PowerNode* node = power_grid_.node(target);
+        if (!node) return false;
+        if (reachable(node->x, node->y)) { x = node->x; y = node->y; return true; }
+        // A station's own ground may be blocked; stop beside it.
+        for (const float ring : {15.0f, 30.0f}) {
+            for (int step = 0; step < 8; ++step) {
+                const float angle = static_cast<float>(step) * 0.78539816f;
+                const float px = node->x + std::cos(angle) * ring;
+                const float py = node->y + std::sin(angle) * ring;
+                if (reachable(px, py)) { x = px; y = py; return true; }
+            }
+        }
+        return false;
+    }
+    // A repair is done at the break; other work anywhere along the line.
+    const PowerLine* line = power_grid_.line(target);
+    if (!line) return false;
+    const bool at_break = order == PowerOrder::REPAIR_LINE;
+    const float from_x = at_break ? line->cut_x : position->x;
+    const float from_y = at_break ? line->cut_y : position->y;
+    float best = std::numeric_limits<float>::infinity();
+    for (const auto& point : power_grid_.sample_line(target, 20.0f)) {
+        const float distance = std::hypot(point[0] - from_x, point[1] - from_y);
+        if (distance >= best || !reachable(point[0], point[1])) continue;
+        best = distance;
+        x = point[0];
+        y = point[1];
+    }
+    return std::isfinite(best);
+}
+
+std::string Simulation::power_order_refusal(EntityId unit, PowerOrder order, uint32_t target) const {
+    const auto* faction = component_manager_.get_component<Faction>(unit);
+    const auto* health = component_manager_.get_component<Health>(unit);
+    if (!faction || !health || health->is_dead) return "NO UNIT TO SEND";
+    if (component_manager_.get_component<Aircraft>(unit) || component_manager_.get_component<NavalVessel>(unit))
+        return "GROUND UNIT REQUIRED";
+    const int side = static_cast<int>(faction->faction_id);
+    if (order == PowerOrder::CAPTURE_STATION) {
+        const PowerNode* node = power_grid_.node(target);
+        if (!node || node->kind != PowerNodeKind::STATION) return "NO POWER STATION THERE";
+        if (node->owner == side) return "POWER STATION ALREADY HELD";
+    } else {
+        const PowerLine* line = power_grid_.line(target);
+        if (!line) return "NO POWER LINE THERE";
+        switch (order) {
+            case PowerOrder::CAPTURE_LINE:
+                if (!line->intact) return "POWER LINE IS DOWN // ENGINEER MUST REPAIR IT";
+                if (line->owner == side) return "POWER LINE ALREADY HELD";
+                break;
+            case PowerOrder::SEVER_LINE:
+                if (!line->intact) return "POWER LINE ALREADY DOWN";
+                break;
+            case PowerOrder::REPAIR_LINE: {
+                if (line->intact) return "POWER LINE IS INTACT";
+                if (line->repair_remaining_ms > 0.0f) return "POWER LINE REPAIR UNDER WAY";
+                if (!is_construction_unit(unit)) return "ENGINEER REQUIRED TO REPAIR POWER LINES";
+                const auto* funds = production_manager_.tactical_resources(production_manager_.faction_storage(faction->faction_id));
+                if (!funds || funds->materials.current < power_grid_.repair_cost(target)) return "INSUFFICIENT MATERIALS";
+                break;
+            }
+            default:
+                return "UNKNOWN POWER ORDER";
+        }
+    }
+    float x = 0.0f;
+    float y = 0.0f;
+    if (!power_work_point(unit, order, target, x, y)) return "NO GROUND ROUTE TO IT";
+    return {};
+}
+
+size_t Simulation::issue_power_command(EntityId unit, FactionId faction, PowerOrder order, uint32_t target) {
+    if (!power_order_refusal(unit, order, target).empty()) return 0;
+    return issue_commands({unit}, faction, CommandType::HARVEST, 0.0f, 0.0f, power_order_extra(order, target));
+}
+
+void Simulation::order_power_work(EntityId unit, uint32_t extra) {
+    const auto order = static_cast<PowerOrder>((extra >> 16) & 0xFFu);
+    const uint32_t target = extra & 0xFFFFu;
+    float x = 0.0f;
+    float y = 0.0f;
+    if (!power_order_refusal(unit, order, target).empty() || !power_work_point(unit, order, target, x, y)) return;
+    // One errand at a time: a new one replaces any capture the unit was on.
+    std::erase_if(fuel_captures_, [unit](const FuelCapture& capture) { return capture.unit == unit; });
+    std::erase_if(site_captures_, [unit](const SiteCapture& capture) { return capture.unit == unit; });
+    std::erase_if(power_tasks_, [unit](const PowerTask& task) { return task.unit == unit; });
+    power_tasks_.push_back({unit, order, target, x, y});
+    move_unit(unit, x, y);
+}
+
+void Simulation::update_power_grid(float delta_ms) {
+    if (!power_grid_.active()) return;
+    std::erase_if(power_tasks_, [this](const PowerTask& task) {
+        const auto* position = component_manager_.get_component<Position>(task.unit);
+        const auto* faction = component_manager_.get_component<Faction>(task.unit);
+        const auto* health = component_manager_.get_component<Health>(task.unit);
+        if (!position || !faction || (health && health->is_dead)) return true;
+        const int side = static_cast<int>(faction->faction_id);
+        const PowerNode* station = task.order == PowerOrder::CAPTURE_STATION ? power_grid_.node(task.target) : nullptr;
+        const float distance = station
+            ? std::min(std::hypot(position->x - station->x, position->y - station->y),
+                       std::hypot(position->x - task.x, position->y - task.y))
+            : task.order == PowerOrder::REPAIR_LINE
+                ? std::hypot(position->x - task.x, position->y - task.y)
+                : power_grid_.distance_to_line(task.target, position->x, position->y);
+        if (distance <= kPowerWorkRadius) {
+            switch (task.order) {
+                case PowerOrder::CAPTURE_STATION: power_grid_.capture_station(task.target, side); break;
+                case PowerOrder::CAPTURE_LINE: power_grid_.capture_line(task.target, side); break;
+                case PowerOrder::SEVER_LINE: power_grid_.sever_line(task.target, position->x, position->y); break;
+                case PowerOrder::REPAIR_LINE: {
+                    const PowerLine* line = power_grid_.line(task.target);
+                    if (!line || line->intact || line->repair_remaining_ms > 0.0f) break;
+                    // Paid when the work starts, like any construction.
+                    if (!production_manager_.deduct_faction_resources(faction->faction_id, power_grid_.repair_cost(task.target), 0.0f)) {
+                        power_notices_[static_cast<size_t>(side)] = "POWER LINE REPAIR REFUSED // INSUFFICIENT MATERIALS";
+                        break;
+                    }
+                    power_grid_.begin_repair(task.target, side);
+                    power_notices_[static_cast<size_t>(side)].clear();
+                    break;
+                }
+            }
+            return true;
+        }
+        // A unit sent elsewhere, or one that has stopped short, gives up.
+        const auto target = move_targets_.find(task.unit);
+        return target == move_targets_.end() ||
+            std::hypot(target->second.arrival.x - task.x, target->second.arrival.y - task.y) > kPowerWorkRadius;
+    });
+    power_grid_.update(delta_ms);
+    for (size_t side = 0; side < FACTION_COUNT; ++side) {
+        const EntityId storage = production_manager_.faction_storage(static_cast<FactionId>(side));
+        if (storage == INVALID_ENTITY) continue;
+        const PowerSupply supply = power_grid_.supply(static_cast<int>(side));
+        production_manager_.set_tactical_power(storage, supply.generation_mw, supply.demand_mw);
+    }
 }
 
 const std::string& Simulation::fuel_supply_reason(FactionId faction) const {
@@ -3643,7 +4345,8 @@ extern "C" {
         auto* faction = get_simulation()->component_manager().get_component<Faction>(static_cast<EntityId>(entity_id));
         FactionId faction_id = faction ? faction->faction_id : FactionId::ELITE_PRECISION;
         
-        manager.projectile_manager().spawn(pos->x, pos->y, dx, dy, speed, damage, aoe_radius, 5.0f, faction_id);
+        manager.projectile_manager().spawn(pos->x, pos->y, dx, dy, speed, damage, aoe_radius, 5.0f, faction_id,
+                                           weapon->hits_ground, weapon->hits_air, weapon->max_target_altitude);
     }
     
     void simulation_set_unit_faction(int entity_id, int faction_id) {
@@ -4125,13 +4828,27 @@ bool Simulation::site_claimed(float x, float y, float half_x, float half_y) cons
     return false;
 }
 
-StructureSite Simulation::assess_structure_site(uint8_t structure_type, float x, float y) const {
+bool Simulation::command_post_site_claimed(float x, float y, float half_x, float half_y) const {
+    for (size_t index = 0; index < FACTION_COUNT; ++index) {
+        const EntityId base = production_manager_.faction_line(static_cast<FactionId>(index));
+        if (base == INVALID_ENTITY || !entity_manager_.is_alive(base)) continue;
+        if (std::abs(get_unit_x(base) - x) < kCommandPostFootprintX * 0.5f + half_x &&
+            std::abs(get_unit_y(base) - y) < kCommandPostFootprintY * 0.5f + half_y) {
+            return true;
+        }
+    }
+    return false;
+}
+
+StructureSite Simulation::assess_structure_site(uint8_t structure_type, float x, float y, bool check_command_post, bool check_site_claims) const {
     StructureSite site{};
     const StructureSiteRules rules = structure_site_rules(structure_type);
     if (rules.footprint_x <= 0.0f || !std::isfinite(x) || !std::isfinite(y)) return site;
 
     const float half_x = rules.footprint_x * 0.5f;
     const float half_y = rules.footprint_y * 0.5f;
+    if ((check_site_claims && site_claimed(x, y, half_x, half_y)) ||
+        (check_command_post && command_post_site_claimed(x, y, half_x, half_y))) return site;
     const float sample_x = rules.footprint_x / 4.0f;
     const float sample_y = rules.footprint_y / 4.0f;
     float heights[5][5]{};
@@ -4174,8 +4891,7 @@ StructureSite Simulation::assess_structure_site(uint8_t structure_type, float x,
         site.buildable = true;
         return site;
     }
-    if (maximum_slope > rules.earthworks_slope || height_variation > rules.earthworks_height_variation ||
-        site_claimed(x, y, half_x, half_y)) {
+    if (maximum_slope > rules.earthworks_slope || height_variation > rules.earthworks_height_variation) {
         return site;
     }
     float total_depth = 0.0f;
@@ -4195,6 +4911,14 @@ StructureSite Simulation::assess_structure_site(uint8_t structure_type, float x,
 
 bool Simulation::validate_structure_placement(uint8_t structure_type, float x, float y) const {
     return assess_structure_site(structure_type, x, y).buildable;
+}
+
+bool Simulation::structure_site_claimed(uint8_t structure_type, float x, float y) const {
+    const StructureSiteRules rules = structure_site_rules(structure_type);
+    if (rules.footprint_x <= 0.0f || !std::isfinite(x) || !std::isfinite(y)) return false;
+    const float half_x = rules.footprint_x * 0.5f;
+    const float half_y = rules.footprint_y * 0.5f;
+    return site_claimed(x, y, half_x, half_y) || command_post_site_claimed(x, y, half_x, half_y);
 }
 
 bool Simulation::queue_structure(EntityId line, FactionId faction, uint8_t structure_type, float x, float y) {
@@ -4221,7 +4945,7 @@ bool Simulation::validate_engineer_placement(float x, float y) const {
     // A construction unit needs one usable local building footprint. Requiring
     // valid road probes in both axes rejected otherwise healthy slopes and
     // made engineer spawning much stricter than normal play.
-    const StructureSite site = assess_structure_site(0, x, y);
+    const StructureSite site = assess_structure_site(0, x, y, false, false);
     return site.buildable && !site.earthworks;
 }
 
@@ -4244,6 +4968,21 @@ bool Simulation::validate_road_placement(float start_x, float start_y, float end
             (length / static_cast<float>(samples)) > 1.0f) return false;
         previous_height = height;
     }
+    return true;
+}
+
+bool Simulation::add_public_road(float start_x, float start_y, float end_x, float end_y) {
+    if (!std::isfinite(start_x) || !std::isfinite(start_y) || !std::isfinite(end_x) || !std::isfinite(end_y)) return false;
+    const float length = std::hypot(end_x - start_x, end_y - start_y);
+    if (length < 50.0f || length > 20000.0f) return false;
+    const int count = std::max(1, static_cast<int>(std::ceil(length / (pathfinding_.cell_size() * 0.5f))));
+    for (int sample = 0; sample <= count; ++sample) {
+        const float fraction = static_cast<float>(sample) / static_cast<float>(count);
+        if (!is_land_position(start_x + (end_x - start_x) * fraction, start_y + (end_y - start_y) * fraction)) return false;
+    }
+    const float width = get_road_settings().width;
+    if (!road_network_.add_completed(start_x, start_y, end_x, end_y, width)) return false;
+    apply_completed_road(road_network_.segments().back());
     return true;
 }
 
@@ -4436,7 +5175,7 @@ int rts::Simulation::create_unit_with_type(float x, float y, rts::UnitType unit_
     const float first_shot_delay = weapon.fire_rate * (0.25f + 0.75f * static_cast<float>(entity.id % 97u) / 96.0f);
     Weapon wep = {weapon.damage, weapon.range, weapon.fire_rate, 0.0f,
                   weapon.projectile_speed, weapon.lead_bias, weapon.aoe_radius, first_shot_delay,
-                  weapon.hits_ground, weapon.hits_air};
+                  weapon.hits_ground, weapon.hits_air, weapon.max_target_altitude};
     
     component_manager_.add_component(entity.id, pos);
     component_manager_.add_component(entity.id, vel);
@@ -4444,7 +5183,7 @@ int rts::Simulation::create_unit_with_type(float x, float y, rts::UnitType unit_
     component_manager_.add_component(entity.id, mat);
     component_manager_.add_component(entity.id, faction);
     component_manager_.add_component(entity.id, wep);
-    component_manager_.add_component(entity.id, UnitData{proto.speed, proto.view_range, static_cast<int>(unit_type), proto.intel_range});
+    component_manager_.add_component(entity.id, UnitData{proto.speed, proto.view_range, static_cast<int>(unit_type), proto.intel_range, proto.flight_altitude});
     if (!proto.is_aircraft && !proto.is_naval) {
         component_manager_.add_component(entity.id, GroundSteering{
             0.0f, 0.0f, 0.0f,
@@ -4528,6 +5267,7 @@ void rts::Simulation::process_commands() {
         if (network_manager_.is_connected()) network_manager_.send_command(cmd);
         command_log_.push_back(cmd);
         match_record_.add_command(cmd);
+        if (retask_recon_flight(cmd)) continue;
         if (cmd.cmd_type == static_cast<uint8_t>(CommandType::MOVE) && cmd.extra > 0) {
             std::vector<EntityId> formation{cmd.entity_id};
             while (i < local_commands.size()) {
@@ -4537,9 +5277,10 @@ void rts::Simulation::process_commands() {
                 ++i;
                 if (validate_command(next, tick_) && std::find(formation.begin(), formation.end(), next.entity_id) == formation.end()) {
                     if (network_manager_.is_connected()) network_manager_.send_command(next);
-                    formation.push_back(next.entity_id);
                     command_log_.push_back(next);
                     match_record_.add_command(next);
+                    // A recon plane in the group flies to the point itself, not in formation.
+                    if (!retask_recon_flight(next)) formation.push_back(next.entity_id);
                 }
             }
             move_units_formation(formation, static_cast<float>(cmd.target_x) / command_position_scale_,
@@ -4562,8 +5303,29 @@ void rts::Simulation::process_network_commands() {
     }
 }
 
+// A move order to a recon plane re-plots its flight: it flies straight to the
+// new point and spends the rest of its time on station there. Returns whether
+// the command was such an order (validate_command has already accepted it).
+bool rts::Simulation::retask_recon_flight(const InputCommand& cmd) {
+    if (cmd.cmd_type != static_cast<uint8_t>(CommandType::MOVE)) return false;
+    const auto plane = static_cast<EntityId>(cmd.entity_id);
+    const auto flight = recon_flights_.find(plane);
+    if (flight == recon_flights_.end() || flight->second.leaving) return false;
+    const float x = std::clamp(static_cast<float>(cmd.target_x) / command_position_scale_,
+                               pathfinding_.min_world_x_center(), pathfinding_.max_world_x_center());
+    const float y = std::clamp(static_cast<float>(cmd.target_y) / command_position_scale_,
+                               pathfinding_.min_world_y_center(), pathfinding_.max_world_y_center());
+    flight->second.x = x;
+    flight->second.y = y;
+    flight->second.on_station = false;
+    flight->second.leg = 0;
+    move_unit(plane, x, y);
+    return true;
+}
+
 void rts::Simulation::process_command_internal(const InputCommand& cmd) {
     if (!validate_command(cmd, tick_)) return;
+    if (retask_recon_flight(cmd)) return;
     
     switch (cmd.cmd_type) {
         case static_cast<uint8_t>(CommandType::MOVE): {
@@ -4605,9 +5367,24 @@ void rts::Simulation::process_command_internal(const InputCommand& cmd) {
                 if (const auto* owner = component_manager_.get_component<Faction>(cmd.entity_id)) request_fuel_shipment(owner->faction_id);
                 break;
             }
+            if (cmd.extra == (FUEL_SHIPMENT_ORDER_FLAG | SEA_DELIVERY_ORDER_FLAG)) {
+                if (const auto* owner = component_manager_.get_component<Faction>(cmd.entity_id)) request_sea_fuel_shipment(owner->faction_id);
+                break;
+            }
             if ((cmd.extra & PARADROP_ORDER_FLAG) != 0) {
                 const auto* owner = component_manager_.get_component<Faction>(cmd.entity_id);
-                if (owner) order_paradrop(owner->faction_id, static_cast<UnitType>(cmd.extra & 0xFFu), build_x, build_y);
+                const int stick = static_cast<int>((cmd.extra >> PARADROP_COUNT_SHIFT) & 0xFFu);
+                if (owner) order_paradrop(owner->faction_id, static_cast<UnitType>(cmd.extra & 0xFFu), build_x, build_y, stick == 0 ? 1 : stick);
+                break;
+            }
+            if ((cmd.extra & NAVAL_ORDER_FLAG) != 0) {
+                const auto* owner = component_manager_.get_component<Faction>(cmd.entity_id);
+                if (owner) order_naval_unit(owner->faction_id, static_cast<UnitType>(cmd.extra & 0xFFu));
+                break;
+            }
+            if ((cmd.extra & SEA_DELIVERY_ORDER_FLAG) != 0) {
+                const auto* owner = component_manager_.get_component<Faction>(cmd.entity_id);
+                if (owner) order_sea_delivery(owner->faction_id, static_cast<UnitType>(cmd.extra & 0xFFu), (cmd.extra >> 8) & 0xFFu);
                 break;
             }
             if ((cmd.extra & (ROAD_DELIVERY_ORDER_FLAG | RAIL_DELIVERY_ORDER_FLAG)) != 0) {
@@ -4645,7 +5422,8 @@ void rts::Simulation::process_command_internal(const InputCommand& cmd) {
         case static_cast<uint8_t>(CommandType::HARVEST): {
             const float harvest_x = static_cast<float>(cmd.target_x) / command_position_scale_;
             const float harvest_y = static_cast<float>(cmd.target_y) / command_position_scale_;
-            harvest_resource(static_cast<EntityId>(cmd.entity_id), harvest_x, harvest_y);
+            if ((cmd.extra & POWER_ORDER_FLAG) != 0) order_power_work(static_cast<EntityId>(cmd.entity_id), cmd.extra);
+            else harvest_resource(static_cast<EntityId>(cmd.entity_id), harvest_x, harvest_y);
             break;
         }
         case static_cast<uint8_t>(CommandType::RETURN): {

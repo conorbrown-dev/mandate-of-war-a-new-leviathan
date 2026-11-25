@@ -262,8 +262,13 @@ func _start(item: Dictionary) -> void:
 	if text.is_empty():
 		text = fill(String(definition.get("plain", definition.get("fallback", ""))), {})
 	var stream: AudioStream = null
-	if prefs.voice_enabled and not clip.is_empty() and ResourceLoader.exists(clip):
-		stream = load(clip)
+	if prefs.voice_enabled and not clip.is_empty():
+		# Generated WAVs can be installed after the editor's import pass.
+		# Load their source directly, preserving the original samples.
+		if clip.get_extension().to_lower() == "wav" and FileAccess.file_exists(clip):
+			stream = AudioStreamWAV.load_from_file(clip)
+		elif ResourceLoader.exists(clip):
+			stream = load(clip)
 	var entry := {
 		"id": String(definition.id), "key": item.key, "category": String(definition.category),
 		"category_name": String(category_names().get(definition.category, definition.category)),

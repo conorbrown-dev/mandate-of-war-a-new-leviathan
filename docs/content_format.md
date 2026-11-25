@@ -10,6 +10,26 @@ not add custom binary content. Game replays are saved output, not content.
 the id of the faction that holds it at the start. Ids must not match a material
 site.
 
+## Power grid
+
+A scenario names its grid with `"power_grid": "res://scenarios/<file>.json"`
+(Broken Strait uses `power_grid.json`). Without it a match has no grid and Power
+stays as set. The file lists `nodes` and `lines`:
+
+- A node has an `id` (1 to 65535), a `kind`, a `name` and a `position`. A
+  `station` has `output_mw` and an optional `owner` faction id (none means
+  civilian). A `load` is a side's command post: it needs an `owner` and has
+  `demand_mw`. A `junction` only joins lines.
+- A line has an `id` (1 to 65535), the node ids `from` and `to`, a `kind`
+  (`wood` or `steel`), an optional `owner`, and optional `via` points where its
+  route bends. `reason` records why it is wood or steel.
+- `known_to` on a node or line lists the faction ids that know of it when the
+  match starts. A side always knows its own.
+
+Use `steel` for a line that leaves a station, serves a large city or large
+structure, or crosses wide water, and `wood` otherwise; the `power_grid`
+contract checks the station and water cases.
+
 ## Units and factions
 
 `data/unit_faction_stats.json` is the only definition of units and factions.

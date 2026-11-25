@@ -21,6 +21,9 @@ struct AIDoctrine {
     float defence_radius = 1500.0f;
     UnitPreference unit_preference = UnitPreference::CHEAPEST;
     int scouts_wanted = 2;
+    // How many scouts one paratroop drop carries when the AI can afford them: it
+    // tries this many and steps down only when the ordinary refusal rules say no.
+    int paradrop_stick = 2;
     float first_recon_flight_seconds = 60.0f;
     float recon_flight_interval_seconds = 120.0f;
     int queue_depth = 2;

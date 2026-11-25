@@ -38,12 +38,14 @@ func _centre(control: Control) -> Vector2:
 	return control.get_global_transform_with_canvas() * (control.size * 0.5)
 
 
-# Pointer away, voice quiet, then into `control`: did that one entry tick?
+# Pointer away, then into `control`: did that one entry play a tick? Counted,
+# not read from `playing`: the tick is so short that a slow frame (as on CI)
+# can end it before the check, which made this test fail at random.
 func _hover_ticks(sound: Node, control: Control) -> bool:
 	await _move_to(_away)
-	sound.hover_voice.stop()
+	var before: int = sound.hover_plays
 	await _move_to(_centre(control))
-	return sound.hover_voice.playing
+	return sound.hover_plays == before + 1
 
 
 func _run() -> void:
@@ -76,10 +78,10 @@ func _run() -> void:
 
 	# One tick per entry into an enabled build button.
 	check(await _hover_ticks(sound, button), "entering a build button plays the hover tick")
-	sound.hover_voice.stop()
+	var plays_inside: int = sound.hover_plays
 	await _move_to(_centre(button) + Vector2(6.0, 2.0))
 	await _move_to(_centre(button) + Vector2(-6.0, -2.0))
-	check(not sound.hover_voice.playing, "moving within the button does not repeat the tick")
+	check(sound.hover_plays == plays_inside, "moving within the button does not repeat the tick")
 	check(await _hover_ticks(sound, button), "leaving and entering again ticks again")
 
 	# The hovered structure's description, from the presentation data file.
