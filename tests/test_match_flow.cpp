@@ -267,11 +267,11 @@ TEST(the_ai_finds_the_player_knowing_only_the_sector) {
     verify(front.simulation.match_result() == 1, "the AI searches out and destroys the player with no position to go on");
 }
 
-TEST(a_recon_flight_goes_straight_to_its_point_with_no_airfield) {
-    MatchFront front;
+namespace {
+// Orders a recon flight to (-3000, 2000) and runs until the plane is watching it.
+EntityId fly_recon_to_station(MatchFront& front, float target_y) {
     auto& simulation = front.simulation;
     simulation.enable_ai(false);
-    const float target_y = 2000.0f;
     verify(!simulation.territorial_control_manager().has_active_installation(FactionId::ELITE_PRECISION, InstallationType::AIRFIELD), "the player has no airfield");
     verify(!simulation.can_see(FactionId::ELITE_PRECISION, -3000.0f, target_y), "the target starts unwatched");
     verify(simulation.issue_build_commands({front.player_post}, FactionId::ELITE_PRECISION, -3000.0f, target_y, 14) == 1, "a recon flight is ordered");
@@ -286,13 +286,16 @@ TEST(a_recon_flight_goes_straight_to_its_point_with_no_airfield) {
     }
     verify(plane != INVALID_ENTITY, "the plane arrives without an airfield");
     verify(watched, "the plane watches the point it was sent to");
+    return plane;
+}
+}
 
-    // A move order re-plots the flight (tests/test_air_altitude.cpp); any other
-    // order is refused, so the plane cannot be stopped or kept on the map.
-    verify(simulation.issue_stop_commands({plane}, FactionId::ELITE_PRECISION) == 0, "a stop order is refused");
-    front.run(40);
-    verify(simulation.get_unit_y(plane) > 0.0f, "the flight plan carries on");
+TEST(a_recon_flight_goes_straight_to_its_point_with_no_airfield) {
+    MatchFront front;
+    auto& simulation = front.simulation;
+    const EntityId plane = fly_recon_to_station(front, 2000.0f);
 
+    // Left alone, the flight plan runs its course.
     bool left = false;
     for (int tick = 0; tick < 20 * 400 && !left; ++tick) {
         simulation.update(50.0f);
@@ -302,6 +305,37 @@ TEST(a_recon_flight_goes_straight_to_its_point_with_no_airfield) {
     verify(left, "the plane leaves the map when its time on station ends");
     verify(simulation.recon_flights_in_air(FactionId::ELITE_PRECISION) == 0, "the flight is over");
     verify(simulation.logistics_manager().crashed_aircraft_count() == 0, "it flew out, it did not crash");
+}
+
+TEST(a_recon_plane_obeys_orders_given_during_its_flight) {
+    MatchFront front;
+    auto& simulation = front.simulation;
+    const EntityId plane = fly_recon_to_station(front, 2000.0f);
+
+    // A stop order ends the flight plan: the plane does not carry on and leave
+    // the map when its planned time on station is up.
+    verify(simulation.on_recon_flight(plane), "the plane is still on its flight plan");
+    verify(simulation.issue_stop_commands({plane}, FactionId::ELITE_PRECISION) == 1, "a stop order is accepted");
+    front.run(40);
+    verify(!simulation.on_recon_flight(plane), "the order replaces the flight plan");
+    front.run(20 * 90);
+    auto entities = simulation.get_entity_list();
+    verify(std::find(entities.begin(), entities.end(), plane) != entities.end(), "it stays on the map past its planned time on station");
+
+    // And it flies where it is told, as an ordinary aircraft.
+    const float x = simulation.get_unit_x(plane);
+    const float start_y = simulation.get_unit_y(plane);
+    verify(simulation.issue_commands({plane}, FactionId::ELITE_PRECISION, CommandType::MOVE, x, -9000.0f) == 1, "a move order is accepted");
+    front.run(40);
+    verify(simulation.get_unit_y(plane) < start_y, "the plane turns toward its new destination");
+    bool arrived = false;
+    for (int tick = 0; tick < 20 * 200 && !arrived; ++tick) {
+        simulation.update(50.0f);
+        arrived = std::hypot(simulation.get_unit_x(plane) - x, simulation.get_unit_y(plane) + 9000.0f) < 100.0f;
+    }
+    verify(arrived, "the plane reaches the point it was ordered to");
+    entities = simulation.get_entity_list();
+    verify(std::find(entities.begin(), entities.end(), plane) != entities.end(), "it was not sent off the map");
 }
 
 TEST(a_combat_aircraft_still_needs_an_airfield) {

@@ -630,6 +630,9 @@ private:
     bool is_watched(FactionId faction, EntityId entity, float x, float y) const;
     bool has_unit_near(FactionId faction, float x, float y, float radius) const;
     void update_recon_flights(float delta_ms);
+    // A player order takes a recon plane off its flight plan and under normal
+    // aircraft rules (endurance, return to an airfield, orbiting when idle).
+    void release_recon_flight(EntityId entity);
     void update_ferry_flights(float delta_ms);
     void update_air_discipline();
     bool orbit_eligible(EntityId entity) const;
@@ -646,6 +649,8 @@ private:
         int leg = 0;
     };
     std::map<EntityId, ReconFlight> recon_flights_;
+    // A plain move re-plots a recon flight; any other order ends it (release_recon_flight).
+    bool retasks_recon_flight(const InputCommand& cmd) const;
     bool retask_recon_flight(const InputCommand& cmd);
     // Manufactured runway aircraft ferrying in to their side's airfield.
     // They roll out on the main runway, then taxi to distinct apron slots.

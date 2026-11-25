@@ -145,11 +145,14 @@ above the 20,000 prototype budget, so its definition carries its own
 A recon plane flies a flight plan set when it is ordered: Strategic Command, Plot
 Recon Flight, then a click on the map. It needs no airfield. It comes in from the
 west map edge, flies straight to the point, circles there for
-`recon_loiter_seconds` and flies back off the map. A move order re-plots its
-flight while it is on its mission: it flies straight to the new point and spends
-the rest of its time on station there (`Simulation::retask_recon_flight`). It
-takes no other order, no queued moves and nothing once it is leaving. Cargo
-airlifters take no orders at all.
+`recon_loiter_seconds` and flies back off the map. A plain move order re-plots its
+flight while it is on its mission: it flies straight to the new point and spends the
+rest of its time on station there (`Simulation::retask_recon_flight`). Any other
+order (stop, attack, return, a queued move, or a move once it is leaving) ends the
+flight plan: the plane then flies as an ordinary aircraft with a fresh airborne
+clock and its unit-data fuel rates, so it returns to an airfield if one exists and
+otherwise runs out of airframe time like any other plane (issue #32,
+`Simulation::release_recon_flight`). Cargo airlifters take no orders at all.
 
 `src/simulation/sighting_log.hpp` records where each faction last saw each enemy.
 The map shows these as `?` markers with their age, merged when they would overlap.

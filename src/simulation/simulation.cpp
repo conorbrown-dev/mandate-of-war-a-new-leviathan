@@ -1615,14 +1615,8 @@ bool Simulation::is_position_visible_to(FactionId faction, float x, float y) con
 }
 
 bool Simulation::validate_command(const InputCommand& cmd, uint32_t execution_tick) const {
-    // A recon plane flies a flight plan. A plain move order re-plots it to a new
-    // point (retask_recon_flight) while the plane is still on its mission; it
-    // takes no other order, and none once it is leaving. A cargo aircraft flies
-    // straight to its airfield.
-    if (const auto flight = recon_flights_.find(static_cast<EntityId>(cmd.entity_id)); flight != recon_flights_.end()) {
-        if (cmd.cmd_type != static_cast<uint8_t>(CommandType::MOVE) || (cmd.extra & MOVE_QUEUE_FLAG) != 0 ||
-            flight->second.leaving) return false;
-    }
+    // A cargo aircraft flies straight to its destination and takes no orders.
+    // A recon plane's flight plan is only its default: an order replaces it.
     if (const auto* cargo = component_manager_.get_component<UnitData>(cmd.entity_id)) {
         const auto prototype = get_unit_prototypes().find(static_cast<UnitType>(cargo->unit_type));
         if (prototype != get_unit_prototypes().end() && prototype->second.cargo_transport) return false;
@@ -3091,6 +3085,22 @@ void Simulation::update_recon_flights(float delta_ms) {
         }
     }
     for (const auto plane : finished) recon_flights_.erase(plane);
+}
+
+void Simulation::release_recon_flight(EntityId entity) {
+    if (recon_flights_.erase(entity) == 0) return;
+    const auto* data = component_manager_.get_component<UnitData>(entity);
+    auto* aircraft = component_manager_.get_component<Aircraft>(entity);
+    if (!data || !aircraft) return;
+    const auto prototype = get_unit_prototypes().find(static_cast<UnitType>(data->unit_type));
+    if (prototype == get_unit_prototypes().end()) return;
+    // The flight plan waived the plane's limits. Under orders it has its own:
+    // a fresh airborne clock and the fuel rates from its unit data.
+    aircraft->mission = Aircraft::Mission::PATROL;
+    aircraft->airborne_time_ms = 0.0f;
+    aircraft->max_airborne_time_ms = prototype->second.max_airborne_time_seconds * 1000.0f;
+    aircraft->fuel_consumption_rate = prototype->second.energy_consumption_rate;
+    aircraft->material_consumption_rate = prototype->second.material_consumption_rate;
 }
 
 bool Simulation::nearest_friendly_airfield(FactionId faction, float x, float y, float& ax, float& ay) const {
@@ -5264,6 +5274,7 @@ void rts::Simulation::process_commands() {
     for (size_t i = 0; i < local_commands.size();) {
         const auto& cmd = local_commands[i++];
         if (!validate_command(cmd, tick_)) continue;
+        if (!retasks_recon_flight(cmd)) release_recon_flight(cmd.entity_id);
         if (network_manager_.is_connected()) network_manager_.send_command(cmd);
         command_log_.push_back(cmd);
         match_record_.add_command(cmd);
@@ -5277,6 +5288,7 @@ void rts::Simulation::process_commands() {
                 ++i;
                 if (validate_command(next, tick_) && std::find(formation.begin(), formation.end(), next.entity_id) == formation.end()) {
                     if (network_manager_.is_connected()) network_manager_.send_command(next);
+                    if (!retasks_recon_flight(next)) release_recon_flight(next.entity_id);
                     command_log_.push_back(next);
                     match_record_.add_command(next);
                     // A recon plane in the group flies to the point itself, not in formation.
@@ -5297,6 +5309,7 @@ void rts::Simulation::process_network_commands() {
     InputCommand cmd{};
     while (network_manager_.receive_command(cmd)) {
         if (!validate_command(cmd, tick_)) continue;
+        if (!retasks_recon_flight(cmd)) release_recon_flight(cmd.entity_id);
         command_log_.push_back(cmd);
         match_record_.add_command(cmd);
         process_command_internal(cmd);
@@ -5306,11 +5319,16 @@ void rts::Simulation::process_network_commands() {
 // A move order to a recon plane re-plots its flight: it flies straight to the
 // new point and spends the rest of its time on station there. Returns whether
 // the command was such an order (validate_command has already accepted it).
+bool rts::Simulation::retasks_recon_flight(const InputCommand& cmd) const {
+    if (cmd.cmd_type != static_cast<uint8_t>(CommandType::MOVE) || (cmd.extra & MOVE_QUEUE_FLAG) != 0) return false;
+    const auto flight = recon_flights_.find(static_cast<EntityId>(cmd.entity_id));
+    return flight != recon_flights_.end() && !flight->second.leaving;
+}
+
 bool rts::Simulation::retask_recon_flight(const InputCommand& cmd) {
-    if (cmd.cmd_type != static_cast<uint8_t>(CommandType::MOVE)) return false;
+    if (!retasks_recon_flight(cmd)) return false;
     const auto plane = static_cast<EntityId>(cmd.entity_id);
     const auto flight = recon_flights_.find(plane);
-    if (flight == recon_flights_.end() || flight->second.leaving) return false;
     const float x = std::clamp(static_cast<float>(cmd.target_x) / command_position_scale_,
                                pathfinding_.min_world_x_center(), pathfinding_.max_world_x_center());
     const float y = std::clamp(static_cast<float>(cmd.target_y) / command_position_scale_,

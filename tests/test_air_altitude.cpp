@@ -139,8 +139,8 @@ TEST(stray_ground_fire_passes_under_strategic_recon) {
 }
 
 // A recon plane flies a flight plan, but a move order re-plots it: it flies to
-// the new point and spends the rest of its time on station there. It still takes
-// no other order (queued moves, stops), so it never joins the fighting line.
+// the new point and spends the rest of its time on station there. Any other order ends
+// the flight plan (tests/test_match_flow.cpp).
 TEST(recon_plane_move_order_replots_its_flight) {
     Simulation s;
     s.configure_world_size(8000.0f, 8000.0f);
@@ -154,9 +154,6 @@ TEST(recon_plane_move_order_replots_its_flight) {
             if (s.on_recon_flight(id)) plane = id;
     }
     require(plane != INVALID_ENTITY, "the recon plane arrives on its flight plan");
-    require(s.issue_move_commands({plane}, FactionId::ELITE_PRECISION, -2000.0f, 2500.0f, 3.0f, true) == 0,
-            "a queued move is refused: the flight has one point");
-    require(s.issue_stop_commands({plane}, FactionId::ELITE_PRECISION) == 0, "a stop order is refused");
     require(s.issue_move_commands({plane}, FactionId::ELITE_PRECISION, -2000.0f, 2500.0f, 3.0f) == 1,
             "a move order to a recon plane is accepted");
     float closest = 1.0e9f;
