@@ -78,7 +78,7 @@
             "total_cost": 560.0,
             "build_time_seconds": 56.0,
             "prerequisites": ["heavy_machinery"],
-            "unlocks": ["INDUSTRIAL_MISSILE_PLATFORM"]
+            "unlocks": ["INDUSTRIAL_MISSILE_PLATFORM", "INDUSTRIAL_TACTICAL_MISSILE"]
         },
         {
             "id": "engineering_corps",
