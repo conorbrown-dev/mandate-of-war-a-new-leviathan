@@ -32,6 +32,7 @@ const CAMERA_MAX_NEAR := 40.0
 # (structure_sites.hpp): local X across the site, local Z along it. All paving
 # lies on one plane and the pieces only meet edge to edge, so none overlap.
 const AirfieldSurfaceShader := preload("res://structures/airfield_surface.gdshader")
+const RoadSurfaceShader := preload("res://structures/road_surface.gdshader")
 const AIRFIELD_PAVING_HEIGHT := 0.25
 const AIRFIELD_RUNWAY_LENGTH := 700.0
 const AIRFIELD_PAVING := [
@@ -285,6 +286,7 @@ var road_start := Vector2.INF
 var road_preview: MeshInstance3D
 var road_preview_material: StandardMaterial3D
 var road_views: Dictionary = {}
+var _road_materials: Dictionary = {}
 var transport_corridor_views: Dictionary = {}
 var ground_transport_views: Dictionary = {}
 var blueprint_pointer_down := false
@@ -2006,7 +2008,7 @@ func _add_transport_corridor_view(faction_id: int, mode: int, start: Vector2, fi
 	var bed := MeshInstance3D.new()
 	bed.name = "Roadbed" if mode == 1 else "RailBallast"
 	bed.mesh = _make_road_mesh(start, finish, 12.0 if mode == 1 else 9.0)
-	bed.material_override = _demo_material(Color("#3b4242") if mode == 1 else Color("#514f4a"), 0.0)
+	bed.material_override = _road_material(12.0 if mode == 1 else 9.0, 0 if mode == 1 else 1)
 	root.add_child(bed)
 	var terminal_label := Label3D.new()
 	terminal_label.name = "TerminalLabel"
@@ -4594,12 +4596,18 @@ func _make_road_mesh(start: Vector2, finish: Vector2, width: float, height_offse
 	var steps := clampi(int(ceilf(start.distance_to(finish) / maxf(width, 1.0))), 1, 4096)
 	var vertices := PackedVector3Array()
 	var normals := PackedVector3Array()
+	var uvs := PackedVector2Array()
 	var indices := PackedInt32Array()
+	var length := start.distance_to(finish)
 	for index in range(steps + 1):
 		var center := start.lerp(finish, float(index) / float(steps))
-		for edge in [center + side, center - side]:
+		var along := length * float(index) / float(steps)
+		# UV is metres across (centre 0) and along the strip for road_surface.gdshader.
+		for edge_sign in [1.0, -1.0]:
+			var edge: Vector2 = center + side * edge_sign
 			vertices.append(Vector3(edge.x, _terrain_height_at(edge.x, edge.y) + height_offset, edge.y))
 			normals.append(Vector3.UP)
+			uvs.append(Vector2(edge_sign * width * 0.5, along))
 		if index < steps:
 			var first := index * 2
 			# Counter-clockwise from above. The previous winding faced into the
@@ -4610,9 +4618,25 @@ func _make_road_mesh(start: Vector2, finish: Vector2, width: float, height_offse
 	arrays[Mesh.ARRAY_VERTEX] = vertices
 	arrays[Mesh.ARRAY_INDEX] = indices
 	arrays[Mesh.ARRAY_NORMAL] = normals
+	arrays[Mesh.ARRAY_TEX_UV] = uvs
 	var mesh := ArrayMesh.new()
 	mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
 	return mesh
+
+func _road_material(width: float, kind: int) -> ShaderMaterial:
+	var key := "%s:%d" % [width, kind]
+	if _road_materials.has(key):
+		return _road_materials[key]
+	var material := ShaderMaterial.new()
+	material.shader = RoadSurfaceShader
+	material.set_shader_parameter("asphalt_albedo", load("res://assets/airfield/asphalt_track_diff_2k.jpg"))
+	material.set_shader_parameter("asphalt_normal", load("res://assets/airfield/asphalt_track_nor_gl_2k.jpg"))
+	material.set_shader_parameter("surface_kind", kind)
+	material.set_shader_parameter("surface_width", width)
+	if kind == 1:
+		material.set_shader_parameter("tint", Color(0.8, 0.78, 0.72))
+	_road_materials[key] = material
+	return material
 
 func _sync_completed_roads() -> void:
 	if extension == null:
@@ -4627,7 +4651,7 @@ func _sync_completed_roads() -> void:
 		var road := MeshInstance3D.new()
 		road.name = "Road_%d" % road_id
 		road.mesh = _make_road_mesh(Vector2(segments[offset + 1], segments[offset + 2]), Vector2(segments[offset + 3], segments[offset + 4]), segments[offset + 5])
-		road.material_override = _demo_material(Color("#343c42"), 0.0)
+		road.material_override = _road_material(segments[offset + 5], 0)
 		add_child(road)
 		road_views[road_id] = road
 

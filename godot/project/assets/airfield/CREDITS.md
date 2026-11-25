@@ -8,3 +8,7 @@
 Each texture covers 2 m x 2 m of real surface. The runway, taxiway and apron
 markings are painted procedurally by `structures/airfield_surface.gdshader`.
 CC0 needs no attribution; it is recorded here so the source can be found again.
+
+The same asphalt albedo and normal maps also texture roads and rail beds
+through `structures/road_surface.gdshader`, which paints the shoulders, white
+edge lines and a dashed yellow centreline procedurally.

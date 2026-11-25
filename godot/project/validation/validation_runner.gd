@@ -121,6 +121,18 @@ func _scenario_ground_transport_routes() -> void:
 		"transport.route_models", "The roadbed, sleepers and two-rail track are present")
 	_focus_camera_on_position(view, Vector2(-12575.0, 2100.0), 1200.0)
 	await _capture_checkpoint(view, "road_and_rail_corridors")
+	var roadbed: MeshInstance3D = road.get_node("Roadbed")
+	var road_material := roadbed.material_override as ShaderMaterial
+	_check(road_material != null and road_material.shader.resource_path.ends_with("road_surface.gdshader")
+			and road_material.get_shader_parameter("asphalt_albedo") is Texture2D,
+		"transport.road_textured", "The roadbed uses the textured road surface shader, not a flat colour")
+	var road_uvs: PackedVector2Array = roadbed.mesh.surface_get_arrays(0)[Mesh.ARRAY_TEX_UV]
+	_check(road_uvs.size() == roadbed.mesh.surface_get_arrays(0)[Mesh.ARRAY_VERTEX].size() and absf(road_uvs[0].x) == 6.0
+			and road_uvs[road_uvs.size() - 1].y > 1000.0,
+		"transport.road_uvs", "Road mesh UVs run in metres across and along the strip", {"first": road_uvs[0], "last": road_uvs[road_uvs.size() - 1]})
+	var road_centre: Vector3 = roadbed.mesh.get_aabb().get_center()
+	_focus_camera_on_position(view, Vector2(road_centre.x, road_centre.z), 50.0)
+	await _capture_checkpoint(view, "road_surface_closeup")
 	view._on_strategic_command_order_unit(0, 1)
 	view._on_strategic_command_order_unit(0, 2)
 	for _tick in range(500):

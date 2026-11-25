@@ -1673,3 +1673,14 @@ Known gaps: no recorded speech and no human listening; ElevenLabs commercial
 rights not yet checked; voice ids in the catalog are empty; the catalog cannot be
 replaced by a mod without code; replays do not replay radio; the AI side's
 reports are produced but nothing presents them.
+
+## Road textures (issue #31)
+
+Roads and the authored road corridors are no longer flat grey ribbons.
+`_make_road_mesh` now emits UVs in metres (across, along) and
+`structures/road_surface.gdshader` draws the Poly Haven CC0 asphalt (shared with
+the airfield) with worn shoulders, white edge lines and a dashed yellow
+centreline. Rail ballast uses the same texture tinted, without paint. The
+`ground_transport_routes` scenario asserts the textured material and UV layout
+and captures a close-up (`road_surface_closeup`); `ground_transport` still
+passes 16 checks. Not hand-played; roads meeting at junctions are not blended.
