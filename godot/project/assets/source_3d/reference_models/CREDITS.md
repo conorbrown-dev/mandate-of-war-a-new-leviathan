@@ -14,7 +14,9 @@ user-provided reference pack whose licences are not recorded here.
 | `chinook_ch47_lowpoly.glb` | Helicopter Low Poly - Chinook CH-47 (1.6k triangles) | Machine Meza (maurib98) | [Sketchfab](https://sketchfab.com/3d-models/helicopter-low-poly-chinook-ch-47-72b5123bda964e9aa5343384734977e2) | [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/) |
 | `tactical_missile_scud.glb` | Desert SCUD Missile Launcher (449.9k triangles, reduced to about 17k for the game) | JacobGroneman | [Sketchfab](https://sketchfab.com/3d-models/desert-scud-missile-launcher-fe6d547e73694367ab47f663413dd5d1) | [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/) |
 
-The SCUD launcher (issue #25) was downloaded 2026-11-24 the same way and is not yet wired in.
+| `elite_tactical_missile_himars.glb` | M142 HIMARS | FREE MODEL (80.8k triangles, loose display rocket removed, reduced to about 16k) | Denys Cherkasov | [Sketchfab](https://sketchfab.com/3d-models/m142-himars-free-model-9335f45a54e74ffea9301acf17615630) | [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/) |
+| `mass_tactical_missile_grad.glb` | БМ-21 Град (BM-21 Grad) (114.8k triangles, reduced to about 16k) | Basic Hsu | [Sketchfab](https://sketchfab.com/3d-models/21-bm-21-grad-c90559a30e6a414d993a0d3bdf6c5ff8) | [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/) |
+The three tactical missile launchers (issue #25) were downloaded 2026-11-24 the same way and is not yet wired in.
 The recon models were downloaded 2026-11-17 and the two Chinook models 2026-11-23,
 all as Sketchfab's glTF-binary conversion with 1k textures. `chinook_ch47.glb` is the
 visual of the Skybridge Airlifter (`visual.elite.airlifter.prototype`), drawn at a
