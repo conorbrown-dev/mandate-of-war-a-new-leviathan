@@ -1626,8 +1626,9 @@ passes 81/81. This package remains open pending those failures.
 Design and rules: [adr/0001-radio-callouts.md](adr/0001-radio-callouts.md).
 
 Three alerts work end to end: `air.hostile_inbound`, `objective.fuel_depot_secured`
-and `objective.fuel_depot_lost`. **No voice clips exist yet**, so every alert is
-text with a short attention tone. Generating speech needs an ElevenLabs key.
+and `objective.fuel_depot_lost`. Ten recorded clips exist (the Elite command voice
+only: eight compass variants of the air alert and the two depot lines); the Mass and
+Industrial voices, and every line of theirs, are still text with the radio keying.
 
 - Native: `Simulation::record_radio_event` raises a report for one side. A depot
   capture tells the captor and the previous holder once each. Hostile aircraft in
@@ -1646,7 +1647,7 @@ text with a short attention tone. Generating speech needs an ElevenLabs key.
   category, saved in `user://audio.cfg`.
 - `tools/generate_radio_voice.py`: dry run by default (30 lines, 2,484 characters
   today). `--generate` renders missing lines to `audio/radio/audition/`, keeping
-  clean masters in `audio/radio/masters/`; `--approve-all` moves them into the
+  original masters in `audio/radio/masters/`; `--approve-all` moves them into the
   game and lists them in `voice_manifest.json`. Cached by text and settings hash,
   with a character budget, selection by event or voice set, and retry on rate
   limits. The key is read from `ELEVENLABS_API_KEY` or the ignored `.env`.
@@ -1669,7 +1670,15 @@ Evidence (Apple M1 Pro, macOS arm64, Release):
   the sweep and passed twice alone. Three `test_validation.py` tool tests error on
   a missing `resolution` argument, unrelated to this work. Cost: PERFORMANCE.md.
 
-Known gaps: no recorded speech and no human listening; ElevenLabs commercial
+### Voiceover audio (2026-11-10)
+
+Voiceovers use the original PCM with no EQ, filters, distortion, limiter, static
+or squelch. The radio treatment and its F2 toggle have been removed at the user's
+request. Generation and offline rebuilding preserve source samples exactly,
+including timing and level; existing auditions were restored from kept masters.
+The Voice volume control and text-only attention cue remain.
+
+Known gaps: only the Elite voice is recorded, and nobody has listened to the result; ElevenLabs commercial
 rights not yet checked; voice ids in the catalog are empty; the catalog cannot be
 replaced by a mod without code; replays do not replay radio; the AI side's
 reports are produced but nothing presents them.

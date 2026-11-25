@@ -83,3 +83,14 @@ See STATUS.md for behavior and PERFORMANCE.md for native-only timing evidence.
 
 Overlay implementation checks are complete (39 headless / 40 rendered); remaining
 work is hand-play tuning, not missing aircraft anchoring or placeholder radii.
+
+
+2026-11-10 voiceover rollback: removed the live radio EQ/filter/distortion/limiter
+chain, static/squelch and F2 effect toggle. Generated and rebuilt WAVs now preserve
+source PCM without trim, fades or normalization. All 10 existing auditions match
+their masters sample-for-sample; 11 generator tests pass. Radio callouts pass
+88 state checks including zero Voice-bus effects and no static/squelch players;
+the scenario passes outside the sandbox (the sandbox blocks macOS certificate
+access). No listening, visual or performance acceptance claim.
+Release build passes. Outside-sandbox CTest discovers/passes four programs;
+direct runner totals: 20 unit, 21 snapshot, 318 integration, BALANCE_OK.

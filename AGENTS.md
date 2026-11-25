@@ -24,6 +24,17 @@ Do not use older Goal 03–11 claims to select work. Goal 0B narrowed the presen
 
 The repository root is the working directory for this project.
 
+## Use Git Worktrees
+
+Do all implementation work in a dedicated git worktree, not in the primary checkout. The primary checkout holds the user's in-progress work and may be shared with other agents.
+
+1. **Create a worktree per task** from the branch the work should be based on, on a new branch named for the task: `git worktree add ../mandate-of-war-worktrees/<branch> -b <branch> <base>`. Agent tools that provide a worktree (for example `EnterWorktree` or `isolation: "worktree"`) satisfy this rule.
+2. **Never edit, build, test, or switch branches in the primary checkout.** Read-only inspection there is fine. Its uncommitted changes belong to the user; do not copy, stash, or discard them.
+3. **One worktree per concurrent task.** Do not share a worktree between agents, and do not check out a branch that is already checked out in another worktree.
+4. **Build inside the worktree.** `build/`, the Godot binaries, and other ignored artifacts are per-checkout, so configure and build there (`cmake -S . -B build -DCMAKE_BUILD_TYPE=Release`) and run validation from that worktree's root.
+5. **Report the worktree path and branch** in the final response so the user can review or merge the work.
+6. **Clean up only your own worktree**, and only after its work is merged or the user says to discard it: `git worktree remove <path>`. Never remove a worktree you did not create, and never use `--force` without approval.
+
 ## Required Reading Order
 
 Before making changes, read:

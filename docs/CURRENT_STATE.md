@@ -191,3 +191,14 @@ is removed. A rendered 1280x720 screenshot is in
 `validation/artifacts/resource_map/rendered/native_resource_markers.png`.
 Release build and four CTest programs pass. Water remains included in Materials;
 water towers are scenery rather than a separate resource.
+
+
+2026-11-10 voiceover rollback: removed the live radio EQ/filter/distortion/limiter
+chain, static/squelch and F2 effect toggle. Generated and rebuilt WAVs now preserve
+source PCM without trim, fades or normalization. All 10 existing auditions match
+their masters sample-for-sample; 11 generator tests pass. Radio callouts pass
+88 state checks including zero Voice-bus effects and no static/squelch players;
+the scenario passes outside the sandbox (the sandbox blocks macOS certificate
+access). No listening, visual or performance acceptance claim.
+Release build passes. Outside-sandbox CTest discovers/passes four programs;
+direct runner totals: 20 unit, 21 snapshot, 318 integration, BALANCE_OK.
