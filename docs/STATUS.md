@@ -1939,7 +1939,7 @@ additional speech needs an ElevenLabs key.
   category, saved in `user://audio.cfg`.
 - `tools/generate_radio_voice.py`: dry run by default (30 lines, 2,484 characters
   today). `--generate` renders missing lines to `audio/radio/audition/`, keeping
-  clean masters in `audio/radio/masters/`; `--approve-all` moves them into the
+  original masters in `audio/radio/masters/`; `--approve-all` moves them into the
   game and lists them in `voice_manifest.json`. Cached by text and settings hash,
   with a character budget, selection by event or voice set, and retry on rate
   limits. The key is read from `ELEVENLABS_API_KEY` or the ignored `.env`.

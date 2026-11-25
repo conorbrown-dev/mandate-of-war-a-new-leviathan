@@ -224,7 +224,8 @@ and preserve the original audio without processing. See STATUS.md "Radio callout
 and `docs/adr/0001-radio-callouts.md`. To add speech: put voice ids in the catalog
 (or `ELEVENLABS_VOICE_<SET>`), set `ELEVENLABS_API_KEY`, run
 `tools/generate_radio_voice.py --generate`, listen, then `--approve-all`. Check
-the plan's commercial rights first and add the voices to the F2 credits. Slices D
+the plan's commercial rights first and add the voices to the F2 credits. Voiceovers play without processing; the radio filter/static treatment was
+removed at the user’s request. Slices D
 (more alerts) and E (mod loading, replay) are open.
 
 ## Suggested next steps
@@ -309,6 +310,9 @@ then, with a GPU and no `--headless`,
 `--script res://tools/bake_tree_impostors.gd`.
 
 ## Gotchas learned
+
+- A node whose script defines `_process` has processing re-enabled when it enters
+  the tree: call `set_process(false)` after `add_child`, not before.
 
 - After any Godot run, `git restore godot/project/.editor_native`. Godot rewrites
   it and the `.import` files.
